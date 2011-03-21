@@ -10,6 +10,6 @@ lastAndLength = go 0
         go !n (_:xs) = go (n+1) xs
 
 main = do
-  tokens <- fmap alexScanTokens BSL.getContents
+  tokens <- fmap scan BSL.getContents
   let (last_, length_) = lastAndLength tokens
   putStrLn (show length_ ++ " tokens, last was " ++ show last_)

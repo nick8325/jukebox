@@ -4,7 +4,7 @@
 {
 {-# OPTIONS_GHC -O2 #-}
 {-# LANGUAGE BangPatterns #-}
-module Lexer(alexScanTokens, Pos(..), Token(..)) where
+module Lexer(scan, Pos(..), Token(..)) where
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -79,7 +79,7 @@ data Token = Atom { name :: !BS.ByteString, pos :: !Pos }
 
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
-alexScanTokens xs = go (Input (Pos 1 1) '\n' BS.empty xs)
+scan xs = go (Input (Pos 1 1) '\n' BS.empty xs)
   where go inp@(Input pos _ x xs) =
           case alexScan inp 0 of
                 AlexEOF -> []
@@ -96,20 +96,20 @@ alexInputPrevChar (Input p c x xs) = c
 
 {-# INLINE alexGetChar #-}
 alexGetChar :: AlexInput -> Maybe (Char,AlexInput)
-alexGetChar (Input p _ x xs) | BS.null x = alexGetCharEmpty p xs
-                             | otherwise = alexGetCharNonEmpty p x xs
-{-# NOINLINE alexGetCharEmpty #-} -- this is the slow path
-alexGetCharEmpty p Empty = Nothing
-alexGetCharEmpty p (Chunk x xs) = alexGetCharNonEmpty p x xs
-{-# INLINE alexGetCharNonEmpty #-}
-alexGetCharNonEmpty p x xs =
+alexGetChar (Input p _ x xs) | BS.null x = refill p xs
+                             | otherwise = getCharNonEmpty p x xs
+{-# NOINLINE refill #-} -- this is the slow path
+refill p Empty = Nothing
+refill p (Chunk x xs) = getCharNonEmpty p x xs
+{-# INLINE getCharNonEmpty #-}
+getCharNonEmpty p x xs =
   let !c = BS.head x
-      !next = Input (alexMove p c) c (BS.tail x) xs
+      !next = Input (advance p c) c (BS.tail x) xs
   in Just (c, next)
 
-{-# INLINE alexMove #-}
-alexMove :: Pos -> Char -> Pos
-alexMove (Pos l c) '\t' = Pos  l     (c+8 - (c-1) `mod` 8)
-alexMove (Pos l c) '\n' = Pos (l+1)   1
-alexMove (Pos l c) _    = Pos  l     (c+1)
+{-# INLINE advance #-}
+advance :: Pos -> Char -> Pos
+advance (Pos l c) '\t' = Pos  l    (c+8 - (c-1) `mod` 8)
+advance (Pos l c) '\n' = Pos (l+1) 1
+advance (Pos l c) _    = Pos  l    (c+1)
 }
