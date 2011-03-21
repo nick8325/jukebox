@@ -5,6 +5,6 @@ Build-type: Simple
 
 Executable jukebox
   Main-is: Main.hs
-  Build-depends: parsec >= 3, bytestring, base >= 4, array
+  Build-depends: bytestring, base >= 4, array
   Build-tools: alex
   Other-modules: Lexer
