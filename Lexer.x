@@ -2,7 +2,8 @@
 
 -- Roughly taken from the TPTP syntax reference
 {
-module Lexer where
+{-# LANGUAGE BangPatterns #-}
+module Lexer(alexScanTokens, Pos(..), Token(..)) where
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -48,7 +49,10 @@ $white+ ;
 {
 constr :: (Pos -> BS.ByteString -> Token) -> Pos -> BSL.ByteString -> Token
 constr con pos x = con pos (strict x)
-  where strict = BS.concat . BSL.toChunks . BSL.copy
+  where strict x = case BSL.toChunks x of
+                     [] -> BS.empty
+                     [x] -> BS.copy x
+                     xs -> BS.concat xs
 
 constrUnquote :: (Pos -> BS.ByteString -> Token) -> Pos -> BSL.ByteString -> Token
 constrUnquote con pos x = constr con pos (unquote (BSL.tail x))
@@ -78,26 +82,26 @@ data Token = Atom { pos :: !Pos, name :: !BS.ByteString }
 -- Shamelessly lifted from Alex's posn-bytestring wrapper---the only
 -- difference is it returns an Error token instead of calling error
 -- when there's a lexical error, and it uses a simpler type for positions.
-alexScanTokens str = go (Pos 1 1,'\n',str)
-  where go inp@(pos,_,str) =
+alexScanTokens str = go (Input (Pos 1 1) '\n' str)
+  where go inp@(Input pos _ str) =
           case alexScan inp 0 of
                 AlexEOF -> []
                 AlexError _ -> [Error pos]
                 AlexSkip  inp' len     -> go inp'
                 AlexToken inp' len act -> act pos (BSL.take (fromIntegral len) str) : go inp'
-type AlexInput = (Pos,     -- current position,
-                  Char,         -- previous char
-                  BSL.ByteString)        -- current input string
+data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !BSL.ByteString
 
 alexInputPrevChar :: AlexInput -> Char
-alexInputPrevChar (p,c,s) = c
+alexInputPrevChar (Input p c s) = c
 
+{-# INLINE alexGetChar #-}
 alexGetChar :: AlexInput -> Maybe (Char,AlexInput)
-alexGetChar (p,_,cs) | BSL.null cs = Nothing
-                     | otherwise = let c   = BSL.head cs
-                                       cs' = BSL.tail cs
-                                       p'  = alexMove p c
-                                    in p' `seq` cs' `seq` Just (c, (p', c, cs'))
+alexGetChar (Input p _ cs) | BSL.null cs = Nothing
+                           | otherwise = let c   = BSL.head cs
+                                             !next = Input (alexMove p c) c (BSL.tail cs)
+                                         in Just (c, next)
+
+{-# INLINE alexMove #-}
 alexMove :: Pos -> Char -> Pos
 alexMove (Pos l c) '\t' = Pos  l     (((c+7) `div` 8)*8+1)
 alexMove (Pos l c) '\n' = Pos (l+1)   1
