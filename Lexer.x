@@ -9,6 +9,7 @@ module Lexer(alexScanTokens, Pos(..), Token(..)) where
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Lazy.Internal
+import Data.Word
 }
 
 $alpha = [a-zA-Z0-9_]
@@ -67,7 +68,7 @@ readNumber :: BS.ByteString -> Integer
 readNumber x | BS.null r = n
   where Just (n, r) = BS.readInteger x
 
-data Pos = Pos !Int !Int deriving Show
+data Pos = Pos !Word !Word deriving Show
 data Token = Atom { name :: !BS.ByteString, pos :: !Pos }
            | Var { name :: !BS.ByteString, pos :: !Pos }
            | DistinctObject { name :: !BS.ByteString, pos :: !Pos }
@@ -108,7 +109,7 @@ alexGetCharNonEmpty p x xs =
 
 {-# INLINE alexMove #-}
 alexMove :: Pos -> Char -> Pos
-alexMove (Pos l c) '\t' = Pos  l     (((c+7) `div` 8)*8+1)
+alexMove (Pos l c) '\t' = Pos  l     (c+8 - (c-1) `mod` 8)
 alexMove (Pos l c) '\n' = Pos (l+1)   1
 alexMove (Pos l c) _    = Pos  l     (c+1)
 }
