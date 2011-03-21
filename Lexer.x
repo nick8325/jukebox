@@ -31,7 +31,7 @@ $white+ ;
 -- Distinct objects, which are double-quoted
 \" (($printable # [\\\"]) | \\ $printable)+  \" { constrUnquote DistinctObject }
 -- Integers
-[\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { \p s -> Number p (readNumber (BSL.unpack s)) }
+[\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { \p s -> Number p (readNumber s) }
 
 -- Operators
 "(" | ")" | "[" | "]" |
@@ -58,9 +58,9 @@ unquote x | BSL.null z = BSL.init y
           | otherwise = y `BSL.append` (BSL.index z 1 `BSL.cons'` unquote (BSL.drop 2 z))
           where (y, z) = BSL.break (== '\\') x
     
-readNumber :: String -> Integer
-readNumber ('+':x) = read x
-readNumber x = read x
+readNumber :: BSL.ByteString -> Integer
+readNumber x | BSL.null r = n
+  where Just (n, r) = BSL.readInteger x
 
 data Pos = Pos !Int !Int deriving Show
 data Token = Atom { pos :: !Pos, name :: !BS.ByteString }
