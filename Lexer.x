@@ -1,4 +1,6 @@
 -- -*- mode: haskell -*-
+
+-- Roughly taken from the TPTP syntax reference
 {
 module Lexer where
 
@@ -7,31 +9,67 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.Word
 }
 
-$digit = 0-9
-$alpha = [a-zA-Z]
+$alpha = [a-zA-Z0-9_]
+$anything = [. \n]
 
 tokens :-
-\%[^\n]* ;
+-- Comments and whitespace
+"%" .* ;
+"/*" (($anything # \*)* "*"+
+      ($anything # [\/\*]))*
+     ($anything # \*)* "*"* "*/" ; -- blech!
 $white+ ;
-[a-z][$alpha]* { constr Atom }
+
+-- Atoms. Might be best to move the $- and $$-atoms into their own token type?
+"$"{0,2}[a-z][$alpha]* { constr Atom }
+-- Atoms with funny quoted names (here we diverge from the official
+-- syntax, which only allows the escape sequences \\ and \' in quoted
+-- atoms: we allow \ to be followed by any printable character)
+"'" (($printable # [\\']) | \\ $printable)+  "'" { constrUnquote Atom }
+-- Vars are easy :)
 [A-Z][$alpha]* { constr Var }
-! { punct Bang }
+-- Distinct objects, which are double-quoted
+\" (($printable # [\\\"]) | \\ $printable)+  \" { constrUnquote DistinctObject }
+-- Integers
+[\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { \p s -> Number p (readNumber (BSL.unpack s)) }
+
+-- Operators
+"(" | ")" | "[" | "]" |
+"," | "." |
+"|" | "&" | "@" | ":" | 
+":=" | ":-" |
+"^" | "!>" | "?*" | "@+" | "@-" |
+"!!" | "??" | "<<" |
+"!" | "?" | "<=>" | "=>" | "<=" |
+"<~>" | "~|" | "~&" | "~" | "-->" |
+"=" | "!=" | "*" | "+" | ">" | "<"
+{ constr Punct }
 
 {
 constr :: (Pos -> BS.ByteString -> Token) -> Pos -> BSL.ByteString -> Token
 constr con pos x = con pos (strict x)
-  where strict = BS.concat . BSL.toChunks
+  where strict = BS.concat . BSL.toChunks . BSL.copy
 
-punct :: Punct -> Pos -> BSL.ByteString -> Token
-punct p pos x = Punct pos p
+constrUnquote :: (Pos -> BS.ByteString -> Token) -> Pos -> BSL.ByteString -> Token
+constrUnquote con pos x = constr con pos (unquote (BSL.tail x))
+
+unquote :: BSL.ByteString -> BSL.ByteString
+unquote x | BSL.null z = BSL.init y
+          | otherwise = y `BSL.append` (BSL.index z 1 `BSL.cons'` unquote (BSL.drop 2 z))
+          where (y, z) = BSL.break (== '\\') x
+    
+readNumber :: String -> Integer
+readNumber ('+':x) = read x
+readNumber x = read x
 
 data Pos = Pos !Int !Int deriving Show
-data Token = Atom { pos :: Pos, name :: BS.ByteString }
-           | Var { pos :: Pos, name :: BS.ByteString }
-           | Punct { pos :: Pos, kind :: Punct }
-           | Error { pos :: Pos }
+data Token = Atom { pos :: !Pos, name :: !BS.ByteString }
+           | Var { pos :: !Pos, name :: !BS.ByteString }
+           | DistinctObject { pos :: !Pos, name :: !BS.ByteString }
+           | Number { pos :: !Pos, value :: Integer }
+           | Punct { pos :: !Pos, kind :: !BS.ByteString }
+           | Error { pos :: !Pos }
              deriving Show
-data Punct = Bang deriving Show
 
 --
 -- Boring copy-and-pasted code for the main scanner function below.
