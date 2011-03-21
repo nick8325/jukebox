@@ -7,6 +7,7 @@ module Lexer(alexScanTokens, Pos(..), Token(..)) where
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
+import Data.ByteString.Lazy.Internal
 import Data.Word
 }
 
@@ -22,17 +23,17 @@ tokens :-
 $white+ ;
 
 -- Atoms. Might be best to move the $- and $$-atoms into their own token type?
-"$"{0,2}[a-z][$alpha]* { constr Atom }
+"$"{0,2}[a-z][$alpha]* { Atom . copy }
 -- Atoms with funny quoted names (here we diverge from the official
 -- syntax, which only allows the escape sequences \\ and \' in quoted
 -- atoms: we allow \ to be followed by any printable character)
-"'" (($printable # [\\']) | \\ $printable)+  "'" { constrUnquote Atom }
+"'" (($printable # [\\']) | \\ $printable)+  "'" { Atom . unquote }
 -- Vars are easy :)
-[A-Z][$alpha]* { constr Var }
+[A-Z][$alpha]* { Var . copy }
 -- Distinct objects, which are double-quoted
-\" (($printable # [\\\"]) | \\ $printable)+  \" { constrUnquote DistinctObject }
+\" (($printable # [\\\"]) | \\ $printable)+  \" { DistinctObject . unquote }
 -- Integers
-[\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { \p s -> Number p (readNumber s) }
+[\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { Number . readNumber }
 
 -- Operators
 "(" | ")" | "[" | "]" |
@@ -44,34 +45,34 @@ $white+ ;
 "!" | "?" | "<=>" | "=>" | "<=" |
 "<~>" | "~|" | "~&" | "~" | "-->" |
 "=" | "!=" | "*" | "+" | ">" | "<"
-{ constr Punct }
+{ Punct }
 
 {
-constr :: (Pos -> BS.ByteString -> Token) -> Pos -> BSL.ByteString -> Token
-constr con pos x = con pos (strict x)
-  where strict x = case BSL.toChunks x of
-                     [] -> BS.empty
-                     [x] -> BS.copy x
-                     xs -> BS.concat xs
+copy :: BS.ByteString -> BS.ByteString
+copy = id
 
-constrUnquote :: (Pos -> BS.ByteString -> Token) -> Pos -> BSL.ByteString -> Token
-constrUnquote con pos x = constr con pos (unquote (BSL.tail x))
+unquote :: BS.ByteString -> BS.ByteString
+unquote x =
+  case BSL.toChunks (unquote' x) of
+    [] -> BS.empty
+    [x] -> copy x
+    xs -> BS.concat xs
 
-unquote :: BSL.ByteString -> BSL.ByteString
-unquote x | BSL.null z = BSL.init y
-          | otherwise = y `BSL.append` (BSL.index z 1 `BSL.cons'` unquote (BSL.drop 2 z))
-          where (y, z) = BSL.break (== '\\') x
+unquote' :: BS.ByteString -> BSL.ByteString
+unquote' x | BS.null z = chunk (BS.init y) Empty
+           | otherwise = chunk y (BS.index z 1 `BSL.cons'` unquote' (BS.drop 2 z))
+           where (y, z) = BS.break (== '\\') x
     
-readNumber :: BSL.ByteString -> Integer
-readNumber x | BSL.null r = n
-  where Just (n, r) = BSL.readInteger x
+readNumber :: BS.ByteString -> Integer
+readNumber x | BS.null r = n
+  where Just (n, r) = BS.readInteger x
 
 data Pos = Pos !Int !Int deriving Show
-data Token = Atom { pos :: !Pos, name :: !BS.ByteString }
-           | Var { pos :: !Pos, name :: !BS.ByteString }
-           | DistinctObject { pos :: !Pos, name :: !BS.ByteString }
-           | Number { pos :: !Pos, value :: Integer }
-           | Punct { pos :: !Pos, kind :: !BS.ByteString }
+data Token = Atom { name :: !BS.ByteString, pos :: !Pos }
+           | Var { name :: !BS.ByteString, pos :: !Pos }
+           | DistinctObject { name :: !BS.ByteString, pos :: !Pos }
+           | Number { value :: Integer, pos :: !Pos }
+           | Punct { kind :: !BS.ByteString, pos :: !Pos }
            | Error { pos :: !Pos }
              deriving Show
 
@@ -82,24 +83,33 @@ data Token = Atom { pos :: !Pos, name :: !BS.ByteString }
 -- Shamelessly lifted from Alex's posn-bytestring wrapper---the only
 -- difference is it returns an Error token instead of calling error
 -- when there's a lexical error, and it uses a simpler type for positions.
-alexScanTokens str = go (Input (Pos 1 1) '\n' str)
-  where go inp@(Input pos _ str) =
+alexScanTokens str = go (Input (Pos 1 1) '\n' BS.empty str)
+  where go inp@(Input pos _ str strs) =
           case alexScan inp 0 of
                 AlexEOF -> []
                 AlexError _ -> [Error pos]
                 AlexSkip  inp' len     -> go inp'
-                AlexToken inp' len act -> act pos (BSL.take (fromIntegral len) str) : go inp'
-data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !BSL.ByteString
+                AlexToken inp' len act | len <= BS.length str -> act (BS.take len str) pos : go inp'
+                                       | otherwise ->
+                                         let token = BSL.take (fromIntegral len) (chunk str strs)
+                                         in act (BS.concat (BSL.toChunks token)) pos : go inp'
+data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !BS.ByteString !BSL.ByteString
 
 alexInputPrevChar :: AlexInput -> Char
-alexInputPrevChar (Input p c s) = c
+alexInputPrevChar (Input p c s ss) = c
 
 {-# INLINE alexGetChar #-}
 alexGetChar :: AlexInput -> Maybe (Char,AlexInput)
-alexGetChar (Input p _ cs) | BSL.null cs = Nothing
-                           | otherwise = let c   = BSL.head cs
-                                             !next = Input (alexMove p c) c (BSL.tail cs)
-                                         in Just (c, next)
+alexGetChar (Input p _ cs css) | BS.null cs = alexGetCharEmpty p css
+                               | otherwise = alexGetCharNonEmpty p cs css
+{-# NOINLINE alexGetCharEmpty #-}
+alexGetCharEmpty p Empty = Nothing
+alexGetCharEmpty p (Chunk cs css) = alexGetCharNonEmpty p cs css
+{-# INLINE alexGetCharNonEmpty #-}
+alexGetCharNonEmpty p cs css =
+  let c = BS.head cs
+      !next = Input (alexMove p c) c (BS.tail cs) css
+  in Just (c, next)
 
 {-# INLINE alexMove #-}
 alexMove :: Pos -> Char -> Pos
