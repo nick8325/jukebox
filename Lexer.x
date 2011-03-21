@@ -2,13 +2,13 @@
 
 -- Roughly taken from the TPTP syntax reference
 {
+{-# OPTIONS_GHC -O2 #-}
 {-# LANGUAGE BangPatterns #-}
 module Lexer(alexScanTokens, Pos(..), Token(..)) where
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Lazy.Internal
-import Data.Word
 }
 
 $alpha = [a-zA-Z0-9_]
@@ -49,7 +49,7 @@ $white+ ;
 
 {
 copy :: BS.ByteString -> BS.ByteString
-copy = id
+copy = id -- could change to a string interning function later
 
 unquote :: BS.ByteString -> BS.ByteString
 unquote x =
@@ -76,39 +76,34 @@ data Token = Atom { name :: !BS.ByteString, pos :: !Pos }
            | Error { pos :: !Pos }
              deriving Show
 
---
--- Boring copy-and-pasted code for the main scanner function below.
---
+-- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
--- Shamelessly lifted from Alex's posn-bytestring wrapper---the only
--- difference is it returns an Error token instead of calling error
--- when there's a lexical error, and it uses a simpler type for positions.
-alexScanTokens str = go (Input (Pos 1 1) '\n' BS.empty str)
-  where go inp@(Input pos _ str strs) =
+alexScanTokens xs = go (Input (Pos 1 1) '\n' BS.empty xs)
+  where go inp@(Input pos _ x xs) =
           case alexScan inp 0 of
                 AlexEOF -> []
                 AlexError _ -> [Error pos]
                 AlexSkip  inp' len     -> go inp'
-                AlexToken inp' len act | len <= BS.length str -> act (BS.take len str) pos : go inp'
+                AlexToken inp' len act | len <= BS.length x -> act (BS.take len x) pos : go inp'
                                        | otherwise ->
-                                         let token = BSL.take (fromIntegral len) (chunk str strs)
+                                         let token = BSL.take (fromIntegral len) (chunk x xs)
                                          in act (BS.concat (BSL.toChunks token)) pos : go inp'
 data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !BS.ByteString !BSL.ByteString
 
 alexInputPrevChar :: AlexInput -> Char
-alexInputPrevChar (Input p c s ss) = c
+alexInputPrevChar (Input p c x xs) = c
 
 {-# INLINE alexGetChar #-}
 alexGetChar :: AlexInput -> Maybe (Char,AlexInput)
-alexGetChar (Input p _ cs css) | BS.null cs = alexGetCharEmpty p css
-                               | otherwise = alexGetCharNonEmpty p cs css
-{-# NOINLINE alexGetCharEmpty #-}
+alexGetChar (Input p _ x xs) | BS.null x = alexGetCharEmpty p xs
+                             | otherwise = alexGetCharNonEmpty p x xs
+{-# NOINLINE alexGetCharEmpty #-} -- this is the slow path
 alexGetCharEmpty p Empty = Nothing
-alexGetCharEmpty p (Chunk cs css) = alexGetCharNonEmpty p cs css
+alexGetCharEmpty p (Chunk x xs) = alexGetCharNonEmpty p x xs
 {-# INLINE alexGetCharNonEmpty #-}
-alexGetCharNonEmpty p cs css =
-  let c = BS.head cs
-      !next = Input (alexMove p c) c (BS.tail cs) css
+alexGetCharNonEmpty p x xs =
+  let !c = BS.head x
+      !next = Input (alexMove p c) c (BS.tail x) xs
   in Just (c, next)
 
 {-# INLINE alexMove #-}
