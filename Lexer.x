@@ -2,7 +2,7 @@
 
 -- Roughly taken from the TPTP syntax reference
 {
-{-# OPTIONS_GHC -O2 #-}
+{-# OPTIONS_GHC -O2 -fno-warn-deprecated-flags #-}
 {-# LANGUAGE BangPatterns #-}
 module Lexer(scan, Pos(..), Token(..), TokenStream(..), alexGetChar) where
 
@@ -54,7 +54,7 @@ copy = id -- could change to a string interning function later
 
 unquote :: BS.ByteString -> BS.ByteString
 unquote x =
-  case BSL.toChunks (unquote' x) of
+  case BSL.toChunks (BSL.tail (unquote' x)) of
     [] -> BS.empty
     [x] -> copy x
     xs -> BS.concat xs
