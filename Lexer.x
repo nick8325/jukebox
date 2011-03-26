@@ -14,6 +14,8 @@ import Data.Word
 
 $alpha = [a-zA-Z0-9_]
 $anything = [. \n]
+@quoted = ($printable # [\\']) | \\ $printable
+@dquoted = ($printable # [\\\"]) | \\ $printable
 
 tokens :-
 -- Comments and whitespace
@@ -23,32 +25,99 @@ tokens :-
      ($anything # \*)* "*"* "*/" ; -- blech!
 $white+ ;
 
--- Atoms. Might be best to move the $- and $$-atoms into their own token type?
-"$"{0,2}[a-z][$alpha]* { Atom . copy }
+-- Keywords.
+"thf" { k Thf }
+"tff" { k Tff }
+"fof" { k Fof }
+"cnf" { k Cnf }
+"axiom" { k Axiom }
+"hypothesis" { k Hypothesis }
+"definition" { k Definition }
+"assumption" { k Assumption }
+"lemma" { k Lemma }
+"theorem" { k Theorem }
+"conjecture" { k Conjecture }
+"negated_conjecture" { k NegatedConjecture }
+"plain" { k Plain }
+"fi_domain" { k FiDomain }
+"fi_hypothesis" { k FiHypothesis }
+"fi_predicates" { k FiPredicates }
+"type" { k Type }
+"unknown" { k Unknown }
+"include" { k Include }
+-- Defined symbols.
+"$true" { d DTrue }
+"$false" { d DFalse }
+"$equal" { d DEqual }
+"$distinct" { d DDistinct }
+"$itef" { d DItef }
+"$itett" | "$itetf" { d DItet }
+"$o" | "$oType" { d DO }
+"$i" | "$iType" { d DI }
+"$tType" { d DTType }
+-- Atoms.
+"$$"{0,2} [a-z] $alpha* { Atom Normal . copy }
 -- Atoms with funny quoted names (here we diverge from the official
 -- syntax, which only allows the escape sequences \\ and \' in quoted
 -- atoms: we allow \ to be followed by any printable character)
-"'" (($printable # [\\']) | \\ $printable)+  "'" { Atom . unquote }
+"'"  @quoted+ "'" { Atom Normal . unquote }
 -- Vars are easy :)
 [A-Z][$alpha]* { Var . copy }
 -- Distinct objects, which are double-quoted
-\" (($printable # [\\\"]) | \\ $printable)+  \" { DistinctObject . unquote }
+\" @dquoted+  \" { DistinctObject . unquote }
 -- Integers
 [\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { Number . readNumber }
 
--- Operators
-"(" | ")" | "[" | "]" |
-"," | "." |
-"|" | "&" | "@" | ":" | 
-":=" | ":-" |
-"^" | "!>" | "?*" | "@+" | "@-" |
-"!!" | "??" | "<<" |
-"!" | "?" | "<=>" | "=>" | "<=" |
-"<~>" | "~|" | "~&" | "~" | "-->" |
-"=" | "!=" | "*" | "+" | ">" | "<"
-{ Punct }
+-- Operators (FOF)
+"("  { p LParen }  ")"   { p RParen }  "["  { p LBrack }   "]"  { p RBrack }
+","  { p Comma }   "."   { p Dot }     "|"  { p Or }       "&"  { p And }
+"~"  { p Not }     "<=>" { p Iff }     "=>" { p Implies }  "<=" { p Follows }
+"<~>"{ p Xnor }    "~|"  { p Nor }     "~&" { p Nand }     "="  { p Eq }
+"!=" { p Neq }     "!"   { p ForAll }  "?"  { p Exists }   ":=" { p Let }
+":-" { p LetTerm }
+-- Operators (TFF)
+":" { p Colon }    "*"   { p Times }   "+"  { p Plus }     ">"  { p FunArrow }
+-- Operators (THF)
+"^"  { p Lambda } "@" { p Apply }  "!!" { p ForAllLam }  "??"  { p ExistsLam }
+"@+" { p Some }   "@-" { p The }   "<<" { p Subtype }    "-->" { p SequentArrow }
+"!>" { p DependentProduct }        "?*" { p DependentSum }
 
 {
+data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
+data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString, pos :: !Pos }
+           | Defined { defined :: !Defined, name :: !BS.ByteString, pos :: !Pos }
+           | Var { name :: !BS.ByteString, pos :: !Pos }
+           | DistinctObject { name :: !BS.ByteString, pos :: !Pos }
+           | Number { value :: !Integer, pos :: !Pos }
+           | Punct { kind :: !Punct, pos :: !Pos }
+             deriving Show
+
+data Keyword = Normal
+             | Thf | Tff | Fof | Cnf
+             | Axiom | Hypothesis | Definition | Assumption
+             | Lemma | Theorem | Conjecture | NegatedConjecture
+             | Plain | FiDomain | FiHypothesis | FiPredicates | Type | Unknown
+             | Include deriving Show
+
+-- We only include defined names that need special treatment from the
+-- parser here: you can freely make up any other names starting with a
+-- '$' and they get turned into Atoms.
+data Defined = DTrue | DFalse | DEqual | DDistinct | DItef | DItet
+             | DO | DI | DTType deriving Show
+
+data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
+           | Or | And | Not | Iff | Implies | Follows | Xnor | Nor | Nand
+           | Eq | Neq | ForAll | Exists | Let | LetTerm -- FOF
+           | Colon | Times | Plus | FunArrow -- TFF
+           | Lambda | Apply | ForAllLam | ExistsLam
+           | DependentProduct | DependentSum | Some | The
+           | Subtype | SequentArrow -- THF
+             deriving Show
+
+p x = const (Punct x)
+k x = Atom x . copy
+d x = Defined x . copy
+
 copy :: BS.ByteString -> BS.ByteString
 copy = id -- could change to a string interning function later
 
@@ -67,14 +136,6 @@ unquote' x | BS.null z = chunk (BS.init y) Empty
 readNumber :: BS.ByteString -> Integer
 readNumber x | BS.null r = n
   where Just (n, r) = BS.readInteger x
-
-data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
-data Token = Atom { name :: !BS.ByteString, pos :: !Pos }
-           | Var { name :: !BS.ByteString, pos :: !Pos }
-           | DistinctObject { name :: !BS.ByteString, pos :: !Pos }
-           | Number { value :: !Integer, pos :: !Pos }
-           | Punct { kind :: !BS.ByteString, pos :: !Pos }
-             deriving Show
 
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
