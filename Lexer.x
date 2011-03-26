@@ -38,6 +38,7 @@ $white+ ;
 "theorem" { k Theorem }
 "conjecture" { k Conjecture }
 "negated_conjecture" { k NegatedConjecture }
+"question" { k Question }
 "plain" { k Plain }
 "fi_domain" { k FiDomain }
 "fi_hypothesis" { k FiHypothesis }
@@ -56,7 +57,7 @@ $white+ ;
 "$i" | "$iType" { d DI }
 "$tType" { d DTType }
 -- Atoms.
-"$$"{0,2} [a-z] $alpha* { Atom Normal . copy }
+"$"{0,2} [a-z] $alpha* { Atom Normal . copy }
 -- Atoms with funny quoted names (here we diverge from the official
 -- syntax, which only allows the escape sequences \\ and \' in quoted
 -- atoms: we allow \ to be followed by any printable character)
@@ -95,7 +96,7 @@ data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString, pos :: !Pos }
 data Keyword = Normal
              | Thf | Tff | Fof | Cnf
              | Axiom | Hypothesis | Definition | Assumption
-             | Lemma | Theorem | Conjecture | NegatedConjecture
+             | Lemma | Theorem | Conjecture | NegatedConjecture | Question
              | Plain | FiDomain | FiHypothesis | FiPredicates | Type | Unknown
              | Include deriving Show
 
