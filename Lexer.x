@@ -4,7 +4,7 @@
 {
 {-# OPTIONS_GHC -O2 #-}
 {-# LANGUAGE BangPatterns #-}
-module Lexer(scan, Pos(..), Token(..)) where
+module Lexer(scan, Pos(..), Token(..), TokenStream(..), alexGetChar) where
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -68,39 +68,39 @@ readNumber :: BS.ByteString -> Integer
 readNumber x | BS.null r = n
   where Just (n, r) = BS.readInteger x
 
-data Pos = Pos !Word !Word deriving Show
+data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
 data Token = Atom { name :: !BS.ByteString, pos :: !Pos }
            | Var { name :: !BS.ByteString, pos :: !Pos }
            | DistinctObject { name :: !BS.ByteString, pos :: !Pos }
-           | Number { value :: Integer, pos :: !Pos }
+           | Number { value :: !Integer, pos :: !Pos }
            | Punct { kind :: !BS.ByteString, pos :: !Pos }
-           | Error { pos :: !Pos }
              deriving Show
 
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
+data TokenStream = Nil | Cons !Token TokenStream | Error !Pos
+
 scan xs = go (Input (Pos 1 1) '\n' BS.empty xs)
   where go inp@(Input pos _ x xs) =
           case alexScan inp 0 of
-                AlexEOF -> []
-                AlexError _ -> [Error pos]
-                AlexSkip  inp' len     -> go inp'
-                AlexToken inp' len act | len <= BS.length x -> act (BS.take len x) pos : go inp'
-                                       | otherwise ->
-                                         let token = BSL.take (fromIntegral len) (chunk x xs)
-                                         in act (BS.concat (BSL.toChunks token)) pos : go inp'
-data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !BS.ByteString !BSL.ByteString
+                AlexEOF -> Nil
+                AlexError _ -> Error pos
+                AlexSkip  inp' len -> go inp'
+                AlexToken inp' len act ->
+                  let token | len <= BS.length x = BS.take len x
+                            | otherwise = BS.concat (BSL.toChunks (BSL.take (fromIntegral len) (chunk x xs)))
+                  in act token pos `Cons` go inp'
+
+data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !BS.ByteString BSL.ByteString
 
 alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar (Input p c x xs) = c
 
 {-# INLINE alexGetChar #-}
 alexGetChar :: AlexInput -> Maybe (Char,AlexInput)
-alexGetChar (Input p _ x xs) | BS.null x = refill p xs
-                             | otherwise = getCharNonEmpty p x xs
-{-# NOINLINE refill #-} -- this is the slow path
-refill p Empty = Nothing
-refill p (Chunk x xs) = getCharNonEmpty p x xs
+alexGetChar (Input p _ x xs) | not (BS.null x) = getCharNonEmpty p x xs
+alexGetChar (Input p _ _ (Chunk x xs)) = getCharNonEmpty p x xs
+alexGetChar (Input p _ _ Empty) = Nothing
 {-# INLINE getCharNonEmpty #-}
 getCharNonEmpty p x xs =
   let !c = BS.head x

@@ -7,11 +7,12 @@ import System.IO
 
 data Progress a = Tick (Progress a) | Done a
 
-lastAndLength :: [a] -> Progress (a, Int)
+lastAndLength :: TokenStream -> Progress (Token, Int)
 lastAndLength = go 0 1
   where go !n 250000 xs = Tick (go n 1 xs)
-        go !n t [x] = Done (x, n+1)
-        go !n t (_:xs) = go (n+1) (t+1) xs
+        go !n t (Cons x Nil) = Done (x, n+1)
+        go !n t (Error pos) = Done (error $ "error at " ++ show pos, n+1)
+        go !n t (_ `Cons` xs) = go (n+1) (t+1) xs
 
 progress :: String -> Progress a -> IO a
 progress msg x = putStr msg >> go 0 x
