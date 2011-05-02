@@ -39,9 +39,9 @@ data Problem a = Problem
     inputs :: [Input a] }
 
 data Input a = Input
-  { kind :: !Kind
-  , tag :: !Name
-  , formula :: !a }
+  { kind :: !Kind,
+    tag :: !Name,
+    formula :: !a }
 
 data Term = Var !Variable | !Function :@: [Term] -- use vectors for this?
 data Atom = Term :=: Term | !Predicate :?: [Term]
@@ -55,5 +55,17 @@ data Formula
   | Equiv !Formula !Formula
   | ForAll !(Set Variable) !Formula
   | Exists !(Set Variable) !Formula
+
+nt :: Formula -> Formula
+nt (Literal x) = Literal (neg x)
+nt (And xs) = Or (fmap nt xs)
+nt (Or xs) = And (fmap nt xs)
+nt (Equiv x y) = Equiv (nt x) y
+nt (ForAll vs x) = Exists vs (nt x)
+nt (Exists vs x) = ForAll vs (nt x)
+
+neg :: Signed a -> Signed a
+neg (Pos x) = Neg x
+neg (Neg x) = Pos x
 
 data Kind = Axiom | Conjecture deriving (Eq, Ord, Show)

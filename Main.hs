@@ -3,6 +3,7 @@ module Main where
 
 import Lexer
 import Formula
+import Parser
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import System.IO
 
