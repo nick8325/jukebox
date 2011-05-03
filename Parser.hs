@@ -50,11 +50,12 @@ satisfy p = token (\x -> if p x then Just x else Nothing)
 sourcePos (MkPos file (L.Pos l c)) = newPos file (fromIntegral l) (fromIntegral c)
 
 countTokens :: Parser Int
-countTokens = skipMany (satisfy isAtom >> satisfy (isPunct L.LParen) >> brackets >> satisfy (isPunct L.RParen) >> satisfy (isPunct L.Dot)) >> eof >> getState
+countTokens = skipMany (satisfy (isAtom (== L.Fof)) >> satisfy (isPunct L.LParen) >> satisfy (isAtom (const True)) >> satisfy (isPunct L.Comma) >> ((satisfy (isAtom (== L.Conjecture)) >> skipMany brackets) <|> (satisfy (isAtom (== L.Axiom)) >> skipMany brackets)) >> satisfy (isPunct L.RParen) >> satisfy (isPunct L.Dot)) >> eof >> getState
   where isPunct k L.Punct{L.kind=k'} = k == k'
         isPunct k _ = False
-        isAtom L.Atom{L.keyword=L.Axiom} = True
-        isAtom _ = False
+        isAtom p L.Atom{L.keyword=k} = p k
+        isAtom p _ = False
+        kind k = k == L.Conjecture || k == L.Axiom
         brackets = (satisfy (isPunct L.LParen) >> modifyState (+1) >> skipMany brackets >> satisfy (isPunct L.RParen)) <|>
                    (satisfy (not . isPunct L.RParen))
 
