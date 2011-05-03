@@ -4,7 +4,7 @@
 {
 {-# OPTIONS_GHC -O2 -fno-warn-deprecated-flags #-}
 {-# LANGUAGE BangPatterns #-}
-module Lexer(scan, Pos(..), Token(..), TokenStream(..), Contents(..), alexGetChar) where
+module Lexer(scan, Pos(..), Token(..), Punct(..), Defined(..), Keyword(..), TokenStream(..), Contents(..), alexGetChar) where
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -98,13 +98,13 @@ data Keyword = Normal
              | Axiom | Hypothesis | Definition | Assumption
              | Lemma | Theorem | Conjecture | NegatedConjecture | Question
              | Plain | FiDomain | FiHypothesis | FiPredicates | Type | Unknown
-             | Include deriving Show
+             | Include deriving (Eq, Ord, Show)
 
 -- We only include defined names that need special treatment from the
 -- parser here: you can freely make up any other names starting with a
 -- '$' and they get turned into Atoms.
 data Defined = DTrue | DFalse | DEqual | DDistinct | DItef | DItet
-             | DO | DI | DTType deriving Show
+             | DO | DI | DTType deriving (Eq, Ord, Show)
 
 data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
            | Or | And | Not | Iff | Implies | Follows | Xnor | Nor | Nand
@@ -113,7 +113,7 @@ data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
            | Lambda | Apply | ForAllLam | ExistsLam
            | DependentProduct | DependentSum | Some | The
            | Subtype | SequentArrow -- THF
-             deriving Show
+             deriving (Eq, Ord, Show)
 
 p x = const (Punct x)
 k x = Atom x . copy

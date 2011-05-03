@@ -7,11 +7,12 @@ import Progress
 import TPTP
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
-import Text.Parsec hiding (Empty, Error, anyToken)
+import Text.Parsec hiding (Empty, Error, anyToken, token, satisfy)
 import Text.Parsec.Error
 import Text.Parsec.Pos
 import qualified Control.Monad.Trans.Error as E
 import Control.Monad.Trans.Class
+import Control.Monad
 
 data Pos = MkPos FilePath {-# UNPACK #-} !L.Pos
 data InputState = At {-# UNPACK #-} !Pos !Contents
@@ -40,17 +41,27 @@ nextFile :: Pos -> [(FilePath, L.TokenStream)] -> InputState
 nextFile pos [] = At pos Empty
 nextFile _ ((file, ts):xs) = nextState file ts xs
 
-anyToken :: Parser L.Token
-anyToken = lift (lift tick) >> tokenPrim show (\_ _ (At pos _) -> sourcePos pos) Just
+token :: (L.Token -> Maybe a) -> Parser a
+token f = lift (lift tick) >> tokenPrim show (\_ _ (At pos _) -> sourcePos pos) f
+
+anyToken = token Just
+satisfy p = token (\x -> if p x then Just x else Nothing)
 
 sourcePos (MkPos file (L.Pos l c)) = newPos file (fromIntegral l) (fromIntegral c)
 
 countTokens :: Parser Int
-countTokens = skipMany (anyToken >> modifyState (+1)) >> getState
+countTokens = skipMany (satisfy isAtom >> satisfy (isPunct L.LParen) >> brackets >> satisfy (isPunct L.RParen) >> satisfy (isPunct L.Dot)) >> eof >> getState
+  where isPunct k L.Punct{L.kind=k'} = k == k'
+        isPunct k _ = False
+        isAtom L.Atom{L.keyword=L.Axiom} = True
+        isAtom _ = False
+        brackets = (satisfy (isPunct L.LParen) >> modifyState (+1) >> skipMany brackets >> satisfy (isPunct L.RParen)) <|>
+                   (satisfy (not . isPunct L.RParen))
 
 runParser :: Parser a -> FilePath -> L.TokenStream -> IO (Either ParseError a)
 runParser p file ts = do
-  let errorT = runParserT p 0 file (nextState file ts [])
+  let state@(At pos _) = nextState file ts []
+      errorT = runParserT (setPosition (sourcePos pos) >> p) 0 file state
       progress = E.runErrorT errorT
       tptp = runProgress progress 100000 $ "Parsing " ++ file ++ ".."
       io = runTPTP tptp (const (return Nothing))
