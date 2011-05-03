@@ -4,7 +4,7 @@
 {
 {-# OPTIONS_GHC -O2 -fno-warn-deprecated-flags #-}
 {-# LANGUAGE BangPatterns #-}
-module Lexer(scan, Pos(..), Token(..), TokenStream(..), alexGetChar) where
+module Lexer(scan, Pos(..), Token(..), TokenStream(..), Contents(..), alexGetChar) where
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -85,12 +85,12 @@ $white+ ;
 
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
-data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString, pos :: !Pos }
-           | Defined { defined :: !Defined, name :: !BS.ByteString, pos :: !Pos }
-           | Var { name :: !BS.ByteString, pos :: !Pos }
-           | DistinctObject { name :: !BS.ByteString, pos :: !Pos }
-           | Number { value :: !Integer, pos :: !Pos }
-           | Punct { kind :: !Punct, pos :: !Pos }
+data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString }
+           | Defined { defined :: !Defined, name :: !BS.ByteString }
+           | Var { name :: !BS.ByteString }
+           | DistinctObject { name :: !BS.ByteString }
+           | Number { value :: !Integer }
+           | Punct { kind :: !Punct }
              deriving Show
 
 data Keyword = Normal
@@ -140,18 +140,19 @@ readNumber x | BS.null r = n
 
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
-data TokenStream = Nil | Cons !Token TokenStream | Error !Pos
+data TokenStream = At {-# UNPACK #-} !Pos !Contents
+data Contents = Nil | Cons !Token TokenStream | Error
 
 scan xs = go (Input (Pos 1 1) '\n' BS.empty xs)
   where go inp@(Input pos _ x xs) =
           case alexScan inp 0 of
-                AlexEOF -> Nil
-                AlexError _ -> Error pos
+                AlexEOF -> At pos Nil
+                AlexError _ -> At pos Error
                 AlexSkip  inp' len -> go inp'
                 AlexToken inp' len act ->
                   let token | len <= BS.length x = BS.take len x
                             | otherwise = BS.concat (BSL.toChunks (BSL.take (fromIntegral len) (chunk x xs)))
-                  in act token pos `Cons` go inp'
+                  in At pos (act token `Cons` go inp')
 
 data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !BS.ByteString BSL.ByteString
 
