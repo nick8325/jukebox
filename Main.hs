@@ -36,5 +36,6 @@ import Text.Parsec hiding (runParser)
 
 main = do
   tokens <- fmap Lexer.scan BSL.getContents
-  runParser countTokens "<stdin>" tokens >>= print
+  undefined
+  -- runParser countTokens "<stdin>" tokens >>= print
   

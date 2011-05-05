@@ -6,6 +6,7 @@ import Data.Set(Set)
 import Data.Map(Map)
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
+import Data.List
 
 type Name = BS.ByteString -- for now
 
@@ -24,18 +25,17 @@ instance Eq Type where
 instance Ord Type where
   compare = comparing tname
 
-data Function = Function
-  { fname :: !Name,
-    fres :: !Type }
+instance Show Type where
+  show = BS.unpack . tname
 
+data Function = Function { fname :: !Name, fres :: !Type }
 data Predicate = Predicate { pname :: !Name }
-
 data Variable = Variable { vname :: !Name, vtype :: !Type }
 
 data Problem a = Problem
-  { types :: Set Type,
-    preds :: Map [Type] Predicate,
-    funs :: Map [Type] Function,
+  { types :: Map BS.ByteString Type,
+    preds :: Map BS.ByteString ([Type], Predicate),
+    funs :: Map BS.ByteString ([Type], Function),
     inputs :: [Input a] }
 
 data Input a = Input
@@ -43,7 +43,10 @@ data Input a = Input
     tag :: !Name,
     formula :: !a }
 
-data Term = Var !Variable | !Function :@: [Term] -- use vectors for this?
+instance Functor Input where
+  fmap f x = x { formula = f (formula x) }
+
+data Term = Var !Variable | !Function :@: [Term]
 data Atom = Term :=: Term | !Predicate :?: [Term]
 data Signed a = Pos !a | Neg !a
 type Literal = Signed Atom
@@ -55,6 +58,9 @@ data Formula
   | Equiv !Formula !Formula
   | ForAll !(Set Variable) !Formula
   | Exists !(Set Variable) !Formula
+
+data CNF = CNF [Clause]
+data Clause = Clause !(Set Variable) [Literal]
 
 nt :: Formula -> Formula
 nt (Literal x) = Literal (neg x)
@@ -69,3 +75,9 @@ neg (Pos x) = Neg x
 neg (Neg x) = Pos x
 
 data Kind = Axiom | Conjecture deriving (Eq, Ord, Show)
+
+showPredType args = showArgs args ++ "$o"
+showFunType args res = showArgs args ++ show res
+showArgs [] = ""
+showArgs [ty] = show ty ++ " > "
+showArgs tys = "(" ++ intercalate " * " (map show tys) ++ ") >"
