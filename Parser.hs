@@ -1,10 +1,10 @@
 {-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses #-}
 module Parser where
 
-import Lexer hiding (At, Error, Pos, Contents, Type)
+import Lexer hiding (At, Error, Pos, Contents, Type, keyword, defined)
 import qualified Lexer as L
 import qualified Formula as F
-import Formula
+import Formula hiding (kind, formula)
 import Progress
 import TPTP
 import qualified Data.ByteString.Char8 as BS
@@ -24,7 +24,7 @@ data InputState = At {-# UNPACK #-} !Pos !Contents
 data Contents = Empty | Error | Token !Token !TokenStream [(FilePath, TokenStream)]
 
 type M = E.ErrorT Pos (Progress (TPTP IO)) -- ErrorT Pos is for reporting lex errors
-type Parser = ParsecT InputState (Problem (Either Formula Clause)) M
+type Parser = ParsecT InputState (Problem Formula) M
 
 instance E.Error Pos where
   noMsg = error "instance Error Pos: not implemented"
@@ -79,19 +79,24 @@ token f = lift (lift tick) >> tokenPrim show (\_ _ (At pos _) -> sourcePos pos) 
 
 anyToken = token Just
 satisfy p = token (\x -> if p x then Just x else Nothing)
-
-finish :: Parser (Problem (Either Formula Clause))
-finish = do
-  x <- getState
-  return x { inputs = reverse (inputs x) }
+keyword p = satisfy p'
+  where p' Atom { L.keyword = k } = p k
+        p' _ = False
+punct p = satisfy p'
+  where p' Punct { kind = k } = p k
+        p' _ = False
+defined p = satisfy p'
+  where p' Defined { L.defined = d } = p d
+        p' _ = False
+atom = keyword (const True)
+parens p = between (punct (== LParen)) (punct (== RParen)) p
+bracks p = between (punct (== LBrack)) (punct (== RBrack)) p
+nested nest p = nest (nested nest p) <|> p -- e.g. nested parens p
 
 -- Inserting types, predicates, functions and clauses.
 
 newFormula :: Input Formula -> Parser ()
-newFormula input = modifyState (\x -> x { inputs = fmap Left input:inputs x })
-
-newClause :: Input Clause -> Parser ()
-newClause input = modifyState (\x -> x { inputs = fmap Right input:inputs x })
+newFormula input = modifyState (\x -> x { inputs = input:inputs x })
 
 findType :: BS.ByteString -> Parser Type
 findType name = do
@@ -112,9 +117,8 @@ findPredicate name args = do
       putState s { preds = Map.insert name (args, pred) (preds s) }
       return pred
     Just (args', _) | args /= args' ->
-      fail $ "Predicate " ++ BS.unpack name ++ " : " ++
-             showPredType args' ++ " was used at type " ++
-             showPredType args
+      fail $ "Expected " ++ BS.unpack name ++ " to have type " ++ showPredType args ++
+             " but it has type " ++ showPredType args'
     Just (_, pred) ->
       return pred
 
@@ -126,9 +130,77 @@ findFunction name args res = do
       let fun = Function { fname = name, fres = res }
       putState s { funs = Map.insert name (args, fun) (funs s) }
       return fun
-    Just (args', fun) | args /= args' ->
-      fail $ "Function " ++ BS.unpack name ++ " : " ++
-             showFunType args' (fres fun) ++ " was used at type " ++
-             showFunType args res
+    Just (args', fun) | args /= args' || res /= fres fun ->
+      fail $ "Expected " ++ BS.unpack name ++ " to have type " ++ showFunType args res ++
+             " but it has type " ++ showFunType args' (fres fun)
     Just (_, fun) ->
       return fun
+
+-- Parsing formulae.
+
+problem :: Parser (Problem Formula)
+problem = do
+  many input
+  x <- getState
+  return x { inputs = reverse (inputs x) }
+
+input :: Parser ()
+input = declaration L.Type (keyword (== L.Type)) (\_ _ -> typeDecl) <|>
+        formula Cnf cnf <|>
+        formula Tff tff <|>
+        formula Fof fof
+  where formula k p = declaration k kind $
+                        \tag (f, kind) -> do
+                          res <- p
+                          newFormula Input{ F.kind = kind, tag = tag, F.formula = f res }
+        kind = axiom L.Axiom <|> 
+               axiom L.Hypothesis <|>
+               axiom L.Definition <|>
+               axiom L.Assumption <|>
+               axiom L.Lemma <|>
+               axiom L.Theorem <|>
+               conjecture L.Conjecture <|>
+               conjecture L.Question <|>
+               do { keyword (== L.NegatedConjecture); return (id, F.NegatedConjecture) }
+        axiom k = do { keyword (== k); return (id, F.Axiom) }
+        conjecture k = do { keyword (== k); return (nt, F.NegatedConjecture) }
+
+declaration :: Keyword -> Parser a -> (BS.ByteString -> a -> Parser b) -> Parser b
+declaration k p1 p2 = do
+  keyword (== k)
+  res <- parens $ do
+    Atom{name = tag} <- atom
+    punct (== Comma)
+    kind <- p1
+    punct (== Comma)
+    p2 tag kind
+  punct (== Dot)
+  return res
+
+typeDecl = nested parens $ do
+  Atom{name = name} <- atom
+  punct (== Colon)
+  let function = do
+        lhs <- args
+        punct (== FunArrow)
+        fun lhs
+      constant = fun []
+      fun lhs =
+            do { defined (== DO); findPredicate name lhs; return () }
+        <|> do { rhs <- type_; findFunction name lhs rhs; return () } 
+      args = fmap concat (sepBy1 arg (punct (== Times)))
+        where arg = parens args <|>
+                    do { ty <- type_; return [ty] }
+      type_ =
+            do { Atom { name = ty } <- atom; findType ty }
+        <|> do { defined (== DI); findType individual }
+ 
+  nested (try . parens) $ do { defined (== DTType); findType name; return () } <|>
+                          try function <|>
+                          constant
+
+individual = BS.pack "$i"
+
+cnf = fail "cnf"
+tff = fail "tff"
+fof = fail "fof"

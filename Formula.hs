@@ -28,27 +28,27 @@ instance Ord Type where
 instance Show Type where
   show = BS.unpack . tname
 
-data Function = Function { fname :: !Name, fres :: !Type }
-data Predicate = Predicate { pname :: !Name }
-data Variable = Variable { vname :: !Name, vtype :: !Type }
+data Function = Function { fname :: !Name, fres :: !Type } deriving Show
+data Predicate = Predicate { pname :: !Name } deriving Show
+data Variable = Variable { vname :: !Name, vtype :: !Type } deriving Show
 
 data Problem a = Problem
   { types :: Map BS.ByteString Type,
     preds :: Map BS.ByteString ([Type], Predicate),
     funs :: Map BS.ByteString ([Type], Function),
-    inputs :: [Input a] }
+    inputs :: [Input a] } deriving Show
 
 data Input a = Input
   { kind :: !Kind,
     tag :: !Name,
-    formula :: !a }
+    formula :: !a } deriving Show
 
 instance Functor Input where
   fmap f x = x { formula = f (formula x) }
 
-data Term = Var !Variable | !Function :@: [Term]
-data Atom = Term :=: Term | !Predicate :?: [Term]
-data Signed a = Pos !a | Neg !a
+data Term = Var !Variable | !Function :@: [Term] deriving Show
+data Atom = Term :=: Term | !Predicate :?: [Term] deriving Show
+data Signed a = Pos !a | Neg !a deriving Show
 type Literal = Signed Atom
 
 data Formula
@@ -57,7 +57,7 @@ data Formula
   | Or !(AppList Formula)
   | Equiv !Formula !Formula
   | ForAll !(Set Variable) !Formula
-  | Exists !(Set Variable) !Formula
+  | Exists !(Set Variable) !Formula deriving Show
 
 data CNF = CNF [Clause]
 data Clause = Clause !(Set Variable) [Literal]
@@ -74,7 +74,7 @@ neg :: Signed a -> Signed a
 neg (Pos x) = Neg x
 neg (Neg x) = Pos x
 
-data Kind = Axiom | Conjecture deriving (Eq, Ord, Show)
+data Kind = Axiom | NegatedConjecture deriving (Eq, Ord, Show)
 
 showPredType args = showArgs args ++ "$o"
 showFunType args res = showArgs args ++ show res

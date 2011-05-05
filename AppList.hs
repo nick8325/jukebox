@@ -6,6 +6,9 @@ import Control.Monad
 
 data AppList a = Append !(AppList a) !(AppList a) | Unit !a | Nil
 
+instance Show a => Show (AppList a) where
+  show = show . toList
+
 cons :: a -> AppList a -> AppList a
 cons x xs = Append (Unit x) xs
 
