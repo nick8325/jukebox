@@ -5,6 +5,6 @@ Build-type: Simple
 
 Executable jukebox
   Main-is: Main.hs
-  Build-depends: bytestring, base >= 4, array, transformers, parsec >= 3, containers, directory, filepath
+  Build-depends: bytestring, base >= 4, array, transformers, parsimony, containers, directory, filepath
   Build-tools: alex
   Other-modules: Lexer, AppList, Formula, Parser

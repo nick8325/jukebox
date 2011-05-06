@@ -1,33 +1,36 @@
 {-# LANGUAGE BangPatterns #-}
 module Main where
 
-import qualified Lexer
+import Lexer
 import Formula
-import Parser
+import qualified Parser
 import qualified Data.ByteString.Lazy.Char8 as BSL
-import Text.Parsec hiding (runParser)
--- import System.IO
+import System.IO
 
--- data Progress a = Tick (Progress a) | Done a
+data Progress a = Tick (Progress a) | Done a
 
--- lastAndLength :: TokenStream -> Progress (Token, Int)
--- lastAndLength = go 0 1
---   where go !n 250000 xs = Tick (go n 1 xs)
---         go !n t (At _ (Cons x (At _ Nil))) = Done (x, n+1)
---         go !n t (At pos Error) = Done (error $ "error at " ++ show pos, n+1)
---         go !n t (At _ (Cons _ xs)) = go (n+1) (t+1) xs
+lastAndLength :: TokenStream -> Progress (Token, Int)
+lastAndLength = go 0 1
+  where go !n 250000 xs = Tick (go n 1 xs)
+        go !n t (At _ (Cons x (At _ Nil))) = Done (x, n+1)
+        go !n t (At pos Error) = Done (error $ "error at " ++ show pos, n+1)
+        go !n t (At _ (Cons _ xs)) = go (n+1) (t+1) xs
 
--- progress :: String -> Progress a -> IO a
--- progress msg x = putStr msg >> go 0 x
---   where go n x = do
---           putStr (spinny n) >> hFlush stdout
---           case x of
---             Tick x -> go ((n+1) `mod` 4) x
---             Done x -> putStrLn "." >> return x
---         spinny 0 = ".-\08"
---         spinny 1 = "\\\08"
---         spinny 2 = "|\08"
---         spinny 3 = "/\08"
+filterNonPunct (At _ (Cons Punct{} ts)) = filterNonPunct ts
+filterNonPunct (At p (Cons t ts)) = At p (Cons t (filterNonPunct ts))
+filterNonPunct ts = ts
+
+progress :: String -> Progress a -> IO a
+progress msg x = putStr msg >> go 0 x
+  where go n x = do
+          putStr (spinny n) >> hFlush stdout
+          case x of
+            Tick x -> go ((n+1) `mod` 4) x
+            Done x -> putStrLn "." >> return x
+        spinny 0 = ".-\08"
+        spinny 1 = "\\\08"
+        spinny 2 = "|\08"
+        spinny 3 = "/\08"
 
 -- main = do
 --   tokens <- fmap scan BSL.getContents
@@ -35,6 +38,9 @@ import Text.Parsec hiding (runParser)
 --   putStrLn (show length_ ++ " tokens, last was " ++ show last_)
 
 main = do
-  tokens <- fmap Lexer.scan BSL.getContents
-  runParser problem "<stdin>" tokens >>= print
+  tokens <- fmap scan BSL.getContents
+  let nonPunct = filterNonPunct tokens
+  progress "foo" (lastAndLength nonPunct) >>= print
+  progress "foo" (lastAndLength nonPunct) >>= print
+  -- runParser problem "<stdin>" tokens >>= print
   
