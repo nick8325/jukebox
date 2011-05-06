@@ -3,7 +3,7 @@ module Main where
 
 import Lexer
 import Formula
-import qualified Parser
+import Parser
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import System.IO
 
@@ -37,10 +37,4 @@ progress msg x = putStr msg >> go 0 x
 --   (last_, length_) <- progress "Lexing..." (lastAndLength tokens)
 --   putStrLn (show length_ ++ " tokens, last was " ++ show last_)
 
-main = do
-  tokens <- fmap scan BSL.getContents
-  let nonPunct = filterNonPunct tokens
-  progress "foo" (lastAndLength nonPunct) >>= print
-  progress "foo" (lastAndLength nonPunct) >>= print
-  -- runParser problem "<stdin>" tokens >>= print
-  
+main = parseProblem "test" >>= print

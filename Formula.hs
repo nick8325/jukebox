@@ -7,6 +7,7 @@ import Data.Map(Map)
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Data.List
+import qualified Lexer as L
 
 type Name = BS.ByteString -- for now
 
@@ -40,7 +41,7 @@ data Problem a = Problem
 
 data Input a = Input
   { kind :: !Kind,
-    tag :: !Name,
+    tag :: !L.Token,
     formula :: !a } deriving Show
 
 instance Functor Input where

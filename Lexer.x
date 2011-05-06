@@ -91,7 +91,7 @@ data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString }
            | DistinctObject { name :: !BS.ByteString }
            | Number { value :: !Integer }
            | Punct { kind :: !Punct }
-             deriving Show
+             deriving (Eq, Show)
 
 data Keyword = Normal
              | Thf | Tff | Fof | Cnf
