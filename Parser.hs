@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, ScopedTypeVariables #-}
+{-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, ScopedTypeVariables, BangPatterns #-}
 module Parser where
 
 import Lexer hiding (Error, Type, Pos, Include, Var, keyword, defined)
@@ -7,15 +7,14 @@ import qualified Lexer as L
 import qualified Formula as F
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy as BSL
-import Parsimony hiding (Parser)
-import Parsimony.Error
-import Parsimony.Pos
-import Parsimony.Stream hiding (Token)
-import qualified Parsimony.Stream
-import Parsimony.UserState
+import Text.Parsec hiding (satisfy, anyToken, eof)
+import Text.Parsec.Error
+import Text.Parsec.Pos
+import Text.Parsec.Prim
 import Control.Monad
-import Control.Monad.IO.Class
-import Control.Monad.Trans.Error
+import Control.Monad.Trans
+import Control.Monad.Identity
+import Control.Monad.Error
 import Control.Exception hiding (try)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -59,6 +58,10 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
         problem :: ParseState -> Problem Formula
         problem (MkState prob _ _) = prob
 
+        consume :: Consumed a -> a
+        consume (Consumed x) = x
+        consume (Empty x) = x
+
         parseFile :: FilePath -> Maybe [Token] -> SourcePos ->
                      Problem Formula -> ErrorT ParseError IO (Problem Formula)
         parseFile name clauses pos prob = do
@@ -70,23 +73,20 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
                         (newPos file 0 0) show
           let At (L.Pos l c) tokens = scan contents
               pos' = newPos file (fromIntegral l) (fromIntegral c)
-              s = State (UserState (MkState prob iType clauses) tokens) pos'
-          fmap (problem . userState . stateInput) (parseSections s)
+              s = State tokens pos' (MkState prob iType clauses)
+          fmap (problem . stateUser) (parseSections s)
 
-        parseSections :: State (UserState ParseState Contents) ->
-                         ErrorT ParseError IO (State (UserState ParseState Contents))
+        parseSections :: State Contents ParseState ->
+                         ErrorT ParseError IO (State Contents ParseState)
         parseSections s =
-          case runParser section s of
+          case runIdentity (consume (runIdentity (runParsecT section s))) of
             Error e -> throwError e
-            Ok Nothing s' ->
-              case parserStream (stateInput s') of
-                Nil -> do
-                  liftIO $ leave progressBar
-                  return s'
-                L.Error -> err (statePos s') "Lexical error"
-            Ok (Just (Include name clauses')) (State (UserState (MkState prob i clauses) tokens) pos) -> do
+            Ok Nothing s'@State{stateInput = Nil} _ -> do
+              liftIO $ leave progressBar
+              return s'
+            Ok (Just (Include name clauses')) (State tokens pos (MkState prob i clauses)) _ -> do
               prob' <- parseFile (BS.unpack name) clauses' pos prob
-              parseSections (State (UserState (MkState prob' i clauses) tokens) pos)
+              parseSections (State tokens pos (MkState prob' i clauses))
 
         finalise :: Problem Formula -> Problem Formula
         finalise p = p { inputs = reverse (inputs p) }
@@ -97,31 +97,30 @@ data ParseState =
   MkState !(Problem Formula) -- problem being constructed, inputs are in reverse order
           !Type              -- the $i type
           !(Maybe [Token])   -- only clauses with these names are added to the problem
-type Parser = ParserU ParseState Contents
+type Parser = Parsec Contents ParseState
 
--- Interfacing with Alex: how to get a token from a token stream
-instance Parsimony.Stream.Token Token where
-  updatePos = error "Parser.updatePos"
-  showToken = show
-
-instance Stream Contents Token where
-  getToken (State Nil p) =
-    Error $ newErrorMessage (UnExpect "end of input") p
-  getToken (State (Cons t (At (L.Pos l c) ts)) p) =
-    let p' = flip setSourceLine (fromIntegral l) $
-             flip setSourceColumn (fromIntegral c) p in
-    Ok t (State ts p')
-  -- Note that, for example, the eof combinator will succeed when the
-  -- token stream is in the error state! We detect this in the parser
-  -- driver instead.
-  getToken (State L.Error p) =
-    Error $ newErrorMessage (UnExpect "lexical error") p
+-- dummy instance---we have our own combinators for fetching from the
+-- stream, since parsec struggles with our special Error token.
+instance Stream Contents Identity Token where
+  uncons = error "uncons: not implemented"
 
 -- Primitive parsers.
 
-satisfy p = try $ do
-  t <- anyToken
-  if p t then return t else unexpected (showToken t)
+satisfy p = mkPT $ \s ->
+  let err msg = Identity (Empty (Identity (Error (newErrorMessage msg (statePos s))))) in
+  case stateInput s of
+    Nil -> err (UnExpect "end of input")
+    Cons t (At (L.Pos l c) !ts) ->
+      case p t of
+        True ->
+          let !pos' = flip setSourceLine (fromIntegral l) .
+                      flip setSourceColumn (fromIntegral c) $ statePos s
+              !s' = s { statePos = pos', stateInput = ts }
+          in Identity (Consumed (Identity (Ok t s' (unknownError s'))))
+        False -> err (UnExpect (show t))
+    L.Error -> err (Message "lexical error")
+eof = notFollowedBy (satisfy (const True)) <?> "end of input"
+
 keyword' p = satisfy p'
   where p' Atom { L.keyword = k } = p k
         p' _ = False
@@ -157,29 +156,29 @@ binExpr leaf op = do
 
 newFormula :: Input Formula -> Parser ()
 newFormula input = do
-  MkState x i p <- getUserState
+  MkState x i p <- getState
   let ok = case p of
              Nothing -> True
              Just names -> tag input `elem` names
-  when ok $ setUserState $ MkState x{ inputs = input:inputs x } i p
+  when ok $ setState $ MkState x{ inputs = input:inputs x } i p
 
 findType :: BS.ByteString -> Parser Type
 findType name = do
-  MkState s i p <- getUserState
+  MkState s i p <- getState
   case Map.lookup name (types s) of
     Nothing -> do
       let ty = Type { tname = name, tmonotone = Infinite, tsize = Infinite } 
-      setUserState (MkState s{ types = Map.insert name ty (types s) } i p)
+      setState (MkState s{ types = Map.insert name ty (types s) } i p)
       return ty
     Just x -> return x
 
 findPredicate :: BS.ByteString -> [Type] -> Parser Predicate
 findPredicate name args = do
-  MkState s i p <- getUserState
+  MkState s i p <- getState
   case Map.lookup name (preds s) of
     Nothing -> do
       let pred = Predicate { pname = name }
-      setUserState (MkState s{ preds = Map.insert name (args, pred) (preds s) } i p)
+      setState (MkState s{ preds = Map.insert name (args, pred) (preds s) } i p)
       return pred
     Just (args', _) | args /= args' ->
       fail $ "Expected " ++ BS.unpack name ++ " to have type " ++ showPredType args ++
@@ -189,11 +188,11 @@ findPredicate name args = do
 
 findFunction :: BS.ByteString -> [Type] -> Type -> Parser Function
 findFunction name args res = do
-  MkState s i p <- getUserState
+  MkState s i p <- getState
   case Map.lookup name (funs s) of
     Nothing -> do
       let fun = Function { fname = name, fres = res }
-      setUserState (MkState s{ funs = Map.insert name (args, fun) (funs s) } i p)
+      setState (MkState s{ funs = Map.insert name (args, fun) (funs s) } i p)
       return fun
     Just (args', fun) | args /= args' || res /= fres fun ->
       fail $ "Expected " ++ BS.unpack name ++ " to have type " ++ showFunType args res ++
@@ -269,7 +268,7 @@ typeDeclaration = do
     Atom { name = name } <- atom
     punct Colon
     lhs <- binExpr leafType (punct Times >> return productType)
-    rhs <- optional (punct FunArrow >> leafType)
+    rhs <- optionMaybe (punct FunArrow >> leafType)
     case (lhs, rhs) of
       (TypeAST, Nothing) -> do { findType name; return () }
       (BooleanAST, Nothing) -> do { findPredicate name []; return () }
@@ -306,5 +305,5 @@ type_ =
 -- The type $i (anything whose type is not specified gets this type)
 individual :: Parser Type
 individual = do
-  MkState _ i _ <- getUserState
+  MkState _ i _ <- getState
   return i
