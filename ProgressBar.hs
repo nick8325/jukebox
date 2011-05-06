@@ -25,8 +25,8 @@ data State = State {
 -- What happened last.
 data Last = Tick | Enter | Leave
 
-tickOnRead :: BSL.ByteString -> ProgressBar -> IO BSL.ByteString
-tickOnRead s p = do
+tickOnRead :: ProgressBar -> BSL.ByteString -> IO BSL.ByteString
+tickOnRead p s = do
   let chunkSize = 250000 :: Word64
   nextRef <- newIORef chunkSize
   let f _ index = do

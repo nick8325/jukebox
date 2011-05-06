@@ -14,6 +14,8 @@ import Parsimony.Stream hiding (Token)
 import qualified Parsimony.Stream
 import Parsimony.UserState
 import Control.Monad
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Error
 import Control.Exception hiding (try)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -27,58 +29,67 @@ parseProblem name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP []) 
 -- The I/O part of the parser loop, which has the job of handling
 -- include files, finding and reading files and updating the progress bar.
 -- This is a bit icky.
-parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either ParseError (Problem Formula))
-parseProblemWith findFile progressBar name = do
-  let s0 = MkState p0 iType Nothing
-      p0 = Problem { types  = Map.fromList [(tname iType, iType)],
-                     preds  = Map.empty,
-                     funs   = Map.empty,
-                     inputs = [] }
-      iType = Type { tname = BS.pack "$i", tmonotone = Infinite, tsize = Infinite }
-      -- read and parse a new file
-      push name clauses ss s pos = do
-        let err msg = return (Left (newErrorMessage (Message msg) pos))
-        file <- findFile name
-        case file of
-          Nothing -> err $ "File " ++ name ++ " not found"
-          Just file -> do
-            contents <- fmap Right (BSL.readFile file) `catch`
-                        (\(e :: IOException) -> return (Left e))
-            case contents of
-              Left e ->
-                err $ "Couldn't read file " ++ file
-              Right contents ->
-                let At (L.Pos l c) tokens = scan contents
-                    pos = newPos file (fromIntegral l) (fromIntegral c)
-                    s' = State (UserState (pushState clauses s) tokens) pos
-                in go s' ss
-      -- continue parsing
-      go s ss =
-        case runParser section s of
-          Error e -> return (Left e)
-          Ok Nothing s' ->
-            goEof s' ss
-          Ok (Just (Include name clauses)) s' ->
-            push (BS.unpack name) clauses (s':ss) (userState (stateInput s')) (statePos s')
-      -- decide what to do at end-of-file/lexical-error
-      goEof s ss =
-        case parserStream (stateInput s) of
-          Nil -> resume (userState (stateInput s)) ss
-          L.Error ->
-            let msg = "Lexical error"
-                pos = statePos s
-            in return (Left (newErrorMessage (Message msg) pos))
-          _ -> error "Parser.parseProblemWith.goEof: not at end of file"
-      resume s [] =
-        return (Right (extractProblem s))
-      resume s' (s:ss) =
-        go (popState s' s) ss
+instance Error ParseError where
+  noMsg = strMsg "unknown error"
+  strMsg msg = newErrorMessage (Message msg) (newPos "<unknown>" 0 0)
 
-      extractProblem (MkState p _ _) = p { inputs = reverse (inputs p) }
-      pushState clauses (MkState p i _) = MkState p i clauses
-      popState (MkState p _ _) (State (UserState (MkState _ i cs) tokens) pos) = State (UserState (MkState p i cs) tokens) pos
-                
-  push name Nothing [] s0 (newPos "<command line>" 0 0)
+parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either ParseError (Problem Formula))
+parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile name Nothing pos0 p0))
+  where p0 = Problem { types  = Map.fromList [(tname iType, iType)],
+                       preds  = Map.empty,
+                       funs   = Map.empty,
+                       inputs = [] }
+        pos0 = newPos "<command line>" 0 0
+        iType = Type { tname = BS.pack "$i", tmonotone = Infinite, tsize = Infinite }
+
+        err pos msg = throwError (newErrorMessage (Message msg) pos)
+        liftMaybeIO :: IO (Maybe a) -> SourcePos -> String -> ErrorT ParseError IO a
+        liftMaybeIO m pos msg = do
+          x <- liftIO m
+          case x of
+            Nothing -> err pos msg
+            Just x -> return x
+        liftEitherIO :: IO (Either a b) -> SourcePos -> (a -> String) -> ErrorT ParseError IO b
+        liftEitherIO m pos msg = do
+          x <- liftIO m
+          case x of
+            Left e -> err pos (msg e)
+            Right x -> return x
+
+        problem :: ParseState -> Problem Formula
+        problem (MkState prob _ _) = prob
+
+        parseFile :: FilePath -> Maybe [Token] -> SourcePos ->
+                     Problem Formula -> ErrorT ParseError IO (Problem Formula)
+        parseFile name clauses pos prob = do
+          file <- liftMaybeIO (findFile name) pos ("File " ++ name ++ " not found")
+          liftIO $ enter progressBar $ "Reading " ++ file
+          contents <- liftEitherIO
+                        (fmap Right (BSL.readFile file >>= tickOnRead progressBar)
+                          `catch` (\(e :: IOException) -> return (Left e)))
+                        (newPos file 0 0) show
+          let At (L.Pos l c) tokens = scan contents
+              pos' = newPos file (fromIntegral l) (fromIntegral c)
+              s = State (UserState (MkState prob iType clauses) tokens) pos'
+          fmap (problem . userState . stateInput) (parseSections s)
+
+        parseSections :: State (UserState ParseState Contents) ->
+                         ErrorT ParseError IO (State (UserState ParseState Contents))
+        parseSections s =
+          case runParser section s of
+            Error e -> throwError e
+            Ok Nothing s' ->
+              case parserStream (stateInput s') of
+                Nil -> do
+                  liftIO $ leave progressBar
+                  return s'
+                L.Error -> err (statePos s') "Lexical error"
+            Ok (Just (Include name clauses')) (State (UserState (MkState prob i clauses) tokens) pos) -> do
+              prob' <- parseFile (BS.unpack name) clauses' pos prob
+              parseSections (State (UserState (MkState prob' i clauses) tokens) pos)
+
+        finalise :: Problem Formula -> Problem Formula
+        finalise p = p { inputs = reverse (inputs p) }
 
 data IncludeStatement = Include BS.ByteString (Maybe [Token])
 
