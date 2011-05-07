@@ -7,4 +7,3 @@ Executable jukebox
   Main-is: Main.hs
   Build-depends: bytestring, base >= 4, array, mtl, parsec >= 3.1, containers, directory, filepath, bytestring-progress
   Build-tools: alex
-  Other-modules: Lexer, AppList, Formula, Parser

@@ -4,6 +4,7 @@ import System.FilePath
 import System.Directory
 import System.Environment
 import Control.Exception
+import Control.Monad
 import Prelude hiding (catch)
 
 findFile :: [FilePath] -> FilePath -> IO (Maybe FilePath)
@@ -19,4 +20,6 @@ findFileTPTP dirs file = do
   let f :: IOException -> IO [FilePath]
       f _ = return []
   tptp <- do { dir <- getEnv "TPTP"; return [dir] } `catch` f
-  findFile (".":dirs++tptp) file
+  let candidates = [file, "Problems" </> file,
+                    "Problems" </> take 3 file </> file]
+  fmap msum (mapM (findFile (".":dirs++tptp)) candidates)

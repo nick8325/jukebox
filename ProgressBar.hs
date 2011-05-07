@@ -27,7 +27,7 @@ data Last = Tick | Enter | Leave
 
 tickOnRead :: ProgressBar -> BSL.ByteString -> IO BSL.ByteString
 tickOnRead p s = do
-  let chunkSize = 250000 :: Word64
+  let chunkSize = 1000000 :: Word64
   nextRef <- newIORef chunkSize
   let f _ index = do
         next <- readIORef nextRef
@@ -63,4 +63,4 @@ withProgressBar f = do
         when (level s /= 1) (put ")")
         writeIORef state s{last = Leave, level = level s - 1 }
   f ProgressBar { tick = tick, enter = enter, leave = leave }
-    `finally` put "\n"
+    `finally` put " \n"

@@ -31,7 +31,7 @@ instance Show Type where
 
 data Function = Function { fname :: !Name, fres :: !Type } deriving Show
 data Predicate = Predicate { pname :: !Name } deriving Show
-data Variable = Variable { vname :: !Name, vtype :: !Type } deriving Show
+data Variable = Variable { vname :: !Name, vtype :: !Type } deriving (Eq, Ord, Show)
 
 data Problem a = Problem
   { types :: Map BS.ByteString Type,

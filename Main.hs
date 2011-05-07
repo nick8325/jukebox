@@ -1,9 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
 module Main where
 
-import Lexer
+import ReadProblem.Lexer
 import Formula
-import Parser
+import ReadProblem.Parser
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import System.IO
 

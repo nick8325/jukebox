@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeSynonymInstances, MultiParamTypeClasses, ScopedTypeVariables, BangPatterns #-}
 module Parser where
 
-import Lexer hiding (Error, Type, Pos, Include, Var, keyword, defined)
+import Lexer hiding (Error, Type, Pos, Include, Var, ForAll, Exists, keyword, defined)
 import Formula hiding (kind, formula)
 import qualified Lexer as L
 import qualified Formula as F
@@ -116,7 +116,7 @@ satisfy p = mkPT $ \s ->
           let !pos' = flip setSourceLine (fromIntegral l) .
                       flip setSourceColumn (fromIntegral c) $ statePos s
               !s' = s { statePos = pos', stateInput = ts }
-          in Identity (Consumed (Identity (Ok t s' (unknownError s'))))
+          in Identity (Consumed (Identity (Ok t s' (unknownError s))))
         False -> err (UnExpect (show t))
     L.Error -> err (Message "lexical error")
 eof = notFollowedBy (satisfy (const True)) <?> "end of input"
@@ -278,12 +278,38 @@ typeDeclaration = do
       _ -> fail "invalid type"
  
 tff, fof, cnf :: Parser Formula
-tff = formula (varDecl True)
-fof = formula (varDecl False)
+tff = formula True Map.empty (varDecl True)
+fof = formula True Map.empty (varDecl False)
 cnf = fail "cnf not supported yet"
 
-formula :: Parser Variable -> Parser Formula
-formula = undefined
+formula :: Bool -> Map.Map Name Variable -> Parser Variable -> Parser Formula
+formula !pos env var = undefined
+               
+unitary :: Bool -> Map.Map Name Variable -> Parser Variable -> Parser Formula
+unitary !pos env var = -- fmap mkLiteral literal <|>
+                       quant forAll L.ForAll <|>
+                       quant exists L.Exists <|>
+                       negation
+  where quant q k = do
+          punct k
+          vars <- bracks (sepBy var (punct Comma))
+          punct Comma
+          let env' = foldl' (\m v -> Map.insert (vname v) v m) env vars
+          form <- unitary pos env' var <|> parens (formula pos env' var)
+          return (q (Set.fromList vars) form)
+        negation = do
+          punct Not
+          unitary (not pos) env var
+          -- how will we parse
+          --   (f(x)) != y
+          -- as a formula
+          -- (possible change of plan, then:
+          --  prolog-style term structure first after all,
+          --  but only process one clause at a time.
+          --  or: structure the parser as a slurp-up-clause-followed-by-turn-into-formula thing.
+          -- but, this is still hard because we need = to have higher priority than &)
+        (forAll, exists) | pos = (ForAll, Exists)
+                         | otherwise = (Exists, ForAll)
 
 -- varDecl True: parse a typed variable binding X:a or an untyped one X
 -- varDecl Fals: parse an untyped variable binding X
