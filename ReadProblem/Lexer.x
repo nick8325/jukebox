@@ -4,7 +4,15 @@
 {
 {-# OPTIONS_GHC -O2 -fno-warn-deprecated-flags #-}
 {-# LANGUAGE BangPatterns #-}
-module Lexer(scan, Pos(..), Token(..), Punct(..), Defined(..), Keyword(..), TokenStream(..), Contents(..), alexGetChar) where
+module ReadProblem.Lexer(
+  scan,
+  Pos(..),
+  Token(..),
+  Punct(..),
+  Defined(..),
+  Keyword(..),
+  TokenStream(..),
+  Contents(..)) where
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
@@ -73,7 +81,7 @@ $white+ ;
 "("  { p LParen }  ")"   { p RParen }  "["  { p LBrack }   "]"  { p RBrack }
 ","  { p Comma }   "."   { p Dot }     "|"  { p Or }       "&"  { p And }
 "~"  { p Not }     "<=>" { p Iff }     "=>" { p Implies }  "<=" { p Follows }
-"<~>"{ p Xnor }    "~|"  { p Nor }     "~&" { p Nand }     "="  { p Eq }
+"<~>"{ p Xor }     "~|"  { p Nor }     "~&" { p Nand }     "="  { p Eq }
 "!=" { p Neq }     "!"   { p ForAll }  "?"  { p Exists }   ":=" { p Let }
 ":-" { p LetTerm }
 -- Operators (TFF)
@@ -107,7 +115,7 @@ data Defined = DTrue | DFalse | DEqual | DDistinct | DItef | DItet
              | DO | DI | DTType deriving (Eq, Ord, Show)
 
 data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
-           | Or | And | Not | Iff | Implies | Follows | Xnor | Nor | Nand
+           | Or | And | Not | Iff | Implies | Follows | Xor | Nor | Nand
            | Eq | Neq | ForAll | Exists | Let | LetTerm -- FOF
            | Colon | Times | Plus | FunArrow -- TFF
            | Lambda | Apply | ForAllLam | ExistsLam
@@ -140,8 +148,8 @@ readNumber x | BS.null r = n
 
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
-data TokenStream = At {-# UNPACK #-} !Pos !Contents
-data Contents = Nil | Cons !Token TokenStream | Error
+data TokenStream = At {-# UNPACK #-} !Pos !Contents deriving Show
+data Contents = Nil | Cons !Token TokenStream | Error deriving Show
 
 scan xs = go (Input (Pos 1 1) '\n' BS.empty xs)
   where go inp@(Input pos _ x xs) =

@@ -3,7 +3,7 @@ module Main where
 
 import ReadProblem.Lexer
 import Formula
-import ReadProblem.Parser
+import ReadProblem.TermParser
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import System.IO
 
