@@ -102,7 +102,7 @@ bracks p = between (punct LBrack) (punct RBrack) p
 
 binExpr :: Parser a -> Parser (a -> a -> Parser a) -> Parser a
 binExpr leaf op = do
-  lhs <- leaf <|> parens (binExpr leaf op)
+  lhs <- leaf
   do { f <- op; rhs <- binExpr leaf op; f lhs rhs } <|> return lhs
 
 -- Parsing clauses.
@@ -156,9 +156,8 @@ kind = axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
                   Formula.formula = f form }
 
 -- A formula name.
-tag = satisfy p <?> "clause name"
-  where p Punct{} = False
-        p _ = True
+tag :: Parser Tag
+tag = atom <|> fmap (BS.pack . show) number <?> "clause name"
 
 -- An include declaration.
 include :: Parser IncludeStatement
@@ -275,25 +274,26 @@ term (Atomic x xs) = do
 
 atomic, literal, unitaryThing, quantifiedThing, thing ::
   (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing
-atomic = parens thing <|> ((function <|> variable) <?> "term")
+atomic = parens thing <|> ((function <|> variable <|> true <|> false) <?> "term")
   where variable = do
           x <- var
           case Map.lookup x ?ctx of
             Just v -> return (Term (Var v))
             Nothing -> fail $ "unbound variable " ++ BS.unpack x
         function = do
-          x <- fmap name (satisfy p)
+          x <- atom
           args <- parens (sepBy1 (atomic >>= term) (punct Comma)) <|> return []
           return (Atomic x args)
-        p Atom{} = True
-        p Defined{} = True
-        p _ = False
+        true = defined DTrue >> return (Formula (And AppList.Nil))
+        false = defined DFalse >> return (Formula (Or AppList.Nil))
 
 literal = atomic `binExpr` ((punct Eq >> return (f Pos)) <|>
                             (punct Neq >> return (f Neg)))
   where f sign x y = do
           x' <- term x
           y' <- term y
+          when (ty x' /= ty y') $
+            fail $ "Type mismatch in equality: left hand side has type " ++ show (ty x') ++ " and right hand side has type " ++ show (ty y')
           return (Formula . Literal . sign $ x' :=: y')
 
 unitaryThing = negation <|> quantifiedThing <|> literal
@@ -356,7 +356,12 @@ arrow _ _ = fail "invalid type"
 leaf :: Parser Type_
 leaf = do { defined DTType; return TType } <|>
        do { defined DO; return O } <|>
-       do { ty <- type_; return (Prod [ty]) }
+       do { ty <- type_; return (Prod [ty]) } <|>
+       parens type__
+
+type__ :: Parser Type_
+type__ = leaf `binExpr` (punct Times >> return prod)
+              `binExpr` (punct FunArrow >> return arrow)
 
 typeDeclaration :: Parser ()
 typeDeclaration = do
