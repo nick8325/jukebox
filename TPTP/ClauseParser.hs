@@ -1,7 +1,7 @@
 -- Parse and typecheck TPTP clauses, stopping at include-clauses.
 
 {-# LANGUAGE BangPatterns, MultiParamTypeClasses, ImplicitParams #-}
-module ReadProblem.Parser where
+module TPTP.ClauseParser where
 
 import Text.Parsec hiding (satisfy, eof, token, runParser)
 import Text.Parsec.Error
@@ -16,8 +16,8 @@ import qualified Data.Set as Set
 import qualified AppList
 import Data.List
 
-import ReadProblem.Lexer hiding (At, Error, Include, Pos, Var, Type, Not, ForAll, Exists, And, Or, Type, keyword, defined, kind)
-import qualified ReadProblem.Lexer as L
+import TPTP.Lexer hiding (At, Error, Include, Pos, Var, Type, Not, ForAll, Exists, And, Or, Type, keyword, defined, kind)
+import qualified TPTP.Lexer as L
 import qualified Formula
 import Formula hiding (tag, kind, formula, Axiom, NegatedConjecture)
 

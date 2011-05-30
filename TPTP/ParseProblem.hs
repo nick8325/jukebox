@@ -1,4 +1,4 @@
-module ReadProblem where
+module TPTP.ParseProblem where
 
 import Text.Parsec(ParseError)
 

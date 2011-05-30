@@ -4,7 +4,7 @@
 {
 {-# OPTIONS_GHC -O2 -fno-warn-deprecated-flags #-}
 {-# LANGUAGE BangPatterns #-}
-module ReadProblem.Lexer(
+module TPTP.Lexer(
   scan,
   Pos(..),
   Token(..),

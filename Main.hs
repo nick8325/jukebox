@@ -1,11 +1,11 @@
 {-# LANGUAGE BangPatterns #-}
 module Main where
 
-import ReadProblem.Lexer
+import TPTP.Lexer
 import Formula
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import System.IO
-import qualified ReadProblem.Parser
+-- import qualified ReadProblem.Parser
 
 data Progress a = Tick (Progress a) | Done a
 
