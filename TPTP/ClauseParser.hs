@@ -82,12 +82,6 @@ satisfy p = mkPT $ \s ->
          else err Empty (UnExpect ("'" ++ prettyShow t ++ "'"))
     L.Error -> err Consumed (Message "lexical error")
 
--- Opposite of 'try'.
-consume p = mkPT $ \s ->
-  case runParsecT p s of
-    Identity (Empty x) -> Identity (Consumed x)
-    Identity (Consumed x) -> Identity (Consumed x)
-
 eof = notFollowedBy (satisfy (const True)) <?> "end of input"
 
 keyword' p = satisfy p'
@@ -150,8 +144,10 @@ input included = declaration Cnf (formulaIn cnf) <|>
           punct Comma
           form <- lang
           newFormula (k tag form)
-        -- Relies on Parsec's non-backtracking behaviour
-        balancedParens = parens balancedParens <|> (satisfy (const True) >> balancedParens)
+        balancedParens = skipMany (parens balancedParens <|> (satisfy p >> return ()))
+        p Punct{L.kind=LParen} = False
+        p Punct{L.kind=RParen} = False
+        p _ = True
 
 -- A TPTP kind.
 kind :: Parser (Tag -> Formula -> Input Formula)
