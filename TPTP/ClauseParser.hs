@@ -29,7 +29,6 @@ import Formula hiding (tag, kind, formula, Axiom, NegatedConjecture)
 data ParseState =
   MkState !(Problem Formula) -- problem being constructed, inputs are in reverse order
           !(Maybe Type)      -- the $i type, if used in the problem
-          !(Maybe [Tag])     -- only clauses with these names are added to the problem
   deriving Show
 type Parser = Parsec Contents ParseState
 type ParsecState = State Contents ParseState
@@ -42,11 +41,14 @@ instance Stream Contents Identity Token where
   -- the stream, since parsec struggles with our special Error token.
   uncons = error "uncons: not implemented"
 
--- The initial Parsec state.
-openFile :: FilePath -> TokenStream -> ParsecState
-openFile file (L.At (L.Pos l c) ts) = State ts pos state0
+-- The parser state after opening a file.
+openFile :: FilePath -> TokenStream -> ParseState -> ParsecState
+openFile file (L.At (L.Pos l c) ts) s = State ts pos s
   where pos = newPos file (fromIntegral l) (fromIntegral c)
-        state0 = MkState (Problem Map.empty Map.empty Map.empty []) Nothing Nothing
+
+-- The initial parser state.
+initialState :: ParseState
+initialState = MkState (Problem Map.empty Map.empty Map.empty []) Nothing
 
 runParser :: Parser a -> ParsecState -> Either ParseError (a, ParsecState)
 runParser p state =
@@ -58,11 +60,11 @@ runParser p state =
 
 -- Wee function for testing.
 testParser :: Parser a -> String -> Either ParseError a
-testParser p s = fmap fst (runParser p (openFile "<test input>" (scan (BSL.pack s))))
+testParser p s = fmap fst (runParser p (openFile "<test input>" (scan (BSL.pack s)) initialState))
 
 getProblem :: Parser (Problem Formula)
 getProblem = do
-  MkState p _ _ <- getState
+  MkState p _ <- getState
   return p { inputs = reverse (inputs p) }
 
 -- Primitive parsers.
@@ -124,14 +126,14 @@ binExpr leaf op = do
 -- Parsing clauses.
 
 -- Parse as many things as possible until EOF or an include statement.
-section :: Parser (Maybe IncludeStatement)
-section = skipMany input >> (fmap Just include <|> (eof >> return Nothing))
+section :: (Tag -> Bool) -> Parser (Maybe IncludeStatement)
+section included = skipMany (input included) >> (fmap Just include <|> (eof >> return Nothing))
 
 -- A single non-include clause.
-input :: Parser ()
-input = declaration Cnf (formulaIn cnf) <|>
-        declaration Fof (formulaIn fof) <|>
-        declaration Tff (\tag -> formulaIn tff tag <|> typeDeclaration)
+input :: (Tag -> Bool) -> Parser ()
+input included = declaration Cnf (formulaIn cnf) <|>
+                 declaration Fof (formulaIn fof) <|>
+                 declaration Tff (\tag -> formulaIn tff tag <|> typeDeclaration)
   where declaration k m = do
           keyword k
           parens $ do
@@ -140,8 +142,7 @@ input = declaration Cnf (formulaIn cnf) <|>
             -- Don't bother typechecking clauses that we are not
             -- supposed to include in the problem (seems in the
             -- spirit of TPTP's include mechanism)
-            b <- included t
-            if b then m t else balancedParens
+            if included t then m t else balancedParens
           punct Dot
           return ()
         formulaIn lang tag = do
@@ -151,11 +152,6 @@ input = declaration Cnf (formulaIn cnf) <|>
           newFormula (k tag form)
         -- Relies on Parsec's non-backtracking behaviour
         balancedParens = parens balancedParens <|> (satisfy (const True) >> balancedParens)
-        included t = do
-          MkState _ _ x <- getState
-          case x of
-            Nothing -> return True
-            Just ts -> return (t `elem` ts)
 
 -- A TPTP kind.
 kind :: Parser (Tag -> Formula -> Input Formula)
@@ -191,26 +187,26 @@ include = do
 
 newFormula :: Input Formula -> Parser ()
 newFormula input = do
-  MkState x i p <- getState
-  putState (MkState x{ inputs = input:inputs x } i p)
+  MkState x i <- getState
+  putState (MkState x{ inputs = input:inputs x } i)
 
 findType :: BS.ByteString -> Parser Type
 findType name = do
-  MkState s i p <- getState
+  MkState s i <- getState
   case Map.lookup name (types s) of
     Nothing -> do
       let ty = Type { tname = name, tmonotone = Infinite, tsize = Infinite } 
-      putState (MkState s{ types = Map.insert name ty (types s) } i p)
+      putState (MkState s{ types = Map.insert name ty (types s) } i)
       return ty
     Just x -> return x
 
 findPredicate :: BS.ByteString -> [Type] -> Parser Predicate
 findPredicate name args = do
-  MkState s i p <- getState
+  MkState s i <- getState
   case Map.lookup name (preds s) of
     Nothing -> do
       let pred = Predicate { pname = name }
-      putState (MkState s{ preds = Map.insert name (args, pred) (preds s) } i p)
+      putState (MkState s{ preds = Map.insert name (args, pred) (preds s) } i)
       return pred
     Just (args', _) | args /= args' ->
       fail $ "Predicate " ++ BS.unpack name ++ " was used at type " ++ showPredType args ++
@@ -220,12 +216,12 @@ findPredicate name args = do
 
 findFunction :: BS.ByteString -> [Type] -> Parser Function
 findFunction name args = do
-  MkState s i p <- getState
+  MkState s i <- getState
   case Map.lookup name (funs s) of
     Nothing -> do
       ind <- individual
       let fun = Function { fname = name, fres = ind }
-      putState (MkState s{ funs = Map.insert name (args, fun) (funs s) } i p)
+      putState (MkState s{ funs = Map.insert name (args, fun) (funs s) } i)
       return fun
     Just (args', fun) | args /= args' ->
       fail $ "Function " ++ BS.unpack name ++ " was used at argument type " ++ showArgs args ++
@@ -235,11 +231,11 @@ findFunction name args = do
 
 newFunction :: BS.ByteString -> [Type] -> Type -> Parser Function
 newFunction name args res = do
-  MkState s i p <- getState
+  MkState s i <- getState
   case Map.lookup name (funs s) of
     Nothing -> do
       let fun = Function { fname = name, fres = res }
-      putState (MkState s{ funs = Map.insert name (args, fun) (funs s) } i p)
+      putState (MkState s{ funs = Map.insert name (args, fun) (funs s) } i)
       return fun
     Just (args', fun) | args /= args' || res /= fres fun ->
       fail $ "Function " ++ BS.unpack name ++ " was declared to have type " ++ showFunType args res ++
@@ -250,11 +246,11 @@ newFunction name args res = do
 -- The type $i (anything whose type is not specified gets this type)
 individual :: Parser Type
 individual = do
-  MkState x i p <- getState
+  MkState x i <- getState
   case i of
     Nothing -> do
       ind <- findType (BS.pack "$i")
-      putState (MkState x (Just ind) p)
+      putState (MkState x (Just ind))
       return ind
     Just x -> return x
 

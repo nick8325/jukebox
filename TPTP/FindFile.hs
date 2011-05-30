@@ -1,4 +1,4 @@
-module FindFile where
+module TPTP.FindFile where
 
 import System.FilePath
 import System.Directory
