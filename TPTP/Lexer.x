@@ -94,24 +94,43 @@ $white+ ;
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
 data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString }
-           | Defined { defined :: !Defined, name :: !BS.ByteString  }
+           | Defined { defined :: !Defined  }
            | Var { name :: !BS.ByteString }
            | DistinctObject { name :: !BS.ByteString }
            | Number { value :: !Integer }
-           | Punct { kind :: !Punct, name :: !BS.ByteString }
+           | Punct { kind :: !Punct } deriving Show
 
 data Keyword = Normal
              | Thf | Tff | Fof | Cnf
              | Axiom | Hypothesis | Definition | Assumption
              | Lemma | Theorem | Conjecture | NegatedConjecture | Question
              | Plain | FiDomain | FiHypothesis | FiPredicates | Type | Unknown
-             | Include deriving (Eq, Ord, Show)
+             | Include deriving (Eq, Ord)
+
+instance Show Keyword where
+  show x =
+    case x of {
+      Normal -> "normal";
+      Thf -> "thf"; Tff -> "tff"; Fof -> "fof"; Cnf -> "cnf";
+      Axiom -> "axiom"; Hypothesis -> "hypothesis"; Definition -> "definition";
+      Assumption -> "assumption"; Lemma -> "lemma"; Theorem -> "theorem";
+      Conjecture -> "conjecture"; NegatedConjecture -> "negated_conjecture";
+      Question -> "question"; Plain -> "plain"; FiDomain -> "fi_domain";
+      FiHypothesis -> "fi_hypothesis"; FiPredicates -> "fi_predicates";
+      Type -> "type"; Unknown -> "unknown"; Include -> "include" }
 
 -- We only include defined names that need special treatment from the
 -- parser here: you can freely make up any other names starting with a
 -- '$' and they get turned into Atoms.
 data Defined = DTrue | DFalse | DEqual | DDistinct | DItef | DItet
-             | DO | DI | DTType deriving (Eq, Ord, Show)
+             | DO | DI | DTType deriving (Eq, Ord)
+
+instance Show Defined where
+  show x =
+    case x of {
+      DTrue -> "$true"; DFalse -> "$false"; DEqual -> "$equal";
+      DDistinct -> "$distinct"; DItef -> "$itef"; DItet -> "$itet";
+      DO -> "$o"; DI -> "$i"; DTType -> "$tType" }
 
 data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
            | Or | And | Not | Iff | Implies | Follows | Xor | Nor | Nand
@@ -120,11 +139,23 @@ data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
            | Lambda | Apply | ForAllLam | ExistsLam
            | DependentProduct | DependentSum | Some | The
            | Subtype | SequentArrow -- THF
-             deriving (Eq, Ord, Show)
+             deriving (Eq, Ord)
 
-p x = Punct x . copy
+instance Show Punct where
+  show x =
+    case x of {
+      LParen -> "("; RParen -> ")"; LBrack -> "["; RBrack -> "]";
+      Comma -> ","; Dot -> "."; Or -> "|"; And -> "&"; Not -> "~";
+      Iff -> "<=>"; Implies -> "=>"; Follows -> "<="; Xor -> "<~>";
+      Nor -> "~|"; Nand -> "~&"; Eq -> "="; Neq -> "!="; ForAll -> "!";
+      Exists -> "?"; Let -> ":="; Colon -> ":"; Times -> "*"; Plus -> "+";
+      FunArrow -> ">"; Lambda -> "^"; Apply -> "@"; ForAllLam -> "!!";
+      ExistsLam -> "??"; Some -> "@+"; The -> "@-"; Subtype -> "<<";
+      SequentArrow -> "-->"; DependentProduct -> "!>"; DependentSum -> "?*" }
+
+p x = const (Punct x)
 k x = Atom x . copy
-d x = Defined x . copy
+d x = const (Defined x)
 
 copy :: BS.ByteString -> BS.ByteString
 copy = id -- could change to a string interning function later

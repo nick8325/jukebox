@@ -15,6 +15,7 @@ import Data.Map(Map)
 import qualified Data.Set as Set
 import qualified AppList
 import Data.List
+import TPTP.Print
 
 import TPTP.Lexer hiding
   (At, Error, Include, Pos, Var, Type, Not, ForAll,
@@ -71,7 +72,7 @@ satisfy p = mkPT $ \s ->
                           flip setSourceColumn (fromIntegral c) $ statePos s
                   !s' = s { statePos = pos', stateInput = ts }
               in Identity (Consumed (Identity (Ok t s' (unknownError s'))))
-         else err Empty (UnExpect (show t))
+         else err Empty (UnExpect ("'" ++ prettyShow t ++ "'"))
     L.Error -> err Consumed (Message "lexical error")
 
 -- Opposite of 'try'.
@@ -85,15 +86,15 @@ eof = notFollowedBy (satisfy (const True)) <?> "end of input"
 keyword' p = satisfy p'
   where p' Atom { L.keyword = k } = p k
         p' _ = False
-keyword k = keyword' (== k) <?> show k
+keyword k = keyword' (== k) <?> "'" ++ show k ++ "'"
 punct' p = satisfy p'
   where p' Punct { L.kind = k } = p k
         p' _ = False
-punct k = punct' (== k) <?> show k
+punct k = punct' (== k) <?> "'" ++ show k ++ "'"
 defined' p = fmap L.defined (satisfy p')
   where p' Defined { L.defined = d } = p d
         p' _ = False
-defined k = defined' (== k) <?> show k
+defined k = defined' (== k) <?> "'" ++ show k ++ "'"
 variable = fmap name (satisfy p) <?> "variable"
   where p L.Var{} = True
         p _ = False
@@ -110,12 +111,10 @@ bracks p = between (punct LBrack) (punct RBrack) p
 
 -- Build an expression parser from a binary-connective parser
 -- and a leaf parser.
--- The odd type of the binary-connective parser is so that we
--- get error messages at approximately the right point.
-binExpr :: Parser a -> (a -> Parser (a -> Parser a)) -> Parser a
+binExpr :: Parser a -> Parser (a -> a -> Parser a) -> Parser a
 binExpr leaf op = do
   lhs <- leaf
-  do { f <- op lhs; rhs <- binExpr leaf op; f rhs } <|> return lhs
+  do { f <- op; rhs <- binExpr leaf op; f lhs rhs } <|> return lhs
 
 -- Parsing clauses.
 
@@ -352,7 +351,7 @@ literal = true <|> false <|> binary <?> "literal"
                punct p
                rhs <- term :: Parser Term
                when (ty lhs /= ty rhs) $
-                 fail $ "Type mismatch in equality: left hand side has type " ++ show (ty lhs) ++ " and right hand side has type " ++ show (ty rhs)
+                 fail $ "Type mismatch in equality: left hand side has type " ++ prettyShow (ty lhs) ++ " and right hand side has type " ++ prettyShow (ty rhs)
                return (fromFormula . Literal . sign $ lhs :=: rhs)
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
@@ -421,11 +420,11 @@ leaf :: Parser Type_
 leaf = do { defined DTType; return TType } <|>
        do { defined DO; return O } <|>
        do { ty <- type_; return (Prod [ty]) } <|>
-       parens type__
+       parens compoundType
 
-type__ :: Parser Type_
-type__ = leaf `binExpr` (\t -> punct Times >> return (prod t))
-              `binExpr` (\t -> punct FunArrow >> return (arrow t))
+compoundType :: Parser Type_
+compoundType = leaf `binExpr` (punct Times >> return prod)
+                    `binExpr` (punct FunArrow >> return arrow)
 
 typeDeclaration :: Parser ()
 typeDeclaration = do
@@ -435,7 +434,7 @@ typeDeclaration = do
   manyParens $ do
     name <- atom
     punct Colon
-    res <- type__
+    res <- compoundType
     case res of
       TType -> do { findType name; return () }
       O -> do { findPredicate name []; return () }
