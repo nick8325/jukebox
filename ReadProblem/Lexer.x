@@ -94,7 +94,7 @@ $white+ ;
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
 data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString }
-           | Defined { defined :: !Defined  }
+           | Defined { defined :: !Defined, name :: !BS.ByteString  }
            | Var { name :: !BS.ByteString }
            | DistinctObject { name :: !BS.ByteString }
            | Number { value :: !Integer }
@@ -125,7 +125,7 @@ data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
 
 p x = const (Punct x)
 k x = Atom x . copy
-d x = const (Defined x)
+d x = Defined x . copy
 
 copy :: BS.ByteString -> BS.ByteString
 copy = id -- could change to a string interning function later

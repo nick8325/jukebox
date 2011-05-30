@@ -6,14 +6,19 @@ import Control.Monad
 
 data AppList a = Append !(AppList a) !(AppList a) | Unit !a | Nil
 
+append :: AppList a -> AppList a -> AppList a
+append Nil xs = xs
+append xs Nil = xs
+append xs ys = Append xs ys
+
 instance Show a => Show (AppList a) where
   show = show . toList
 
 cons :: a -> AppList a -> AppList a
-cons x xs = Append (Unit x) xs
+cons x xs = Unit x `append` xs
 
 snoc :: AppList a -> a -> AppList a
-snoc xs x = Append xs (Unit x)
+snoc xs x = xs `append` Unit x
 
 instance Functor AppList where
   fmap f (Append x y) = Append (fmap f x) (fmap f y)
@@ -26,10 +31,10 @@ instance Monad AppList where
 
 instance MonadPlus AppList where
   mzero = Nil
-  mplus = Append
+  mplus = append
 
 concat :: AppList (AppList a) -> AppList a
-concat (Append x y) = Append (concat x) (concat y)
+concat (Append x y) = concat x `append` concat y
 concat (Unit x) = x
 concat Nil = Nil
 

@@ -7,9 +7,10 @@ import Data.Map(Map)
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Data.List
-import ReadProblem.Syntax(Tag)
+import ReadProblem.Lexer(Token)
 
 type Name = BS.ByteString -- for now
+type Tag = Token
 
 data DomainSize = Finite !Int | Infinite deriving (Eq, Ord) 
 
@@ -39,7 +40,7 @@ data Problem a = Problem
     funs :: Map BS.ByteString ([Type], Function),
     inputs :: [Input a] } deriving Show
 
-data Input k a = Input
+data Input a = Input
   { tag :: !Tag,
     kind :: !Kind,
     formula :: !a } deriving Show
@@ -48,12 +49,18 @@ instance Functor Input where
   fmap f x = x { formula = f (formula x) }
 
 data Term = Var !Variable | !Function :@: [Term] deriving Show
+
+ty :: Term -> Type
+ty (Var Variable{vtype = ty}) = ty
+ty (Function{fres = ty} :@: _) = ty
+
 data Atom = Term :=: Term | !Predicate :?: [Term] deriving Show
 data Signed a = Pos !a | Neg !a deriving Show
 type Literal = Signed Atom
 
 data Formula
   = Literal !Literal
+  | Not !Formula
   | And !(AppList Formula)
   | Or !(AppList Formula)
   | Equiv !Formula !Formula
@@ -63,14 +70,6 @@ data Formula
 data CNF = CNF [Clause]
 data Clause = Clause !(Set Variable) [Literal]
 
-nt :: Formula -> Formula
-nt (Literal x) = Literal (neg x)
-nt (And xs) = Or (fmap nt xs)
-nt (Or xs) = And (fmap nt xs)
-nt (Equiv x y) = Equiv (nt x) y
-nt (ForAll vs x) = Exists vs (nt x)
-nt (Exists vs x) = ForAll vs (nt x)
-
 neg :: Signed a -> Signed a
 neg (Pos x) = Neg x
 neg (Neg x) = Pos x
@@ -78,7 +77,7 @@ neg (Neg x) = Pos x
 data Kind = Axiom | NegatedConjecture deriving (Eq, Ord, Show)
 
 showPredType args = showArgs args ++ "$o"
-showFunType args res = showArgs args ++ show res
-showArgs [] = ""
-showArgs [ty] = show ty ++ " > "
-showArgs tys = "(" ++ intercalate " * " (map show tys) ++ ") >"
+showFunType [] res = show res
+showFunType [arg] res = show arg ++ " > " ++ show res
+showFunType args res = "(" ++ showArgs args ++ ") > " ++ show res
+showArgs tys = intercalate " * " (map show tys)

@@ -3,9 +3,9 @@ module Main where
 
 import ReadProblem.Lexer
 import Formula
-import ReadProblem.TermParser
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import System.IO
+import qualified ReadProblem.Parser
 
 data Progress a = Tick (Progress a) | Done a
 
@@ -32,9 +32,9 @@ progress msg x = putStr msg >> go 0 x
         spinny 2 = "|\08"
         spinny 3 = "/\08"
 
--- main = do
---   tokens <- fmap scan BSL.getContents
---   (last_, length_) <- progress "Lexing..." (lastAndLength tokens)
---   putStrLn (show length_ ++ " tokens, last was " ++ show last_)
+main = do
+  tokens <- fmap scan BSL.getContents
+  (last_, length_) <- progress "Lexing..." (lastAndLength tokens)
+  putStrLn (show length_ ++ " tokens, last was " ++ show last_)
 
-main = parseProblem "test" >>= print
+-- main = parseProblem "test" >>= print
