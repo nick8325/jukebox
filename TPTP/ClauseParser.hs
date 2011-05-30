@@ -16,7 +16,9 @@ import qualified Data.Set as Set
 import qualified AppList
 import Data.List
 
-import TPTP.Lexer hiding (At, Error, Include, Pos, Var, Type, Not, ForAll, Exists, And, Or, Type, keyword, defined, kind)
+import TPTP.Lexer hiding
+  (At, Error, Include, Pos, Var, Type, Not, ForAll,
+   Exists, And, Or, Type, Apply, keyword, defined, kind)
 import qualified TPTP.Lexer as L
 import qualified Formula
 import Formula hiding (tag, kind, formula, Axiom, NegatedConjecture)
@@ -72,6 +74,12 @@ satisfy p = mkPT $ \s ->
          else err Empty (UnExpect (show t))
     L.Error -> err Consumed (Message "lexical error")
 
+-- Opposite of 'try'.
+consume p = mkPT $ \s ->
+  case runParsecT p s of
+    Identity (Empty x) -> Identity (Consumed x)
+    Identity (Consumed x) -> Identity (Consumed x)
+
 eof = notFollowedBy (satisfy (const True)) <?> "end of input"
 
 keyword' p = satisfy p'
@@ -86,7 +94,7 @@ defined' p = fmap L.defined (satisfy p')
   where p' Defined { L.defined = d } = p d
         p' _ = False
 defined k = defined' (== k) <?> show k
-var = fmap name (satisfy p) <?> "variable"
+variable = fmap name (satisfy p) <?> "variable"
   where p L.Var{} = True
         p _ = False
 number = fmap value (satisfy p) <?> "number"
@@ -100,10 +108,14 @@ parens, bracks :: Parser a -> Parser a
 parens p = between (punct LParen) (punct RParen) p
 bracks p = between (punct LBrack) (punct RBrack) p
 
-binExpr :: Parser a -> Parser (a -> a -> Parser a) -> Parser a
+-- Build an expression parser from a binary-connective parser
+-- and a leaf parser.
+-- The odd type of the binary-connective parser is so that we
+-- get error messages at approximately the right point.
+binExpr :: Parser a -> (a -> Parser (a -> Parser a)) -> Parser a
 binExpr leaf op = do
   lhs <- leaf
-  do { f <- op; rhs <- binExpr leaf op; f lhs rhs } <|> return lhs
+  do { f <- op lhs; rhs <- binExpr leaf op; f rhs } <|> return lhs
 
 -- Parsing clauses.
 
@@ -164,7 +176,7 @@ include :: Parser IncludeStatement
 include = do
   keyword L.Include
   res <- parens $ do
-    name <- atom
+    name <- atom <?> "quoted filename"
     clauses <- do { punct Comma
                   ; fmap Just (bracks (sepBy1 tag (punct Comma))) } <|> return Nothing
     return (Include name clauses)
@@ -249,86 +261,138 @@ cnf = fail "cnf not implemented"
 tff =
   let ?binder = varDecl True
       ?ctx = Map.empty
-  in thing >>= formula
+  in formula
 fof =
   let ?binder = varDecl False
       ?ctx = Map.empty
-  in thing >>= formula
+  in formula
 
--- A formula or term, or a literal-thing of unknown type.
-data Thing = Atomic !BS.ByteString ![Term] | Term !Term | Formula !Formula
+-- We cannot always know whether what we are parsing is a formula or a
+-- term, since we don't have lookahead. For example, p(x) might be a
+-- formula, but in p(x)=y, p(x) is a term.
+--
+-- To deal with this, we introduce the Thing datatype.
+-- A thing is either a term or a formula, or a literal that we don't know
+-- if it should be a term or a formula. Instead of a separate formula-parser
+-- and term-parser we have a combined thing-parser.
+data Thing = Apply !BS.ByteString ![Term] | Term !Term | Formula !Formula
 
-formula :: Thing -> Parser Formula
-formula (Formula f) = return f
-formula (Term _) = unexpected "term" <?> "formula"
-formula (Atomic x xs) = do
-  p <- findPredicate x (map ty xs)
-  return (Literal (Pos (p :?: xs)))
+-- However, often we do know whether we want a formula or a term,
+-- and there it's best to use a specialised parser (not least because
+-- the error messages are better). For that reason, our parser is
+-- parametrised on the type of thing you want to parse. We have two
+-- main parsers:
+--   * 'term' parses an atomic expression
+--   * 'formula' parses an arbitrary expression
+-- You can instantiate 'term' for Term, Formula or Thing; in each case
+-- you get an appropriate parser. You can instantiate 'formula' for
+-- Formula or Thing.
 
-term :: Thing -> Parser Term
-term (Formula _) = unexpected "formula" <?> "term"
-term (Term t) = return t
-term (Atomic x xs) = do
-  f <- findFunction x (map ty xs)
-  return (f :@: xs)
+-- Types for which a term f(...) is a valid literal. These are the types on
+-- which you can use 'term'.
+class TermLike a where
+  -- Convert from a Thing.
+  fromThing :: Thing -> Parser a
+  -- Parse a variable occurrence as a term on its own, if that's allowed.
+  var :: (?ctx :: Map BS.ByteString Variable) => Parser a
+  -- A parser for this type.
+  parser :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser a
 
-atomic, literal, unitaryThing, quantifiedThing, thing ::
-  (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing
-atomic = parens thing <|> ((function <|> variable <|> true <|> false) <?> "term")
-  where variable = do
-          x <- var
-          case Map.lookup x ?ctx of
-            Just v -> return (Term (Var v))
-            Nothing -> fail $ "unbound variable " ++ BS.unpack x
-        function = do
+instance TermLike Formula where
+  fromThing (Apply x xs) = do
+    f <- findPredicate x (map ty xs)
+    return (Literal (Pos (f :?: xs)))
+  fromThing (Term _) = mzero
+  fromThing (Formula f) = return f
+  -- A variable itself is not a valid formula.
+  var = mzero
+  parser = formula
+
+instance TermLike Term where
+  fromThing (Apply x xs) = do
+    f <- findFunction x (map ty xs)
+    return (f :@: xs)
+  fromThing (Term t) = return t
+  fromThing (Formula _) = mzero
+  parser = term
+  var = do
+    x <- variable
+    case Map.lookup x ?ctx of
+      Just v -> return (Var v)
+      Nothing -> fail $ "unbound variable " ++ BS.unpack x
+
+instance TermLike Thing where
+  fromThing = return
+  var = fmap Term var
+  parser = formula
+
+-- Types that can represent formulae. These are the types on which
+-- you can use 'formula'.
+class TermLike a => FormulaLike a where fromFormula :: Formula -> a
+instance FormulaLike Formula where fromFormula = id
+instance FormulaLike Thing where fromFormula = Formula
+
+-- An atomic expression.
+term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, TermLike a) => Parser a
+term = function <|> var <|> parens parser <?> "term"
+  where function = do
           x <- atom
-          args <- parens (sepBy1 (atomic >>= term) (punct Comma)) <|> return []
-          return (Atomic x args)
-        true = defined DTrue >> return (Formula (And AppList.Nil))
-        false = defined DFalse >> return (Formula (Or AppList.Nil))
+          args <- parens (sepBy1 term (punct Comma)) <|> return []
+          fromThing (Apply x args)
 
-literal = atomic `binExpr` ((punct Eq >> return (f Pos)) <|>
-                            (punct Neq >> return (f Neg)))
-  where f sign x y = do
-          x' <- term x
-          y' <- term y
-          when (ty x' /= ty y') $
-            fail $ "Type mismatch in equality: left hand side has type " ++ show (ty x') ++ " and right hand side has type " ++ show (ty y')
-          return (Formula . Literal . sign $ x' :=: y')
+literal, unitary, quantified, formula ::
+  (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, FormulaLike a) => Parser a
+literal = true <|> false <|> binary <?> "literal"
+  where true = do { defined DTrue; return (fromFormula (And AppList.Nil)) }
+        false = do { defined DFalse; return (fromFormula (Or AppList.Nil)) }
+        binary = do
+          x <- term :: Parser Thing
+          let f p sign = do
+               lhs <- fromThing x
+               punct p
+               rhs <- term :: Parser Term
+               when (ty lhs /= ty rhs) $
+                 fail $ "Type mismatch in equality: left hand side has type " ++ show (ty lhs) ++ " and right hand side has type " ++ show (ty rhs)
+               return (fromFormula . Literal . sign $ lhs :=: rhs)
+          f Eq Pos <|> f Neq Neg <|> fromThing x
 
-unitaryThing = negation <|> quantifiedThing <|> literal
+unitary = negation <|> quantified <|> literal
   where negation = do
           punct L.Not
-          fmap (Formula . Not) (unitaryThing >>= formula)
+          fmap (fromFormula . Not) (unitary :: Parser Formula)
 
-quantifiedThing = do
+quantified = do
   q <- (punct L.ForAll >> return ForAll) <|>
        (punct L.Exists >> return Exists)
   vars <- bracks (sepBy1 ?binder (punct Comma))
   let ctx' = foldl' (\m v -> Map.insert (vname v) v m) ?ctx vars
   punct Colon
-  rest <- let ?ctx = ctx' in unitaryThing >>= formula
-  return (Formula (q (Set.fromList vars) rest))
+  rest <- let ?ctx = ctx' in (unitary :: Parser Formula)
+  return (fromFormula (q (Set.fromList vars) rest))
 
-thing = unitaryThing `binExpr` connective
-  where connective = f L.And (binop And) <|>
-                     f L.Or (binop Or) <|>
-                     f L.Iff Equiv <|>
-                     f L.Implies (\t u -> binop Or (Not t) u) <|>
-                     f L.Follows (\t u -> binop Or (Not u) t) <|>
-                     f L.Xor (\t u -> Not (t `Equiv` u)) <|>
-                     f Nor (\t u -> Not (binop Or t u)) <|>
-                     f Nand (\t u -> Not (binop And t u))
-        binop op t u = op (AppList.Unit t `AppList.append` AppList.Unit u)
-        f p conn = do
-          punct p
-          return $ \t u -> fmap Formula (liftM2 conn (formula t) (formula u))
+-- A general formula.
+formula = do
+  x <- unitary :: Parser Thing
+  let binop op t u = op (AppList.Unit t `AppList.append` AppList.Unit u)
+      connective p op = do
+        lhs <- fromThing x
+        punct p
+        rhs <- formula :: Parser Formula
+        return (fromFormula (op lhs rhs))
+  connective L.And (binop And) <|> connective L.Or (binop Or) <|>
+   connective Iff Equiv <|>
+   connective Implies (\t u -> binop Or (Not t) u) <|>
+   connective Follows (\t u -> binop Or t (Not u)) <|>
+   connective Xor (\t u -> Not (t `Equiv` u)) <|>
+   connective Nor (\t u -> Not (binop Or t u)) <|>
+   connective Nand (\t u -> Not (binop And t u)) <|>
+   fromThing x
 
 -- varDecl True: parse a typed variable binding X:a or an untyped one X
 -- varDecl Fals: parse an untyped variable binding X
 varDecl :: Bool -> Parser Variable
 varDecl typed = do
-  x <- var
+  x <- variable
   ty <- do { punct Colon;
              when (not typed) $
                fail "Used a typed quantification in an untyped formula";
@@ -360,8 +424,8 @@ leaf = do { defined DTType; return TType } <|>
        parens type__
 
 type__ :: Parser Type_
-type__ = leaf `binExpr` (punct Times >> return prod)
-              `binExpr` (punct FunArrow >> return arrow)
+type__ = leaf `binExpr` (\t -> punct Times >> return (prod t))
+              `binExpr` (\t -> punct FunArrow >> return (arrow t))
 
 typeDeclaration :: Parser ()
 typeDeclaration = do
@@ -371,8 +435,7 @@ typeDeclaration = do
   manyParens $ do
     name <- atom
     punct Colon
-    res <- leaf `binExpr` (punct Times >> return prod)
-                `binExpr` (punct FunArrow >> return arrow)
+    res <- type__
     case res of
       TType -> do { findType name; return () }
       O -> do { findPredicate name []; return () }

@@ -98,8 +98,7 @@ data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString }
            | Var { name :: !BS.ByteString }
            | DistinctObject { name :: !BS.ByteString }
            | Number { value :: !Integer }
-           | Punct { kind :: !Punct }
-             deriving (Eq, Show)
+           | Punct { kind :: !Punct, name :: !BS.ByteString }
 
 data Keyword = Normal
              | Thf | Tff | Fof | Cnf
@@ -123,7 +122,7 @@ data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
            | Subtype | SequentArrow -- THF
              deriving (Eq, Ord, Show)
 
-p x = const (Punct x)
+p x = Punct x . copy
 k x = Atom x . copy
 d x = Defined x . copy
 
