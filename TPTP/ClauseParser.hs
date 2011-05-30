@@ -60,6 +60,11 @@ runParser p state =
 testParser :: Parser a -> String -> Either ParseError a
 testParser p s = fmap fst (runParser p (openFile "<test input>" (scan (BSL.pack s))))
 
+getProblem :: Parser (Problem Formula)
+getProblem = do
+  MkState p _ _ <- getState
+  return p { inputs = reverse (inputs p) }
+
 -- Primitive parsers.
 
 satisfy p = mkPT $ \s ->
@@ -347,7 +352,7 @@ literal = true <|> false <|> binary <?> "literal"
         binary = do
           x <- term :: Parser Thing
           let f p sign = do
-               lhs <- fromThing x
+               lhs <- fromThing x :: Parser Term
                punct p
                rhs <- term :: Parser Term
                when (ty lhs /= ty rhs) $

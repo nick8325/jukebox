@@ -62,7 +62,7 @@ instance Show Variable where show = chattyShow
 
 pPrintName :: PrettyLevel -> Rational -> BS.ByteString -> Type -> Doc
 pPrintName l _ name ty
-  | l >= prettyChatty = text (BS.unpack name) <> colon <> pPrint ty
+  | l >= prettyChatty = text (BS.unpack name) <> colon <> pPrintPrec l 0 ty
   | otherwise = text (BS.unpack name)
 
 showPredType args = showFunType args (Type (BS.pack "$o") Infinite Infinite)
@@ -76,16 +76,11 @@ prettyProblem family l prob = vcat (map typeDecl (Map.elems (types prob)) ++
                               map predDecl (Map.elems (preds prob)) ++
                               map funDecl  (Map.elems (funs prob)) ++
                               map (prettyInput family l) (inputs prob))
-    where typeDecl ty =
-            typeClause (tname ty) (text "$tType") <+>
-              hsep ([ text "%" | tmonotone ty /= Infinite || tsize ty /= Infinite ] ++
-                    [ text (intercalate ", "
-                      ([ "monotone above size " ++ show x | Finite x <- [tmonotone ty] ] ++
-                       [ "maximum size is " ++ show x | Finite x <- [tsize ty] ]))])
-          predDecl (args, p) = typeClause (pname p) (text (showPredType args))
-          funDecl (args, f) = typeClause (fname f) (text (showFunType args (fres f)))
+    where typeDecl ty = typeClause (pPrintPrec l 0 ty) (text "$tType")
+          predDecl (args, p) = typeClause (pPrint (pname p)) (text (showPredType args))
+          funDecl (args, f) = typeClause (pPrint (fname f)) (text (showFunType args (fres f)))
           typeClause name ty = prettyClause "tff" "type" "type"
-                                      (text (BS.unpack name) <+> colon <+> ty)
+                                      (name <+> colon <+> ty)
 
 prettyClause :: String -> String -> String -> Doc -> Doc
 prettyClause family name kind rest =
