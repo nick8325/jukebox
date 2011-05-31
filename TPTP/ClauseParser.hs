@@ -3,22 +3,21 @@
 {-# LANGUAGE BangPatterns, MultiParamTypeClasses, ImplicitParams #-}
 module TPTP.ClauseParser where
 
-import Text.Parsec hiding (satisfy, eof, token, runParser)
-import Text.Parsec.Error
-import Text.Parsec.Pos
-import Text.Parsec.Prim hiding (runParser, token)
-import Control.Monad.Identity
+import TPTP.Parsec
+import Control.Applicative
+import Control.Monad
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Map as Map
 import Data.Map(Map)
 import qualified Data.Set as Set
 import qualified AppList
+import AppList(AppList)
 import Data.List
 import TPTP.Print
 
 import TPTP.Lexer hiding
-  (At, Error, Include, Pos, Var, Type, Not, ForAll,
+  (Pos, Error, Include, Var, Type, Not, ForAll,
    Exists, And, Or, Type, Apply, keyword, defined, kind)
 import qualified TPTP.Lexer as L
 import qualified Formula
@@ -30,37 +29,34 @@ data ParseState =
   MkState !(Problem Formula) -- problem being constructed, inputs are in reverse order
           !(Maybe Type)      -- the $i type, if used in the problem
   deriving Show
-type Parser = Parsec Contents ParseState
-type ParsecState = State Contents ParseState
+type Parser = Parsec ParsecState
+type ParsecState = UserState ParseState TokenStream
 
 -- An include-clause.
 data IncludeStatement = Include BS.ByteString (Maybe [Tag]) deriving Show
-
-instance Stream Contents Identity Token where
-  -- dummy instance---we have our own combinators for fetching from
-  -- the stream, since parsec struggles with our special Error token.
-  uncons = error "uncons: not implemented"
-
--- The parser state after opening a file.
-openFile :: FilePath -> TokenStream -> ParseState -> ParsecState
-openFile file (L.At (L.Pos l c) ts) s = State ts pos s
-  where pos = newPos file (fromIntegral l) (fromIntegral c)
 
 -- The initial parser state.
 initialState :: ParseState
 initialState = MkState (Problem Map.empty Map.empty Map.empty []) Nothing
 
-runParser :: Parser a -> ParsecState -> Either ParseError (a, ParsecState)
-runParser p state =
-  case runIdentity (consumed (runIdentity (runParsecT p state))) of
-    Error e -> Left e
-    Ok x s _ -> Right (x, s)
-  where consumed (Consumed x) = x
-        consumed (Empty x) = x
+instance Stream TokenStream Token where
+  primToken (At _ Nil) ok err = err AppList.Nil
+  primToken (At _ L.Error) ok err = err (AppList.Unit (Message "lexical error"))
+  primToken (At _ (Cons t ts)) ok err = ok ts t
+  primEof (At _ Nil) = True
+  primEof _ = False
+
+-- runParser :: Parser a -> ParsecState -> Either ParseError (a, ParsecState)
+-- runParser p state =
+--   case runIdentity (consumed (runIdentity (runParsecT p state))) of
+--     Error e -> Left e
+--     Ok x s _ -> Right (x, s)
+--   where consumed (Consumed x) = x
+--         consumed (Empty x) = x
 
 -- Wee function for testing.
-testParser :: Parser a -> String -> Either ParseError a
-testParser p s = fmap fst (runParser p (openFile "<test input>" (scan (BSL.pack s)) initialState))
+testParser :: Parser a -> String -> Either (AppList Error) a
+testParser p s = snd (run p (UserState initialState (scan (BSL.pack s))))
 
 getProblem :: Parser (Problem Formula)
 getProblem = do
@@ -68,21 +64,6 @@ getProblem = do
   return p { inputs = reverse (inputs p) }
 
 -- Primitive parsers.
-
-satisfy p = mkPT $ \s ->
-  let err c msg = Identity (c (Identity (Error (newErrorMessage msg (statePos s))))) in
-  case stateInput s of
-    Nil -> err Empty (UnExpect "end of input")
-    Cons t (L.At (L.Pos l c) !ts) ->
-      if p t
-         then let !pos' = flip setSourceLine (fromIntegral l) .
-                          flip setSourceColumn (fromIntegral c) $ statePos s
-                  !s' = s { statePos = pos', stateInput = ts }
-              in Identity (Consumed (Identity (Ok t s' (unknownError s'))))
-         else err Empty (UnExpect ("'" ++ prettyShow t ++ "'"))
-    L.Error -> err Consumed (Message "lexical error")
-
-eof = notFollowedBy (satisfy (const True)) <?> "end of input"
 
 keyword' p = satisfy p'
   where p' Atom { L.keyword = k } = p k
@@ -329,6 +310,9 @@ instance FormulaLike Formula where fromFormula = id
 instance FormulaLike Thing where fromFormula = Formula
 
 -- An atomic expression.
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Term #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, TermLike a) => Parser a
 term = function <|> var <|> parens parser <?> "term"
   where function = do
@@ -336,6 +320,8 @@ term = function <|> var <|> parens parser <?> "term"
           args <- parens (sepBy1 term (punct Comma)) <|> return []
           fromThing (Apply x args)
 
+{-# SPECIALISE literal :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE literal :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 literal, unitary, quantified, formula ::
   (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, FormulaLike a) => Parser a
 literal = true <|> false <|> binary <?> "literal"
@@ -352,11 +338,15 @@ literal = true <|> false <|> binary <?> "literal"
                return (fromFormula . Literal . sign $ lhs :=: rhs)
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 unitary = negation <|> quantified <|> literal
   where negation = do
           punct L.Not
           fmap (fromFormula . Not) (unitary :: Parser Formula)
 
+{-# SPECIALISE quantified :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE quantified :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 quantified = do
   q <- (punct L.ForAll >> return ForAll) <|>
        (punct L.Exists >> return Exists)
@@ -367,6 +357,8 @@ quantified = do
   return (fromFormula (q (Set.fromList vars) rest))
 
 -- A general formula.
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 formula = do
   x <- unitary :: Parser Thing
   let binop op t u = op (AppList.Unit t `AppList.append` AppList.Unit u)
