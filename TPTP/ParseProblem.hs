@@ -6,6 +6,7 @@ import TPTP.FindFile
 import TPTP.ClauseParser
 import TPTP.Lexer hiding (Include, Error)
 import TPTP.Parsec
+import TPTP.Print
 import qualified TPTP.Lexer as L
 import Control.Monad.Error
 import Formula hiding (Pos)
@@ -22,7 +23,8 @@ parseProblem name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP []) 
 
 parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Formula))
 parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile name Nothing "<command line>" (Pos 0 0) initialState))
-  where err file pos msg = throwError (file ++ "/" ++ show pos ++ "/" ++ show msg)
+  where err file (Pos l c) msg = throwError msg'
+          where msg' = "Error at " ++ file ++ " (line " ++ show l ++ ", column " ++ show c ++ "):\n" ++ msg
         liftMaybeIO :: IO (Maybe a) -> FilePath -> Pos -> String -> ErrorT String IO a
         liftMaybeIO m file pos msg = do
           x <- liftIO m
@@ -51,7 +53,11 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
         parseSections :: Maybe [Tag] -> FilePath -> ParsecState -> ErrorT String IO ParsecState
         parseSections clauses file s =
           case run (section (included clauses)) s of
-            (UserState{userStream=At pos _}, Left e) -> err file pos e
+            (UserState{userStream=At pos ts}, Left e) ->
+              let report Nil = "Error at end of file:":e
+                  report L.Error = ["Lexical error"]
+                  report (Cons t _) = ("Error while reading " ++ prettyShow t ++ ":"):e in
+              err file pos (concat (intersperse "\n" (report ts)))
             (s'@UserState{userStream=At _ Nil}, Right Nothing) -> do
               liftIO $ leave progressBar
               return s'

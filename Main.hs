@@ -8,5 +8,5 @@ main = do
   [arg] <- getArgs
   res <- parseProblem arg
   case res of
-    Left err -> print err
-    Right p -> putStrLn $ "ok, " ++ show (length (inputs p)) ++ " clauses"
+    Left err -> putStrLn err
+    Right p -> print p -- putStrLn $ "ok, " ++ show (length (inputs p)) ++ " clauses"

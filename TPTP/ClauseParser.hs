@@ -55,7 +55,7 @@ instance Stream TokenStream Token where
 --         consumed (Empty x) = x
 
 -- Wee function for testing.
-testParser :: Parser a -> String -> Either (AppList Error) a
+testParser :: Parser a -> String -> Either [String] a
 testParser p s = snd (run p (UserState initialState (scan (BSL.pack s))))
 
 getProblem :: Parser (Problem Formula)
@@ -65,30 +65,41 @@ getProblem = do
 
 -- Primitive parsers.
 
+{-# INLINE keyword' #-}
 keyword' p = satisfy p'
   where p' Atom { L.keyword = k } = p k
         p' _ = False
+{-# INLINE keyword #-}
 keyword k = keyword' (== k) <?> "'" ++ show k ++ "'"
+{-# INLINE punct' #-}
 punct' p = satisfy p'
   where p' Punct { L.kind = k } = p k
         p' _ = False
+{-# INLINE punct #-}
 punct k = punct' (== k) <?> "'" ++ show k ++ "'"
+{-# INLINE defined' #-}
 defined' p = fmap L.defined (satisfy p')
   where p' Defined { L.defined = d } = p d
         p' _ = False
+{-# INLINE defined #-}
 defined k = defined' (== k) <?> "'" ++ show k ++ "'"
+{-# INLINE variable #-}
 variable = fmap name (satisfy p) <?> "variable"
   where p L.Var{} = True
         p _ = False
+{-# INLINE number #-}
 number = fmap value (satisfy p) <?> "number"
   where p Number{} = True
         p _ = False
+{-# INLINE atom #-}
 atom = fmap name (keyword' (const True)) <?> "atom"
 
 -- Combinators.
 
 parens, bracks :: Parser a -> Parser a
+{-# INLINE parens #-}
 parens p = between (punct LParen) (punct RParen) p
+{-# INLINE bracks #-}
 bracks p = between (punct LBrack) (punct RBrack) p
 
 -- Build an expression parser from a binary-connective parser
@@ -362,19 +373,22 @@ quantified = do
 formula = do
   x <- unitary :: Parser Thing
   let binop op t u = op (AppList.Unit t `AppList.append` AppList.Unit u)
-      connective p op = do
+      binary p = do
         lhs <- fromThing x
-        punct p
+        op <- p
         rhs <- formula :: Parser Formula
         return (fromFormula (op lhs rhs))
-  connective L.And (binop And) <|> connective L.Or (binop Or) <|>
-   connective Iff Equiv <|>
-   connective Implies (\t u -> binop Or (Not t) u) <|>
-   connective Follows (\t u -> binop Or t (Not u)) <|>
-   connective Xor (\t u -> Not (t `Equiv` u)) <|>
-   connective Nor (\t u -> Not (binop Or t u)) <|>
-   connective Nand (\t u -> Not (binop And t u)) <|>
-   fromThing x
+      {-# INLINE connective #-}
+      connective p op = punct p >> return op
+      connectives = 
+        connective L.And (binop And) <|> connective L.Or (binop Or) <|>
+        connective Iff Equiv <|>
+        connective Implies (\t u -> binop Or (Not t) u) <|>
+        connective Follows (\t u -> binop Or t (Not u)) <|>
+        connective Xor (\t u -> Not (t `Equiv` u)) <|>
+        connective Nor (\t u -> Not (binop Or t u)) <|>
+        connective Nand (\t u -> Not (binop And t u))
+  binary connectives <|> fromThing x
 
 -- varDecl True: parse a typed variable binding X:a or an untyped one X
 -- varDecl Fals: parse an untyped variable binding X

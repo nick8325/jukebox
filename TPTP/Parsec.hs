@@ -3,6 +3,7 @@ module TPTP.Parsec where
 
 import Control.Applicative
 import Control.Monad
+import Data.List
 import AppList(AppList)
 import qualified AppList
 
@@ -31,15 +32,20 @@ instance Monad (Parsec a) where
   {-# INLINE (>>=) #-}
   x >>= f = Parsec (\inp ok yum err ->
                      let ok' inp y = runParsec (f y) inp ok yum err
-                         yum' inp y = runParsec (f y) inp yum yum err
+                         yum' inp y = runParsec (f y) inp yum yum Error
                      in runParsec x inp ok' yum' err)
+  {-# INLINE fail #-}
+  fail msg = parseError (Message msg)
 
 instance MonadPlus (Parsec a) where
   {-# INLINE mzero #-}
   mzero = Parsec (\inp ok yum err -> err inp AppList.Nil)
+  {-# INLINE mplus #-}
   m1 `mplus` m2 = Parsec (\inp ok yum err ->
     let {-# INLINE err' #-}
-        err' _ s = runParsec m2 inp ok yum (\inp s' -> err inp (AppList.append s s')) in
+        err' _ s = runParsec m2 inp ok yum (err'' s)
+        {-# INLINE err'' #-}
+        err'' s inp s' = err inp (AppList.append s s') in
     runParsec m1 inp ok yum err')
 
 instance Applicative (Parsec a) where
@@ -102,11 +108,24 @@ run_ :: Parsec a b -> a -> Result a b
 run_ p x = runParsec p x Ok Ok Error
 
 {-# INLINE run #-}
-run :: Parsec a b -> a -> (a, Either (AppList Error) b)
+run :: Parsec a b -> a -> (a, Either [String] b)
 run p ts =
   case run_ p ts of
     Ok ts' x -> (ts', Right x)
-    Error ts' e -> (ts', Left e)
+    Error ts' e -> (ts', Left (errorMessage e))
+
+-- Reporting errors
+
+errorMessage :: AppList Error -> [String]
+errorMessage AppList.Nil = ["Unknown error"]
+errorMessage l =
+  [ "Expected " ++ list expected | not (null expected) ]
+  ++ messages
+  where xs = AppList.toList l
+        expected = [ msg | Expected msg <- xs ]
+        messages = [ msg | Message msg <- xs ]
+        list [msg] = msg
+        list msg = intercalate ", " (init msg) ++ " or " ++ last msg
 
 -- Token streams
 

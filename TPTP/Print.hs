@@ -24,16 +24,19 @@ instance Pretty L.Token where
   pPrint L.Atom{L.name = name} = pPrint (escapeAtom name)
   pPrint L.Defined{L.defined = defined} = text (show defined)
   pPrint L.Var{L.name = name} = pPrint name
-  pPrint L.DistinctObject{L.name = name} = pPrint name
+  pPrint L.DistinctObject{L.name = name} = pPrint (quote '"' name)
   pPrint L.Number{L.value = x} = pPrint x
-  pPrint L.Punct{L.kind = kind} = text (show kind)
+  pPrint L.Punct{L.kind = kind} = quotes (text (show kind))
 
 escapeAtom :: BS.ByteString -> BS.ByteString
 escapeAtom s | not (BS.null s') && isLower (BS.head s') && BS.all isNormal s' = s
-             | otherwise = BS.concat [BS.pack "'", BS.concatMap escape s, BS.pack "'"]
+             | otherwise = quote '\'' s
   where isNormal c = isAlphaNum c || c == '_'
         s' = BS.dropWhile (== '$') s
-        escape '\'' = BS.pack "\\'"
+
+quote :: Char -> BS.ByteString -> BS.ByteString
+quote c s = BS.concat [BS.pack [c], BS.concatMap escape s, BS.pack [c]]
+  where escape c' | c == c' = BS.pack ['\\', c]
         escape '\\' = BS.pack "\\\\"
         escape c = BS.singleton c
 
