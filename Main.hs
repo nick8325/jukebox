@@ -9,4 +9,4 @@ main = do
   res <- parseProblem arg
   case res of
     Left err -> putStrLn err
-    Right p -> print p -- putStrLn $ "ok, " ++ show (length (inputs p)) ++ " clauses"
+    Right p -> putStrLn $ "ok, " ++ show (length (inputs p)) ++ " clauses"

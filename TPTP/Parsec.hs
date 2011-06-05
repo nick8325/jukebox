@@ -10,17 +10,20 @@ import qualified AppList
 -- Parser type and monad instances
 
 newtype Parsec a b = Parsec
-  { runParsec :: forall c. a -> (a -> b -> Result a c)
-                             -> (a -> b -> Result a c)
-                             -> (a -> AppList Error -> Result a c)
-                             -> Result a c }
-
+  { runParsec :: forall c.
+                 a                                       -- Current input
+              -> AppList Error                           -- Error message to report on failure
+              -> (a -> AppList Error -> b -> Result a c) -- ok: success, nothing consumed
+              -> (a -> AppList Error -> b -> Result a c) -- yum: success, something consumed
+              -> (a -> AppList Error -> Result a c)      -- err: failure, nothing consumed
+              -> Result a c }
+  
 data Error = Message String | Expected String deriving Show
 data Result a b = Ok !a !b | Error !a (AppList Error)
 
 {-# INLINE parseError #-}
 parseError :: Error -> Parsec a b
-parseError e = Parsec (\inp _ _ err -> err inp (AppList.Unit e))
+parseError e = Parsec (\inp msg _ _ err -> err inp (AppList.append msg (AppList.Unit e)))
 
 instance Functor (Parsec a) where
   {-# INLINE fmap #-}
@@ -28,25 +31,23 @@ instance Functor (Parsec a) where
 
 instance Monad (Parsec a) where
   {-# INLINE return #-}
-  return x = Parsec (\inp ok _ _ -> ok inp x)
+  return x = Parsec (\inp msg ok _ _ -> ok inp msg x)
   {-# INLINE (>>=) #-}
-  x >>= f = Parsec (\inp ok yum err ->
-                     let ok' inp y = runParsec (f y) inp ok yum err
-                         yum' inp y = runParsec (f y) inp yum yum Error
-                     in runParsec x inp ok' yum' err)
+  x >>= f = Parsec (\inp msg ok yum err ->
+                     let ok' inp' msg' y = runParsec (f y) inp' msg' ok yum err
+                         yum' inp msg' y = runParsec (f y) inp msg' yum yum Error
+                     in runParsec x inp msg ok' yum' err)
   {-# INLINE fail #-}
   fail msg = parseError (Message msg)
 
 instance MonadPlus (Parsec a) where
   {-# INLINE mzero #-}
-  mzero = Parsec (\inp ok yum err -> err inp AppList.Nil)
+  mzero = Parsec (\inp msg ok yum err -> err inp msg)
   {-# INLINE mplus #-}
-  m1 `mplus` m2 = Parsec (\inp ok yum err ->
+  m1 `mplus` m2 = Parsec (\inp msg ok yum err ->
     let {-# INLINE err' #-}
-        err' _ s = runParsec m2 inp ok yum (err'' s)
-        {-# INLINE err'' #-}
-        err'' s inp s' = err inp (AppList.append s s') in
-    runParsec m1 inp ok yum err')
+        err' _ msg' = runParsec m2 inp msg' ok yum err in
+    runParsec m1 inp msg ok yum err')
 
 instance Applicative (Parsec a) where
   {-# INLINE pure #-}
@@ -77,7 +78,7 @@ instance Alternative (Parsec a) where
 
 {-# INLINE nonempty #-}
 nonempty :: Parsec a b -> Parsec a b
-nonempty p = Parsec (\inp ok yum err -> runParsec p inp (error "nonempty: empty parser") yum err)
+nonempty p = Parsec (\inp msg ok yum err -> runParsec p inp msg (error "nonempty: empty parser") yum err)
 
 {-# INLINE skipSome #-}
 skipSome :: Parsec a b -> Parsec a ()
@@ -90,8 +91,10 @@ skipMany p = p' where p' = (nonempty p >> p') `mplus` return ()
 {-# INLINE (<?>) #-}
 infix 0 <?>
 (<?>) :: Parsec a b -> String -> Parsec a b
-p <?> msg = Parsec (\inp ok yum err ->
-  runParsec p inp ok yum (\inp _ -> err inp (AppList.Unit (Expected msg))))
+p <?> text = Parsec (\inp msg ok yum err ->
+  let {-# INLINE add #-}
+      add c inp msg' = c inp (AppList.append msg (AppList.Unit (Expected text))) in
+  runParsec p inp msg (add ok) yum (add err))
 
 {-# INLINE between #-}
 between :: Parsec a b -> Parsec a c -> Parsec a d -> Parsec a d
@@ -105,7 +108,7 @@ sepBy1 it sep = liftM2 (:) it (many (sep >> it))
 
 {-# INLINE run_ #-}
 run_ :: Parsec a b -> a -> Result a b
-run_ p x = runParsec p x Ok Ok Error
+run_ p x = runParsec p x AppList.Nil (\x _ -> Ok x) (\x _ -> Ok x) Error
 
 {-# INLINE run #-}
 run :: Parsec a b -> a -> (a, Either [String] b)
@@ -119,7 +122,7 @@ run p ts =
 errorMessage :: AppList Error -> [String]
 errorMessage AppList.Nil = ["Unknown error"]
 errorMessage l =
-  [ "Expected " ++ list expected | not (null expected) ]
+  [ "Expected " ++ list expected | not (null expected) && null messages ]
   ++ messages
   where xs = AppList.toList l
         expected = [ msg | Expected msg <- xs ]
@@ -137,14 +140,14 @@ class Stream a b | a -> b where
 
 {-# INLINE satisfy #-}
 satisfy :: Stream a b => (b -> Bool) -> Parsec a b
-satisfy p = Parsec (\inp ok yum err ->
-  let ok' inp' t | p t = yum inp' t
-                 | otherwise = err inp AppList.Nil
-  in primToken inp ok' (err inp))
+satisfy p = Parsec (\inp msg ok yum err ->
+  let ok' inp' t | p t = yum inp' AppList.Nil t
+                 | otherwise = err inp msg
+  in primToken inp ok' (err inp . AppList.append msg))
 
 {-# INLINE eof #-}
 eof :: Stream a b => Parsec a ()
-eof = Parsec (\inp ok yum err -> if primEof inp then ok inp () else err inp AppList.Nil)
+eof = Parsec (\inp msg ok yum err -> if primEof inp then ok inp msg () else err inp msg) <?> "end of file"
 
 -- User state
 
@@ -157,8 +160,8 @@ instance Stream a b => Stream (UserState state a) b where
 
 {-# INLINE getState #-}
 getState :: Parsec (UserState state a) state
-getState = Parsec (\inp@UserState{userState = state} ok yum err -> ok inp state)
+getState = Parsec (\inp@UserState{userState = state} msg ok yum err -> ok inp msg state)
 
 {-# INLINE putState #-}
 putState :: state -> Parsec (UserState state a) ()
-putState state = Parsec (\inp@UserState{userStream = stream} ok yum err -> ok (UserState state stream) ())
+putState state = Parsec (\inp@UserState{userStream = stream} msg ok yum err -> ok (UserState state stream) msg ())
