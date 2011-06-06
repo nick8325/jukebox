@@ -52,12 +52,15 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
 
         parseSections :: Maybe [Tag] -> FilePath -> ParsecState -> ErrorT String IO ParsecState
         parseSections clauses file s =
-          case run (section (included clauses)) s of
-            (UserState{userStream=At pos ts}, Left e) ->
-              let report Nil = "Error at end of file:":e
-                  report L.Error = ["Lexical error"]
-                  report (Cons t _) = ("Error while reading " ++ prettyShow t ++ ":"):e in
-              err file pos (concat (intersperse "\n" (report ts)))
+          let report UserState{userStream = At _ Nil} =
+                ["Unexpected end of file"]
+              report UserState{userStream = At _ L.Error} =
+                ["Lexical error"]
+              report UserState{userStream = At _ (Cons t _)} =
+                ["Unexpected " ++ prettyShow t] in
+          case run report (section (included clauses)) s of
+            (UserState{userStream=At pos _}, Left e) ->
+              err file pos (concat (intersperse "\n" e))
             (s'@UserState{userStream=At _ Nil}, Right Nothing) -> do
               liftIO $ leave progressBar
               return s'

@@ -53,7 +53,7 @@ ty :: Term -> Type
 ty (Var Variable{vtype = ty}) = ty
 ty (Function{fres = ty} :@: _) = ty
 
-data Atom = Term :=: Term | !Predicate :?: [Term]
+data Atom = !Term :=: !Term | !Predicate :?: [Term]
 
 data Signed a = Pos !a | Neg !a deriving Show
 type Literal = Signed Atom

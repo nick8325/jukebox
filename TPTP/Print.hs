@@ -1,7 +1,7 @@
 -- Pretty-printing of formulae.
 module TPTP.Print(prettyShow, chattyShow, reallyChattyShow,
                   prettyNormal, prettyChatty, prettyReallyChatty,
-                  showPredType, showFunType, showArgs,
+                  showPredType, showFunType, showArgs, prettyFunc,
                   prettyProblem, prettyInput)
                   where
 
@@ -52,8 +52,8 @@ instance Pretty Type where
 
 instance Pretty Function where
   pPrintPrec l p f = pPrintName l p (escapeAtom (fname f)) (fres f)
-instance Show Predicate where
-  show = BS.unpack . escapeAtom . pname
+instance Pretty Predicate where
+  pPrint = pPrint . escapeAtom . pname
 instance Pretty Variable where
   pPrintPrec l p v = pPrintName l p (vname v) (vtype v)
 pPrintBinding :: PrettyLevel -> Variable -> Doc
@@ -61,6 +61,7 @@ pPrintBinding l v | tname (vtype v) == BS.pack "$i" = pPrintPrec l 0 v
                   | otherwise = pPrintPrec (l `max` prettyChatty) 0 v
 
 instance Show Function where show = chattyShow
+instance Show Predicate where show = chattyShow
 instance Show Variable where show = chattyShow
 
 pPrintName :: PrettyLevel -> Rational -> BS.ByteString -> Type -> Doc
@@ -77,7 +78,7 @@ showArgs tys = intercalate " * " (map prettyShow tys)
 prettyProblem :: Pretty a => String -> PrettyLevel -> Problem a -> Doc
 prettyProblem family l prob = vcat (map typeDecl (Map.elems (types prob)) ++
                               map predDecl (Map.elems (preds prob)) ++
-                              map funDecl  (Map.elems (funs prob)) ++
+                              map funDecl (Map.elems (funs prob)) ++
                               map (prettyInput family l) (inputs prob))
     where typeDecl ty = typeClause (pPrintPrec l 0 ty) (text "$tType")
           predDecl (args, p) = typeClause (pPrint (pname p)) (text (showPredType args))
@@ -117,7 +118,7 @@ instance Show Term where
 
 instance Pretty Atom where
   pPrintPrec l _ (t :=: u) = pPrintPrec l 0 t <> text "=" <> pPrintPrec l 0 u
-  pPrintPrec l _ (p :?: ts) = prettyFunc l (text (show p)) ts
+  pPrintPrec l _ (p :?: ts) = prettyFunc l (pPrintPrec l 0 p) ts
 
 instance Show Atom where
   show = chattyShow

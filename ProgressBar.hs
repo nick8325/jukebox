@@ -56,7 +56,7 @@ withProgressBar f = do
       enter msg = do
         s <- readIORef state
         when (level s /= 0) (put " (")
-        put msg
+        put (msg ++ "...")
         writeIORef state s{ last = Enter, level = level s + 1 }
       leave = do
         s <- readIORef state
