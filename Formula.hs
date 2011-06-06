@@ -4,9 +4,9 @@ import AppList(AppList)
 import qualified AppList
 import qualified Data.Set
 import Data.Set(Set)
-import Data.Map(Map)
-import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.HashMap(Map)
+import qualified Data.HashMap as Map
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Data.List

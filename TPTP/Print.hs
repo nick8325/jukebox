@@ -13,7 +13,7 @@ import Text.PrettyPrint.HughesPJClass
 import qualified TPTP.Lexer as L
 import Formula
 import Data.List
-import qualified Data.Map as Map
+import qualified Data.HashMap as Map
 import qualified Data.Set as Set
 import qualified AppList
 
