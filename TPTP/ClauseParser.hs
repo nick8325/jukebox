@@ -27,8 +27,8 @@ import Formula hiding (tag, kind, formula, Axiom, NegatedConjecture)
 -- The parser monad
 
 data ParseState =
-  MkState !(Problem Name (Formula Name)) -- problem being constructed, inputs are in reverse order
-          !(Maybe (Type Name))           -- the $i type, if used in the problem
+  MkState !(Problem Formula Name) -- problem being constructed, inputs are in reverse order
+          !(Maybe (Type Name))    -- the $i type, if used in the problem
   deriving Show
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
@@ -49,7 +49,7 @@ instance Stream TokenStream Token where
 testParser :: Parser a -> String -> Either [String] a
 testParser p s = snd (run (const []) p (UserState initialState (scan (BSL.pack s))))
 
-getProblem :: Parser (Problem Name (Formula Name))
+getProblem :: Parser (Problem Formula Name)
 getProblem = do
   MkState p _ <- getState
   return p { inputs = reverse (inputs p) }

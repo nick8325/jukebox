@@ -18,10 +18,10 @@ import Control.Exception
 import Prelude hiding (catch)
 import Data.List
 
-parseProblem :: FilePath -> IO (Either String (Problem Name (Formula Name)))
+parseProblem :: FilePath -> IO (Either String (Problem Formula Name))
 parseProblem name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP []) pb name
 
-parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Name (Formula Name)))
+parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Formula Name))
 parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile name Nothing "<command line>" (Pos 0 0) initialState))
   where err file (Pos l c) msg = throwError msg'
           where msg' = "Error at " ++ file ++ " (line " ++ show l ++ ", column " ++ show c ++ "):\n" ++ msg
@@ -78,5 +78,5 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
         merge x Nothing = x
         merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
-        finalise :: ParseState -> Problem Name (Formula Name)
+        finalise :: ParseState -> Problem Formula Name
         finalise (MkState p _) = p { inputs = reverse (inputs p) }

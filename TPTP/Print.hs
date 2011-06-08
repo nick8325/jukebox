@@ -82,7 +82,7 @@ showFunType [arg] res = prettyShow arg ++ " > " ++ prettyShow res
 showFunType args res = "(" ++ showArgs args ++ ") > " ++ prettyShow res
 showArgs tys = intercalate " * " (map prettyShow tys)
 
-prettyProblem :: (Pretty a, Pretty b) => String -> PrettyLevel -> Problem a b -> Doc
+prettyProblem :: (Pretty a, Pretty (f a)) => String -> PrettyLevel -> Problem f a -> Doc
 prettyProblem family l prob = vcat (map typeDecl (Map.elems (types prob)) ++
                               map predDecl (Map.elems (preds prob)) ++
                               map funDecl (Map.elems (funs prob)) ++
@@ -97,10 +97,10 @@ prettyClause :: String -> String -> String -> Doc -> Doc
 prettyClause family name kind rest =
   text family <> parens (sep [text name <> comma <+> text kind <> comma, rest]) <> text "."
 
-instance (Pretty a, Pretty b) => Pretty (Problem a b) where
+instance (Pretty a, Pretty (f a)) => Pretty (Problem f a) where
   pPrintPrec l _ = prettyProblem "tff" l
 
-instance (Pretty a, Pretty b) => Show (Problem a b) where
+instance (Pretty a, Pretty (f a)) => Show (Problem f a) where
   show = chattyShow
 
 prettyInput :: Pretty a => String -> PrettyLevel -> Input a -> Doc
