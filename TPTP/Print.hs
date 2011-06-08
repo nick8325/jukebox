@@ -1,4 +1,5 @@
 -- Pretty-printing of formulae.
+{-# LANGUAGE FlexibleContexts, TypeSynonymInstances #-}
 module TPTP.Print(prettyShow, chattyShow, reallyChattyShow,
                   prettyNormal, prettyChatty, prettyReallyChatty,
                   showPredType, showFunType, showArgs, prettyFunc,
@@ -16,6 +17,15 @@ import Data.List
 import qualified Data.HashMap as Map
 import qualified Data.Set as Set
 import qualified AppList
+
+class Pretty a => PrettyBinding a where
+  pPrintBinding :: PrettyLevel -> Rational -> Variable a -> Doc
+
+instance PrettyBinding Name where
+  pPrintBinding l p v
+    | l < prettyChatty && tname (vtype v) == BS.pack "$i" = 
+      pPrintPrec l p (vname v)
+    | otherwise = pPrintPrec l p v
 
 instance Pretty BS.ByteString where
   pPrint = text . BS.unpack
@@ -40,7 +50,7 @@ quote c s = BS.concat [BS.pack [c], BS.concatMap escape s, BS.pack [c]]
         escape '\\' = BS.pack "\\\\"
         escape c = BS.singleton c
 
-instance Pretty Type where
+instance Pretty a => Pretty (Type a) where
   pPrintPrec l p t | l >= prettyReallyChatty = 
                      hcat (punctuate (text "/")
                            [pPrint (tname t),
@@ -50,21 +60,18 @@ instance Pretty Type where
     where size Infinite = empty
           size (Finite n) = pPrint n
 
-instance Pretty Function where
-  pPrintPrec l p f = pPrintName l p (escapeAtom (fname f)) (fres f)
-instance Pretty Predicate where
-  pPrint = pPrint . escapeAtom . pname
-instance Pretty Variable where
-  pPrintPrec l p v = pPrintName l p (vname v) (vtype v)
-pPrintBinding :: PrettyLevel -> Variable -> Doc
-pPrintBinding l v | tname (vtype v) == BS.pack "$i" = pPrintPrec l 0 v
-                  | otherwise = pPrintPrec (l `max` prettyChatty) 0 v
+instance Pretty a => Pretty (Function a) where
+  pPrintPrec l p f = pPrintName l p (escapeAtom (BS.pack (render (pPrintPrec l p (fname f))))) (fres f)
+instance Pretty a => Pretty (Predicate a) where
+  pPrintPrec l pr p = pPrint (escapeAtom (BS.pack (render (pPrintPrec l pr (pname p)))))
+instance Pretty a => Pretty (Variable a) where
+  pPrintPrec l p v = pPrintName l p (BS.pack (render (pPrintPrec l p (vname v)))) (vtype v)
 
-instance Show Function where show = chattyShow
-instance Show Predicate where show = chattyShow
-instance Show Variable where show = chattyShow
+instance Pretty a => Show (Function a) where show = chattyShow
+instance Pretty a => Show (Predicate a) where show = chattyShow
+instance Pretty a => Show (Variable a) where show = chattyShow
 
-pPrintName :: PrettyLevel -> Rational -> BS.ByteString -> Type -> Doc
+pPrintName :: Pretty a => PrettyLevel -> Rational -> Name -> Type a -> Doc
 pPrintName l _ name ty
   | l >= prettyChatty = text (BS.unpack name) <> colon <> pPrintPrec l 0 ty
   | otherwise = text (BS.unpack name)
@@ -75,7 +82,7 @@ showFunType [arg] res = prettyShow arg ++ " > " ++ prettyShow res
 showFunType args res = "(" ++ showArgs args ++ ") > " ++ prettyShow res
 showArgs tys = intercalate " * " (map prettyShow tys)
 
-prettyProblem :: Pretty a => String -> PrettyLevel -> Problem a -> Doc
+prettyProblem :: (Pretty a, Pretty b) => String -> PrettyLevel -> Problem a b -> Doc
 prettyProblem family l prob = vcat (map typeDecl (Map.elems (types prob)) ++
                               map predDecl (Map.elems (preds prob)) ++
                               map funDecl (Map.elems (funs prob)) ++
@@ -90,10 +97,10 @@ prettyClause :: String -> String -> String -> Doc -> Doc
 prettyClause family name kind rest =
   text family <> parens (sep [text name <> comma <+> text kind <> comma, rest]) <> text "."
 
-instance Pretty a => Pretty (Problem a) where
+instance (Pretty a, Pretty b) => Pretty (Problem a b) where
   pPrintPrec l _ = prettyProblem "tff" l
 
-instance Pretty a => Show (Problem a) where
+instance (Pretty a, Pretty b) => Show (Problem a b) where
   show = chattyShow
 
 prettyInput :: Pretty a => String -> PrettyLevel -> Input a -> Doc
@@ -105,25 +112,25 @@ instance Pretty a => Pretty (Input a) where
 instance Pretty a => Show (Input a) where
   show = chattyShow
 
-instance Pretty Term where
+instance Pretty a => Pretty (Term a) where
   pPrintPrec l _ (Var v) = pPrintPrec l 0 v
   pPrintPrec l _ (f :@: ts) = prettyFunc l (pPrintPrec l 0 f) ts
 
-prettyFunc :: PrettyLevel -> Doc -> [Term] -> Doc
+prettyFunc :: Pretty a => PrettyLevel -> Doc -> [Term a] -> Doc
 prettyFunc l d [] = d
 prettyFunc l d ts = d <> parens (sep (punctuate comma (map (pPrintPrec l 0) ts))) 
 
-instance Show Term where
+instance Pretty a => Show (Term a) where
   show = chattyShow
 
-instance Pretty Atom where
+instance Pretty a => Pretty (Atom a) where
   pPrintPrec l _ (t :=: u) = pPrintPrec l 0 t <> text "=" <> pPrintPrec l 0 u
   pPrintPrec l _ (p :?: ts) = prettyFunc l (pPrintPrec l 0 p) ts
 
-instance Show Atom where
+instance Pretty a => Show (Atom a) where
   show = chattyShow
 
-instance Pretty Formula where
+instance (Pretty a, PrettyBinding a) => Pretty (Formula a) where
   -- We use two precedences, the lowest for binary connectives
   -- and the highest for everything else.
   pPrintPrec l p (Literal (Neg (t :=: u))) =
@@ -145,7 +152,7 @@ prettyConnective l p ident op (x:xs) =
       where ppr = pPrintPrec l 1
 
 prettyQuant l q vs f =
-  sep [text q <> brackets (sep (punctuate comma (map (pPrintBinding l) (Set.toList vs)))) <> colon,
+  sep [text q <> brackets (sep (punctuate comma (map (pPrintBinding l 0) (Set.toList vs)))) <> colon,
        nest 2 (pPrintPrec l 1 f)]
 
 instance Show Kind where
