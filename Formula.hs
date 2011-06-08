@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module Formula where
 
 import AppList(AppList)
@@ -8,11 +9,10 @@ import qualified Data.Set as Set
 import Data.Hashable
 import Data.HashMap(Map)
 import qualified Data.HashMap as Map
-import qualified Data.HashSet as HashSet
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Data.List
-import Control.Monad.State.Strict
+import Utils
 
 type Name = BS.ByteString -- for now
 type Tag = BS.ByteString
@@ -47,6 +47,17 @@ data Problem f a = Problem
     funs :: Map a ([Type a], Function a),
     equalSize :: [[Type a]],
     inputs :: [Input (f a)] }
+
+-- Get the elements of a HashMap in increasing order of size.
+-- Using this instead of Data.HashMap.toList means that Equinox's
+-- behaviour won't be affected by the choice of hashing function
+-- (which would be scary!)
+toListH :: Ord a => Map a b -> [(a, b)]
+toListH = sortBy (comparing fst) . Map.toList
+keysH :: Ord a => Map a b -> [a]
+keysH = map fst . toListH
+elemsH :: Ord a => Map a b -> [b]
+elemsH = map snd . toListH
 
 data Input a = Input
   { tag :: !Tag,
@@ -125,6 +136,7 @@ rename f (Problem types preds funs equalSize inputs) =
                   | otherwise = m'
           where m' = Map.fromList . map (\(x, y) -> (f x, g y)) . Map.toList $ m
 
+-- Return all names that appear in a problem.
 names :: Problem Formula a -> [a]
 names (Problem types preds funs equalSize inputs) =
   concat [Map.keys types, Map.keys preds, Map.keys funs,
@@ -142,6 +154,31 @@ names (Problem types preds funs equalSize inputs) =
           term (f :@: xs) = A.concat (map term xs)
           term (Var v) = A.Unit (vname v)
 
--- uniquify :: (Ord a, Hashable a) => (a -> Name) -> Problem a (Formula a) -> Problem Name (Formula Name)
--- uniquify base p =
-
+-- Turn a Problem Formula a into a Problem Formula Name by generating unique names.
+-- Each name starts with a user-supplied basename and is uniquified by adding a number.
+-- The smallest name with each basename gets no number, the second-smallest
+-- gets number 1, and so on.
+name :: forall a. (Ord a, Hashable a) => (a -> Name) -> Problem Formula a -> Problem Formula Name
+name base p = rename f p
+  where nameMap :: Map Name (Map a Int)
+        nameMap =
+          Map.fromList .
+          -- Assign numbers to each name
+          map (\xs@(x:_) -> (base x, Map.fromList (zip xs [0..]))).
+          map usort .
+          -- Partition by basename
+          groupBy (\x y -> base x == base y) .
+          sortBy (comparing base) .
+          names $ p
+        f x = uniquify (combine (base x) b)
+          where b = Map.findWithDefault (error "name: name not found") x
+                    (Map.findWithDefault (error "name: name not found") (base x) nameMap)
+        combine s 0 = s
+        combine s n = BS.append s (BS.pack ('_':show n))
+        uniquify s | not (Map.member s nameMap) = s
+                   | otherwise = 
+                     -- Odd situation: we have e.g. a name with basename "f_1",
+                     -- and two names with basename "f", which would normally
+                     -- become "f" and "f_1", but the "f_1" conflicts.
+                     -- Try appending some suffix.
+                     uniquify (BS.snoc s 'a')

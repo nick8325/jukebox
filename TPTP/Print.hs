@@ -83,9 +83,9 @@ showFunType args res = "(" ++ showArgs args ++ ") > " ++ prettyShow res
 showArgs tys = intercalate " * " (map prettyShow tys)
 
 prettyProblem :: (Pretty a, Pretty (f a)) => String -> PrettyLevel -> Problem f a -> Doc
-prettyProblem family l prob = vcat (map typeDecl (Map.elems (types prob)) ++
-                              map predDecl (Map.elems (preds prob)) ++
-                              map funDecl (Map.elems (funs prob)) ++
+prettyProblem family l prob = vcat (map typeDecl (elemsH (types prob)) ++
+                              map predDecl (elemsH (preds prob)) ++
+                              map funDecl (elemsH (funs prob)) ++
                               map (prettyInput family l) (inputs prob))
     where typeDecl ty = typeClause (pPrintPrec l 0 ty) (text "$tType")
           predDecl (args, p) = typeClause (pPrint (pname p)) (text (showPredType args))
