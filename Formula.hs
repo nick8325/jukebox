@@ -1,7 +1,7 @@
 module Formula where
 
 import AppList(AppList)
-import qualified AppList
+import qualified AppList as A
 import qualified Data.Set
 import Data.Set(Set)
 import qualified Data.Set as Set
@@ -128,19 +128,19 @@ rename f (Problem types preds funs equalSize inputs) =
 names :: Problem Formula a -> [a]
 names (Problem types preds funs equalSize inputs) =
   concat [Map.keys types, Map.keys preds, Map.keys funs,
-          AppList.toList (AppList.concat (AppList.fromList (map (vars . formula) inputs)))]
+          A.toList (A.concat (map (vars . formula) inputs))]
     where vars (Literal (Pos a)) = atom a
           vars (Literal (Neg a)) = atom a
           vars (Not f) = vars f
-          vars (And fs) = AppList.concat (fmap vars fs)
-          vars (Or fs) = AppList.concat (fmap vars fs)
-          vars (Equiv f g) = vars f `AppList.append` vars g
-          vars (ForAll xs f) = AppList.fromList (map vname (Set.toList xs)) `AppList.append` vars f
-          vars (Exists xs f) = AppList.fromList (map vname (Set.toList xs)) `AppList.append` vars f
-          atom (t :=: u) = term t `AppList.append` term u
-          atom (p :?: xs) = AppList.concat (AppList.fromList (map term xs))
-          term (f :@: xs) = AppList.concat (AppList.fromList (map term xs))
-          term (Var v) = AppList.Unit (vname v)
+          vars (And fs) = A.concat (fmap vars fs)
+          vars (Or fs) = A.concat (fmap vars fs)
+          vars (Equiv f g) = vars f `A.append` vars g
+          vars (ForAll xs f) = map vname (Set.toList xs) `A.append` vars f
+          vars (Exists xs f) = map vname (Set.toList xs) `A.append` vars f
+          atom (t :=: u) = term t `A.append` term u
+          atom (p :?: xs) = A.concat (map term xs)
+          term (f :@: xs) = A.concat (map term xs)
+          term (Var v) = A.Unit (vname v)
 
 -- uniquify :: (Ord a, Hashable a) => (a -> Name) -> Problem a (Formula a) -> Problem Name (Formula Name)
 -- uniquify base p =

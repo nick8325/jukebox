@@ -16,7 +16,7 @@ import Formula
 import Data.List
 import qualified Data.HashMap as Map
 import qualified Data.Set as Set
-import qualified AppList
+import qualified AppList as A
 
 class Pretty a => PrettyBinding a where
   pPrintBinding :: PrettyLevel -> Rational -> Variable a -> Doc
@@ -138,8 +138,8 @@ instance (Pretty a, PrettyBinding a) => Pretty (Formula a) where
   pPrintPrec l p (Literal (Neg t)) = pPrintPrec l p (Not (Literal (Pos t)))
   pPrintPrec l p (Literal (Pos t)) = pPrintPrec l p t
   pPrintPrec l p (Not f) = text "~" <> pPrintPrec l 1 f
-  pPrintPrec l p (And ts) = prettyConnective l p "$true" "&" (AppList.toList ts)
-  pPrintPrec l p (Or ts) = prettyConnective l p "$false" "|" (AppList.toList ts)
+  pPrintPrec l p (And ts) = prettyConnective l p "$true" "&" (A.toList ts)
+  pPrintPrec l p (Or ts) = prettyConnective l p "$false" "|" (A.toList ts)
   pPrintPrec l p (Equiv t u) = prettyConnective l p undefined "<=>" [t, u]
   pPrintPrec l p (ForAll vs f) = prettyQuant l "!" vs f
   pPrintPrec l p (Exists vs f) = prettyQuant l "?" vs f

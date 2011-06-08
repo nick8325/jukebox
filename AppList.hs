@@ -6,19 +6,31 @@ import Control.Monad
 
 data AppList a = Append !(AppList a) !(AppList a) | Unit !a | Nil
 
-append :: AppList a -> AppList a -> AppList a
-append Nil xs = xs
-append xs Nil = xs
-append xs ys = Append xs ys
+class List f where
+  fromList :: f a -> AppList a
+
+instance List [] where
+  fromList = foldr cons Nil
+
+instance List AppList where
+  fromList = id
+
+appendA :: AppList a -> AppList a -> AppList a
+appendA Nil xs = xs
+appendA xs Nil = xs
+appendA xs ys = Append xs ys
 
 instance Show a => Show (AppList a) where
   show = show . toList
 
 cons :: a -> AppList a -> AppList a
-cons x xs = Unit x `append` xs
+cons x xs = Unit x `appendA` xs
 
 snoc :: AppList a -> a -> AppList a
-snoc xs x = xs `append` Unit x
+snoc xs x = xs `appendA` Unit x
+
+append :: (List f, List g) => f a -> g a -> AppList a
+append xs ys = fromList xs `appendA` fromList ys
 
 instance Functor AppList where
   fmap f (Append x y) = Append (fmap f x) (fmap f y)
@@ -27,16 +39,19 @@ instance Functor AppList where
 
 instance Monad AppList where
   return = Unit
-  x >>= f = concat (fmap f x)
+  x >>= f = concatA (fmap f x)
 
 instance MonadPlus AppList where
   mzero = Nil
   mplus = append
 
-concat :: AppList (AppList a) -> AppList a
-concat (Append x y) = concat x `append` concat y
-concat (Unit x) = x
-concat Nil = Nil
+concat :: (List f, List g) => f (g a) -> AppList a
+concat xs = concatA (fmap fromList (fromList xs))
+
+concatA :: AppList (AppList a) -> AppList a
+concatA (Append x y) = concatA x `appendA` concatA y
+concatA (Unit x) = x
+concatA Nil = Nil
 
 fold :: (b -> b -> b) -> (a -> b) -> b -> AppList a -> b
 fold app u n (Append x y) = app (fold app u n x) (fold app u n y)
@@ -50,6 +65,3 @@ toList x = go [x]
         go (Unit x:left) = x:go left
         go (Append x y:left) = go (x:y:left)
         go [] = []
-
-fromList :: [a] -> AppList a
-fromList = foldr cons Nil

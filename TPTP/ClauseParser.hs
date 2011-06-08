@@ -11,7 +11,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.HashMap as Map
 import Data.HashMap(Map)
 import qualified Data.Set as Set
-import qualified AppList
+import qualified AppList as A
 import AppList(AppList)
 import Data.List
 import TPTP.Print
@@ -372,9 +372,9 @@ literal, unitary, quantified, formula ::
 {-# INLINE literal #-}
 literal = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
-        true = do { defined DTrue; return (fromFormula (And AppList.Nil)) }
+        true = do { defined DTrue; return (fromFormula (And A.Nil)) }
         {-# INLINE false #-}
-        false = do { defined DFalse; return (fromFormula (Or AppList.Nil)) }
+        false = do { defined DFalse; return (fromFormula (Or A.Nil)) }
         binary = do
           x <- term :: Parser Thing
           let {-# INLINE f #-}
@@ -413,7 +413,7 @@ quantified = do
 {-# SPECIALISE formula :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name)) => Parser Thing #-}
 formula = do
   x <- unitary :: Parser Thing
-  let binop op t u = op (AppList.Unit t `AppList.append` AppList.Unit u)
+  let binop op t u = op (A.Unit t `A.append` A.Unit u)
       {-# INLINE connective #-}
       connective p op = do
         punct p
