@@ -25,7 +25,8 @@ instance PrettyBinding Name where
   pPrintBinding l p v
     | l < prettyChatty && tname (vtype v) == BS.pack "$i" = 
       pPrintPrec l p (vname v)
-    | otherwise = pPrintPrec l p v
+    | otherwise = pPrintPrec l p (vname v) <> colon <>
+                  pPrintPrec l p (vtype v)
 
 instance Pretty BS.ByteString where
   pPrint = text . BS.unpack
@@ -76,13 +77,13 @@ pPrintName l _ name ty
   | l >= prettyChatty = text (BS.unpack name) <> colon <> pPrintPrec l 0 ty
   | otherwise = text (BS.unpack name)
 
-showPredType args = showFunType args (Type (BS.pack "$o") Infinite Infinite)
+showPredType args = showFunType args (Type (BS.pack "$o") Infinite Infinite 0)
 showFunType [] res = prettyShow res
 showFunType [arg] res = prettyShow arg ++ " > " ++ prettyShow res
 showFunType args res = "(" ++ showArgs args ++ ") > " ++ prettyShow res
 showArgs tys = intercalate " * " (map prettyShow tys)
 
-prettyProblem :: (Pretty a, Pretty (f a)) => String -> PrettyLevel -> Problem f a -> Doc
+prettyProblem :: (Ord a, Pretty a, Pretty (f a)) => String -> PrettyLevel -> Problem f a -> Doc
 prettyProblem family l prob = vcat (map typeDecl (elemsH (types prob)) ++
                               map predDecl (elemsH (preds prob)) ++
                               map funDecl (elemsH (funs prob)) ++
@@ -97,10 +98,10 @@ prettyClause :: String -> String -> String -> Doc -> Doc
 prettyClause family name kind rest =
   text family <> parens (sep [text name <> comma <+> text kind <> comma, rest]) <> text "."
 
-instance (Pretty a, Pretty (f a)) => Pretty (Problem f a) where
+instance (Ord a, Pretty a, Pretty (f a)) => Pretty (Problem f a) where
   pPrintPrec l _ = prettyProblem "tff" l
 
-instance (Pretty a, Pretty (f a)) => Show (Problem f a) where
+instance (Ord a, Pretty a, Pretty (f a)) => Show (Problem f a) where
   show = chattyShow
 
 prettyInput :: Pretty a => String -> PrettyLevel -> Input a -> Doc

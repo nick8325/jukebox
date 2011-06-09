@@ -40,14 +40,14 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
 
         parseFile :: FilePath -> Maybe [Tag] -> FilePath -> Pos ->
                      ParseState -> ErrorT FilePath IO ParseState
-        parseFile name clauses file0 pos (MkState prob ind) = do
+        parseFile name clauses file0 pos st = do
           file <- liftMaybeIO (findFile name) file0 pos ("File " ++ name ++ " not found")
           liftIO $ enter progressBar $ "Reading " ++ file
           contents <- liftEitherIO
                         (fmap Right (BSL.readFile file >>= tickOnRead progressBar)
                           `catch` (\(e :: IOException) -> return (Left e)))
                         file (Pos 0 0) show
-          let s = UserState (MkState prob ind) (scan contents)
+          let s = UserState st (scan contents)
           fmap userState (parseSections clauses file s)
 
         parseSections :: Maybe [Tag] -> FilePath -> ParsecState -> ErrorT String IO ParsecState
@@ -79,4 +79,4 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
         merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
         finalise :: ParseState -> Problem Formula Name
-        finalise (MkState p _) = p { inputs = reverse (inputs p) }
+        finalise (MkState p _ _) = p { inputs = reverse (inputs p) }

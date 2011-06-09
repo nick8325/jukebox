@@ -24,7 +24,9 @@ data Type a = Type
     -- type is monotone when domain size is >= tmonotone
     tmonotone :: DomainSize,
     -- if there is a model of size >= tsize then there is a model of size tsize
-    tsize :: DomainSize } deriving Show
+    tsize :: DomainSize,
+    -- two types in the same class have to have the same size
+    tclass :: Int } deriving Show
 
 instance Eq a => Eq (Type a) where
   t1 == t2 = tname t1 == tname t2
@@ -39,13 +41,22 @@ instance Hashable a => Hashable (Type a) where
 -- "tie the knot" when doing type+monotonicity inference
 data Function a = Function { fname :: !a, fres :: Type a }
 data Predicate a = Predicate { pname :: !a }
-data Variable a = Variable { vname :: !a, vtype :: Type a } deriving (Eq, Ord)
+data Variable a = Variable { vname :: !a, vtype :: Type a }
+
+instance Eq a => Eq (Function a) where f == g = fname f == fname g
+instance Eq a => Eq (Predicate a) where p == q = pname p == pname q
+instance Eq a => Eq (Variable a) where x == y = vname x == vname y
+instance Ord a => Ord (Function a) where compare = comparing fname
+instance Ord a => Ord (Predicate a) where compare = comparing pname
+instance Ord a => Ord (Variable a) where compare = comparing vname
+instance Hashable a => Hashable (Function a) where hashWithSalt s = hashWithSalt s . fname
+instance Hashable a => Hashable (Predicate a) where hashWithSalt s = hashWithSalt s . pname
+instance Hashable a => Hashable (Variable a) where hashWithSalt s = hashWithSalt s . vname
 
 data Problem f a = Problem
   { types :: Map a (Type a),
     preds :: Map a ([Type a], Predicate a),
     funs :: Map a ([Type a], Function a),
-    equalSize :: [[Type a]],
     inputs :: [Input (f a)] }
 
 -- Get the elements of a HashMap in increasing order of size.
@@ -80,6 +91,16 @@ instance Functor Signed where
   fmap f (Pos x) = Pos (f x)
   fmap f (Neg x) = Neg (f x)
 type Literal a = Signed (Atom a)
+
+sign :: Signed a -> Signed ()
+sign (Pos _) = Pos ()
+sign (Neg _) = Neg ()
+value :: Signed a -> a
+value (Pos x) = x
+value (Neg x) = x
+resign :: Signed () -> a -> Signed a
+resign (Pos _) = Pos
+resign (Neg _) = Neg
 
 data Formula a
   = Literal !(Literal a)
@@ -123,8 +144,8 @@ renameFormula name ty pred fun = form
         mapSet f = Set.fromList . map f . Set.toList
 
 rename :: (Ord b, Hashable b) => (a -> b) -> Problem Formula a -> Problem Formula b
-rename f (Problem types preds funs equalSize inputs) =
-  Problem types' preds' funs' (map (map ty) equalSize)
+rename f (Problem types preds funs inputs) =
+  Problem types' preds' funs'
           (map (fmap (renameFormula f ty pred func)) inputs)
   where types' = onMap (\ty -> ty { tname = f (tname ty) }) types
         ty t = Map.findWithDefault (error "rename: type not found") (f (tname t)) types'
@@ -132,13 +153,11 @@ rename f (Problem types preds funs equalSize inputs) =
         funs' = onMap (\(xs, fun) -> (map ty xs, Function (f (fname fun)) (ty (fres fun)))) funs
         pred p = snd (Map.findWithDefault (error "rename: predicate not found") (f (pname p)) preds')
         func fun = snd (Map.findWithDefault (error "rename: function not found") (f (fname fun)) funs')
-        onMap g m | Map.size m' /= Map.size m = error "rename: non-injective rename"
-                  | otherwise = m'
-          where m' = Map.fromList . map (\(x, y) -> (f x, g y)) . Map.toList $ m
+        onMap g m = Map.fromList . map (\(x, y) -> (f x, g y)) . Map.toList $ m
 
 -- Return all names that appear in a problem.
 names :: Problem Formula a -> [a]
-names (Problem types preds funs equalSize inputs) =
+names (Problem types preds funs inputs) =
   concat [Map.keys types, Map.keys preds, Map.keys funs,
           A.toList (A.concat (map (vars . formula) inputs))]
     where vars (Literal (Pos a)) = atom a
@@ -154,12 +173,14 @@ names (Problem types preds funs equalSize inputs) =
           term (f :@: xs) = A.concat (map term xs)
           term (Var v) = A.Unit (vname v)
 
--- Turn a Problem Formula a into a Problem Formula Name by generating unique names.
--- Each name starts with a user-supplied basename and is uniquified by adding a number.
--- The smallest name with each basename gets no number, the second-smallest
--- gets number 1, and so on.
-name :: forall a. (Ord a, Hashable a) => (a -> Name) -> Problem Formula a -> Problem Formula Name
-name base p = rename f p
+-- A function for generating unique names.
+-- Given a problem of type Problem Formula a, and a function a -> Name
+-- (which might not be injective on the set of names in the problem,
+-- i.e. some names might be mapped to the same Name),
+-- produce a function a -> Name that is injective,
+-- by adding a numeric suffix to the generated Names.
+name :: forall a. (Ord a, Hashable a) => (a -> Name) -> Problem Formula a -> (a -> Name)
+name base p = f
   where nameMap :: Map Name (Map a Int)
         nameMap =
           Map.fromList .
@@ -170,11 +191,11 @@ name base p = rename f p
           groupBy (\x y -> base x == base y) .
           sortBy (comparing base) .
           names $ p
-        f x = uniquify (combine (base x) b)
+        f x = combine (base x) b
           where b = Map.findWithDefault (error "name: name not found") x
                     (Map.findWithDefault (error "name: name not found") (base x) nameMap)
         combine s 0 = s
-        combine s n = BS.append s (BS.pack ('_':show n))
+        combine s n = uniquify (BS.append s (BS.pack ('_':show n)))
         uniquify s | not (Map.member s nameMap) = s
                    | otherwise = 
                      -- Odd situation: we have e.g. a name with basename "f_1",

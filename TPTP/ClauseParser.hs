@@ -22,13 +22,14 @@ import TPTP.Lexer hiding
    Exists, And, Or, Type, Apply, keyword, defined, kind)
 import qualified TPTP.Lexer as L
 import qualified Formula
-import Formula hiding (tag, kind, formula, Axiom, NegatedConjecture)
+import Formula hiding (tag, kind, formula, name, value, Axiom, NegatedConjecture)
 
 -- The parser monad
 
 data ParseState =
   MkState !(Problem Formula Name) -- problem being constructed, inputs are in reverse order
           !(Maybe (Type Name))    -- the $i type, if used in the problem
+          !Int                    -- the next type equivalence class
   deriving Show
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
@@ -38,7 +39,7 @@ data IncludeStatement = Include BS.ByteString (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = MkState (Problem Map.empty Map.empty Map.empty [] []) Nothing
+initialState = MkState (Problem Map.empty Map.empty Map.empty []) Nothing 0
 
 instance Stream TokenStream Token where
   primToken (At _ Nil) ok err fatal = err
@@ -51,7 +52,7 @@ testParser p s = snd (run (const []) p (UserState initialState (scan (BSL.pack s
 
 getProblem :: Parser (Problem Formula Name)
 getProblem = do
-  MkState p _ <- getState
+  MkState p _ _ <- getState
   return p { inputs = reverse (inputs p) }
 
 -- Primitive parsers.
@@ -167,17 +168,17 @@ include = do
 
 newFormula :: Input (Formula Name) -> Parser ()
 newFormula input = do
-  MkState p i <- getState
-  putState (MkState p{ inputs = input:inputs p } i)
+  MkState p i c <- getState
+  putState (MkState p{ inputs = input:inputs p } i c)
 
 {-# INLINE findType #-}
 findType :: BS.ByteString -> Parser (Type Name)
 findType name = do
-  MkState p i <- getState
+  MkState p i c <- getState
   case Map.lookup name (types p) of
     Nothing -> do
-      let ty = Type { tname = name, tmonotone = Infinite, tsize = Infinite } 
-      putState (MkState p{ types = Map.insert name ty (types p) } i)
+      let ty = Type { tname = name, tmonotone = Infinite, tsize = Infinite, tclass = c }
+      putState (MkState p{ types = Map.insert name ty (types p) } i (c+1))
       return ty
     Just x -> return x
 
@@ -249,11 +250,11 @@ lookupPredicate = look preds (\p x -> p { preds = x })
 
 {-# INLINE look #-}
 look get put def name = do
-  MkState p i <- getState
+  MkState p i c <- getState
   case Map.lookup name (get p) of
     Nothing -> do
       f <- def
-      putState (MkState (put p (Map.insert name f (get p))) i)
+      putState (MkState (put p (Map.insert name f (get p))) i c)
       return f
     Just f -> return f
 
@@ -261,11 +262,12 @@ look get put def name = do
 {-# INLINE individual #-}
 individual :: Parser (Type Name)
 individual = do
-  MkState p i <- getState
+  MkState _ i _ <- getState
   case i of
     Nothing -> do
       ind <- findType (BS.pack "$i")
-      putState (MkState p (Just ind))
+      MkState p _ c <- getState
+      putState (MkState p (Just ind) c)
       return ind
     Just x -> return x
 
