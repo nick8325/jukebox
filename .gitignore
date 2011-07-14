@@ -1,4 +1,8 @@
 /#*#
-/.#*
+/.*
 /dist
 /TPTP/Lexer.hs
+/minisat
+*.o
+*.hi
+*.swp

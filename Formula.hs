@@ -19,39 +19,83 @@ type Tag = BS.ByteString
 
 data DomainSize = Finite !Int | Infinite deriving (Eq, Ord, Show)
 
-data Type a = Type
-  { tname :: !a,
-    -- type is monotone when domain size is >= tmonotone
-    tmonotone :: DomainSize,
-    -- if there is a model of size >= tsize then there is a model of size tsize
-    tsize :: DomainSize,
-    -- two types in the same class have to have the same size
-    tclass :: Int } deriving Show
+class Names a where
+  names :: Monad m => (forall a. Name a -> m (Name a)) -> a -> m a
 
-instance Eq a => Eq (Type a) where
+instance Names Type where
+  names f O = return O
+  names f (Type name monotone size cls) = do
+    name' <- f name
+    return (Type name' monotone size cls)
+
+data Type =
+    O
+  | Type {
+      tname :: !Name,
+      -- type is monotone when domain size is >= tmonotone
+      tmonotone :: DomainSize,
+      -- if there is a model of size >= tsize then there is a model of size tsize
+      tsize :: DomainSize,
+      -- two types in the same class have to have the same size
+      tclass :: Int } deriving Show
+
+instance Eq Type where
   t1 == t2 = tname t1 == tname t2
 
-instance Ord a => Ord (Type a) where
+instance Ord Type where
   compare = comparing tname
 
-instance Hashable a => Hashable (Type a) where
+instance Hashable Type where
   hashWithSalt s = hashWithSalt s . tname
 
--- Important that these not be strict in the type so that we can
--- "tie the knot" when doing type+monotonicity inference
-data Function a = Function { fname :: !a, fres :: Type a }
-data Predicate a = Predicate { pname :: !a }
-data Variable a = Variable { vname :: !a, vtype :: Type a }
+data Symbol = !Name ::: !Type
 
-instance Eq a => Eq (Function a) where f == g = fname f == fname g
-instance Eq a => Eq (Predicate a) where p == q = pname p == pname q
-instance Eq a => Eq (Variable a) where x == y = vname x == vname y
-instance Ord a => Ord (Function a) where compare = comparing fname
-instance Ord a => Ord (Predicate a) where compare = comparing pname
-instance Ord a => Ord (Variable a) where compare = comparing vname
-instance Hashable a => Hashable (Function a) where hashWithSalt s = hashWithSalt s . fname
-instance Hashable a => Hashable (Predicate a) where hashWithSalt s = hashWithSalt s . pname
-instance Hashable a => Hashable (Variable a) where hashWithSalt s = hashWithSalt s . vname
+instance Eq Symbol where s == t = name s == name t
+instance Ord Symbol where compare = comparing name
+instance Hashable Symbol where hashWithSalt s = hashWithSalt s . name
+
+type Problem = Bind Type (Bind Function [Input])
+type CNF = Bind Type (Bind Function [Bind Variable [Literal]])
+-- Maybe use IntMap for names so that keys come out in ascending order?
+-- Ok, but we still want variant.
+-- Invariants: (name, variant) unique
+-- (id, variant) unique
+-- uniquify will set all variants to 0...
+-- but really...
+-- maybe we should have an "inefficient-string-name" part
+-- which is calculated on printing out (and takes advantage of the variant)
+-- and an efficient (id, variant) part
+-- ...but actually, this inefficient part should just be a string paired with a number,
+-- since we don't want stupid names like f_1_1_1. No, we want to avoid eagerly
+-- computing the number. (Yes, the number is part of the id-thingy so we can compute it...)
+
+data Name = Name { base :: !BS.ByteString, id :: {-# UNPACK #-} !Int, variant :: {-# UNPACK #-} !Int }
+data Named a = Named { name :: {-# UNPACK #-} !Name, contents :: !a }
+data Bind a b = Bind { names :: !(Map Name a), value :: !b } 
+
+xuBINDu :: NAMESu a => -- want to only bind things of a particular type here
+                   -- also, sometimes we don't want to bind all names,
+                   -- e.g. in a !-quantifier.
+                   -- Do we really want this Bind structure, then? What does it give us?
+                   -- We want names under a binder to be maximally shared,
+                   -- which a smart Bind constructor can give us,
+                   -- but expecting Bind to fix all the sharing seems like a
+                   -- bad idea. Actually, this smart constructor will be rather
+                   -- slow if it has to rebuild the entire term from scratch.
+                   -- So we should try to preserve sharing ourselves; maybe
+                   -- uniquify can reintroduce sharing.
+                   -- Or we can have some memoising introduce-names function...
+                   -- (that's probably better)
+                   -- (can even hide the name in an abstract data type so we
+                   -- have to use memoisation)
+
+data FormulaNamed a where
+  Function :: Function -> FormulaNamed Function
+  -- ...
+
+names :: Formula -> [FormulaNamed a] -- or more general with monad blah
+
+uniquify :: Names a => a -> a
 
 data Problem f a = Problem
   { types :: Map a (Type a),
@@ -78,13 +122,13 @@ data Input a = Input
 instance Functor Input where
   fmap f x = x { formula = f (formula x) }
 
-data Term a = Var !(Variable a) | !(Function a) :@: [Term a]
+data Term = Var !Symbol | !Symbol :@: [Term]
 
 ty :: Term a -> Type a
 ty (Var Variable{vtype = ty}) = ty
 ty (Function{fres = ty} :@: _) = ty
 
-data Atom a = !(Term a) :=: !(Term a) | !(Predicate a) :?: [Term a]
+data Atom = !Term :=: !Term | Tru !Term
 
 data Signed a = Pos !a | Neg !a deriving Show
 instance Functor Signed where
@@ -183,13 +227,10 @@ name :: forall a. (Ord a, Hashable a) => (a -> Name) -> Problem Formula a -> (a 
 name base p = f
   where nameMap :: Map Name (Map a Int)
         nameMap =
-          Map.fromList .
           -- Assign numbers to each name
-          map (\xs@(x:_) -> (base x, Map.fromList (zip xs [0..]))).
-          map usort .
+          Map.map (\xs -> Map.fromList (zip (usort xs) [0..])).
           -- Partition by basename
-          groupBy (\x y -> base x == base y) .
-          sortBy (comparing base) .
+          foldl' (\m x -> Map.insertWith (++) (base x) [x] m) Map.empty .
           names $ p
         f x = combine (base x) b
           where b = Map.findWithDefault (error "name: name not found") x

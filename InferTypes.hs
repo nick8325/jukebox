@@ -1,4 +1,4 @@
-{-# LANGUAGE ImplicitParams, TemplateHaskell #-}
+{-# LANGUAGE ImplicitParams, TupleSections #-}
 module InferTypes where
 
 import UnionFind hiding (S)
@@ -10,16 +10,25 @@ import Data.HashMap(Map)
 import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJClass
 import TPTP.Print
-import Data.DeriveTH
-import Data.Derive.Hashable
 import Data.Hashable
 import qualified AppList as A
+import Data.Ord
 
 -- Type names
-data InferName = InferName !Name !Int deriving (Eq, Ord)
-$(derive makeHashable ''InferName)
+data InferName = InferName !Name {-# UNPACK #-} !Int
 baseName :: InferName -> Name
 baseName (InferName name _) = name
+label :: InferName -> Int
+label (InferName _ x) = x
+
+instance Eq InferName where
+  x == y = label x == label y
+
+instance Ord InferName where
+  compare = comparing label
+
+instance Hashable InferName where
+  hashWithSalt s = hashWithSalt . label
 
 instance Pretty InferName where
   pPrint (InferName x n) = pPrint x <> text "_" <> pPrint n
@@ -109,16 +118,17 @@ inferProblem (Problem _ preds funs inputs) = do
   inputs' <- mapM inferInput inputs
   let toMap xs = Map.fromList [ (tname x, x) | x <- xs ]
   types' <- gets (toMap . types)
-  return (Problem types' preds' funs' inputs')
+  let pr' = Problem types' preds' funs' inputs'
+  return pr'
 
 infer :: (?monotone :: Type Name -> DomainSize, ?size :: Type Name -> DomainSize) =>
          Problem Formula Name -> Problem Formula Name
 infer pr = rename name' res
-  where ((res0, s), uf) = runUF initial (runStateT go s0)
+  where (res0, uf) = runUF initial (evalStateT go s0)
         name' = name baseName res
         res = rename getRep res0
         getRep x = evalUF uf (rep x)
-        s0 = S (error "infer: funs") (error "infer: preds") 0 []
+        s0 = S (error "infer: funs") (error "infer: preds") 1 []
         go = do
           let adapt f ty = 
                 f (Type (name' (getRep (tname ty))) (error "infer: monotone") (error "infer: size") (tclass ty))

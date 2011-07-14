@@ -36,15 +36,34 @@ s =:= t = do
       modify (Map.insert rs rt)
       return (Just (rs :> rt))
 
+{-# INLINE rep #-}
 rep :: (Hashable a, Ord a) => a -> UF a a
-rep t = do
+rep s = do
   m <- get
-  case Map.lookup t m of
-    Nothing -> return t
-    Just t' -> do
-      r <- rep t'
-      when (t' /= r) $ put (Map.insert t r m)
-      return r
+  case Map.lookup s m of
+    Nothing -> return s
+    Just t -> do
+      u <- rep t
+      when (t /= u) $ modify (Map.insert s u)
+      return u
+      -- case Map.lookup t m of
+      --   Nothing -> return t
+      --   Just u -> do
+      --     v <- rep' t u
+      --     modify (Map.insert s v)
+      --     return v
+
+-- rep' :: (Hashable a, Ord a) => a -> a -> UF a a
+-- rep' s t = do
+--   m <- get
+--   case Map.lookup t m of
+--     Nothing -> do
+--       modify (Map.insert s t)
+--       return t
+--     Just u -> do
+--       v <- rep' t u
+--       modify (Map.insert s v)
+--       return v
 
 isRep :: (Hashable a, Ord a) => a -> UF a Bool
 isRep t = do
