@@ -3,6 +3,8 @@ module AppList where
 
 import Prelude hiding (concat)
 import Control.Monad
+import Data.Hashable
+import qualified Data.HashSet as Set
 
 data AppList a = Append !(AppList a) !(AppList a) | Unit !a | Nil
 
@@ -40,6 +42,7 @@ instance Functor AppList where
 instance Monad AppList where
   return = Unit
   x >>= f = concatA (fmap f x)
+  fail _ = Nil
 
 instance MonadPlus AppList where
   mzero = Nil
@@ -65,3 +68,6 @@ toList x = go [x]
         go (Unit x:left) = x:go left
         go (Append x y:left) = go (x:y:left)
         go [] = []
+
+unique :: (Ord a, Hashable a, List f) => f a -> [a]
+unique = Set.toList . Set.fromList . toList . fromList

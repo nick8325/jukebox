@@ -17,11 +17,12 @@ import qualified Data.Map as Map
 import Control.Exception
 import Prelude hiding (catch)
 import Data.List
+import Name
 
-parseProblem :: FilePath -> IO (Either String (Problem Formula Name))
+parseProblem :: FilePath -> IO (Either String (Problem Formula))
 parseProblem name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP []) pb name
 
-parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Formula Name))
+parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Formula))
 parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile name Nothing "<command line>" (Pos 0 0) initialState))
   where err file (Pos l c) msg = throwError msg'
           where msg' = "Error at " ++ file ++ " (line " ++ show l ++ ", column " ++ show c ++ "):\n" ++ msg
@@ -57,7 +58,7 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
               report UserState{userStream = At _ L.Error} =
                 ["Lexical error"]
               report UserState{userStream = At _ (Cons t _)} =
-                ["Unexpected " ++ prettyShow t] in
+                ["Unexpected " ++ show t] in
           case run report (section (included clauses)) s of
             (UserState{userStream=At pos _}, Left e) ->
               err file pos (concat (intersperse "\n" e))
@@ -78,5 +79,5 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
         merge x Nothing = x
         merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
-        finalise :: ParseState -> Problem Formula Name
-        finalise (MkState p _ _) = p { inputs = reverse (inputs p) }
+        finalise :: ParseState -> Problem Formula
+        finalise (MkState p _ _ _ _ n) = close_ n (return (reverse p))

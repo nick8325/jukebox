@@ -98,7 +98,7 @@ data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString }
            | Var { name :: !BS.ByteString }
            | DistinctObject { name :: !BS.ByteString }
            | Number { value :: !Integer }
-           | Punct { kind :: !Punct } deriving Show
+           | Punct { kind :: !Punct }
 
 data Keyword = Normal
              | Thf | Tff | Fof | Cnf
@@ -178,8 +178,8 @@ readNumber x | BS.null r = n
 
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
-data TokenStream = At {-# UNPACK #-} !Pos !Contents deriving Show
-data Contents = Nil | Cons !Token TokenStream | Error deriving Show
+data TokenStream = At {-# UNPACK #-} !Pos !Contents
+data Contents = Nil | Cons !Token TokenStream | Error
 
 scan xs = go (Input (Pos 1 1) '\n' BS.empty xs)
   where go inp@(Input pos _ x xs) =

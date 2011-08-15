@@ -1,8 +1,8 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances #-}
 module Name(
-  Name, uniqueId,
+  Name, uniqueId, base,
   Named(name),
-  Closed, close, open, NameM, newName,
+  Closed, close, close_, open, closed0, stdNames, nameO, nameI, NameM, newName,
   uniquify) where
 
 import qualified Data.ByteString.Char8 as BS
@@ -20,13 +20,13 @@ data Name =
     base :: BS.ByteString }
 
 instance Eq Name where
-  x == y = name x == name y
+  x == y = uniqueId x == uniqueId y
 
 instance Ord Name where
-  compare = comparing name
+  compare = comparing uniqueId
 
 instance Hashable Name where
-  hashWithSalt s = hashWithSalt s . name
+  hashWithSalt s = hashWithSalt s . uniqueId
 
 instance Show Name where
   show Name { uniqueId = uniqueId, base = base } =
@@ -40,6 +40,10 @@ class Named a where
 instance Named BS.ByteString where
   name = error "Name.name: used a ByteString as a name"
   baseName = id
+
+instance Named [Char] where
+  name = error "Name.name: used a String as a name"
+  baseName = BS.pack
 
 instance Named Name where
   name = id
@@ -61,14 +65,28 @@ data Closed a =
     maxIndex :: !Int64,
     open :: !a }
 
+closed0 :: Closed ()
+nameO, nameI :: Name
+
+closed0 = close_ stdNames (return ())
+[nameO, nameI] = open stdNames
+
+stdNames :: Closed [Name]
+stdNames = close (Closed 0 ["$o", "$i"]) (mapM newName)
+
 close :: Closed a -> (a -> NameM b) -> Closed b
 close Closed{ maxIndex = maxIndex, open = open } f =
-  case runState (unNameM (f open)) maxIndex of
-    (open', maxIndex') ->
-      Closed{ maxIndex = maxIndex', open = open' }
+  let (open', maxIndex') = runState (unNameM (f open)) maxIndex
+  in Closed{ maxIndex = maxIndex', open = open' }
+
+close_ :: Closed a -> NameM b -> Closed b
+close_ x m = close x (const m)
 
 uniquify :: [Name] -> (Name -> BS.ByteString)
 uniquify xs = f
+  -- Note to self: nameO should always be mapped to "$o".
+  -- Therefore we make sure that smaller names have priority
+  -- over bigger names here.
   where
     baseMap =
       -- Assign numbers to each baseName
@@ -81,12 +99,12 @@ uniquify xs = f
         b = Map.findWithDefault (error "Name.uniquify: name not found") x
             (Map.findWithDefault (error "Name.uniquify: name not found") (baseName x) baseMap)
     combine s 0 = s
-    combine s n = disambiguate (BS.append s (BS.pack ('_':show n)))
+    combine s n = disambiguate (BS.append s (BS.pack (show n)))
     disambiguate s
       | not (Map.member s baseMap) = s
       | otherwise =
-        -- Odd situation: we have e.g. a name with baseName "f_1",
+        -- Odd situation: we have e.g. a name with baseName "f1",
         -- and two names with baseName "f", which would normally
-        -- become "f" and "f_1", but the "f_1" conflicts.
+        -- become "f" and "f1", but the "f1" conflicts.
         -- Try appending some suffix.
-        disambiguate (BS.snoc s 'a')
+        disambiguate (BS.snoc s '_')

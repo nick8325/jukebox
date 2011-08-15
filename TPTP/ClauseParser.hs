@@ -1,6 +1,6 @@
 -- Parse and typecheck TPTP clauses, stopping at include-clauses.
 
-{-# LANGUAGE BangPatterns, MultiParamTypeClasses, ImplicitParams, FlexibleInstances #-}
+{-# LANGUAGE BangPatterns, MultiParamTypeClasses, ImplicitParams, FlexibleInstances, TypeOperators #-}
 module TPTP.ClauseParser where
 
 import TPTP.Parsec
@@ -10,27 +10,30 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.HashMap as Map
 import Data.HashMap(Map)
-import qualified Data.Set as Set
 import qualified AppList as A
 import AppList(AppList)
 import Data.List
 import TPTP.Print
-import Text.PrettyPrint.HughesPJClass hiding (parens)
+import Name hiding (name)
+import qualified NameMap
 
 import TPTP.Lexer hiding
   (Pos, Error, Include, Var, Type, Not, ForAll,
    Exists, And, Or, Type, Apply, keyword, defined, kind)
 import qualified TPTP.Lexer as L
 import qualified Formula
-import Formula hiding (tag, kind, formula, name, value, Axiom, NegatedConjecture)
+import Formula hiding (tag, kind, formula, Axiom, NegatedConjecture)
+import qualified Name
 
 -- The parser monad
 
 data ParseState =
-  MkState !(Problem Formula Name) -- problem being constructed, inputs are in reverse order
-          !(Maybe (Type Name))    -- the $i type, if used in the problem
-          !Int                    -- the next type equivalence class
-  deriving Show
+  MkState ![Input Formula]                        -- problem being constructed, inputs are in reverse order
+          !(Map BS.ByteString Type)               -- types
+          !(Map BS.ByteString (Name ::: FunType)) -- functions
+          !Type                                   -- the $i type
+          !Int                                    -- the next type equivalence class
+          !(Closed ())                            -- name generation
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
 
@@ -39,7 +42,8 @@ data IncludeStatement = Include BS.ByteString (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = MkState (Problem Map.empty Map.empty Map.empty []) Nothing 0
+initialState = MkState [] (Map.insert (BS.pack "$i") typeI Map.empty) Map.empty typeI 1 closed0
+  where typeI = Type nameI Infinite Infinite 0
 
 instance Stream TokenStream Token where
   primToken (At _ Nil) ok err fatal = err
@@ -50,10 +54,10 @@ instance Stream TokenStream Token where
 testParser :: Parser a -> String -> Either [String] a
 testParser p s = snd (run (const []) p (UserState initialState (scan (BSL.pack s))))
 
-getProblem :: Parser (Problem Formula Name)
+getProblem :: Parser [Input Formula]
 getProblem = do
-  MkState p _ _ <- getState
-  return p { inputs = reverse (inputs p) }
+  MkState p _ _ _ _ _ <- getState
+  return (reverse p)
 
 -- Primitive parsers.
 
@@ -135,7 +139,7 @@ input included = declaration Cnf (formulaIn cnf) <|>
         p _ = True
 
 -- A TPTP kind.
-kind :: Parser (Tag -> Formula Name -> Input (Formula Name))
+kind :: Parser (Tag -> Formula -> Input Formula)
 kind = axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
        axiom Assumption <|> axiom Lemma <|> axiom Theorem <|>
        general Conjecture Formula.NegatedConjecture Not <|>
@@ -164,116 +168,83 @@ include = do
   punct Dot
   return res
 
--- Inserting types, predicates, functions and clauses.
+-- Inserting types, functions and clauses.
 
-newFormula :: Input (Formula Name) -> Parser ()
+newFormula :: Input Formula -> Parser ()
 newFormula input = do
-  MkState p i c <- getState
-  putState (MkState p{ inputs = input:inputs p } i c)
+  MkState p t f i c n <- getState
+  putState (MkState (input:p) t f i c n)
+  
+newNameFrom :: Named a => Closed () -> a -> (Closed (), Name)
+newNameFrom n name = (close_ n' (return ()), open n')
+  where n' = close_ n (newName name)
 
 {-# INLINE findType #-}
-findType :: BS.ByteString -> Parser (Type Name)
+findType :: BS.ByteString -> Parser Type
 findType name = do
-  MkState p i c <- getState
-  case Map.lookup name (types p) of
+  MkState p t f i c n <- getState
+  case Map.lookup name t of
     Nothing -> do
-      let ty = Type { tname = name, tmonotone = Infinite, tsize = Infinite, tclass = c }
-      putState (MkState p{ types = Map.insert name ty (types p) } i (c+1))
+      let (n', name') = newNameFrom n name
+          ty = Type { tname = name', tmonotone = Infinite, tsize = Infinite, tclass = c }
+      putState (MkState p (Map.insert name ty t) f i (c+1) n')
       return ty
     Just x -> return x
 
-newFunction :: BS.ByteString -> [Type Name] -> Type Name -> Parser (Function Name)
-newFunction name args res =
-  new "Function" (lookupFunction f) check decl showSym name args
-    where check f = res == fres f
-          decl = showFunType args res
-          showSym args' f = showFunType args' (fres f)
-          f = return (args, Function { fname = name, fres = res })
-
-newPredicate :: BS.ByteString -> [Type Name] -> Parser (Predicate Name)
-newPredicate name args =
-  new "Predicate" (lookupPredicate p) (const True) decl showSym name args
-    where decl = showPredType args
-          showSym args' _ = showPredType args'
-          p = return (args, Predicate { pname = name })
-
-new kind lookup check decl showSym name args = do
-  (args', f) <- lookup name
-  unless (args == args' && check f) $ do
-    fatalError $ kind ++ " " ++ BS.unpack name ++
-                 " was declared to have type " ++ decl ++
-                 " but already has type " ++ showSym args' f
+newFunction :: BS.ByteString -> FunType -> Parser (Name ::: FunType)
+newFunction name ty' = do
+  f@(_ ::: ty) <- lookupFunction ty' name
+  unless (ty == ty') $ do
+    fatalError $ "Constant " ++ BS.unpack name ++
+                 " was declared to have type " ++ prettyShow ty' ++
+                 " but already has type " ++ prettyShow ty
   return f
 
 {-# INLINE applyFunction #-}
-applyFunction :: BS.ByteString -> [Term Name] -> Parser (Term Name)
-applyFunction name args = lookupFunction f name >>= typeCheck "Function" ty (:@:) args
-  where ty args f = showFunType args (fres f)
-        f = do tys <- mapM (const individual) args
-               res <- individual
-               return (tys, Function { fname = name, fres = res })
-
-{-# INLINE applyPredicate #-}
-applyPredicate :: BS.ByteString -> [Term Name] -> Parser (Atom Name)
-applyPredicate name args = lookupPredicate p name >>= typeCheck "Predicate" ty (:?:) args
-  where ty args _ = showPredType args
-        p = do tys <- mapM (const individual) args
-               return (tys, Predicate { pname = name })
-
-{-# INLINE typeCheck #-}
-typeCheck kind showTy app args (args', fun) = do
-  unless (map ty args == args') $ typeError kind showTy app args args' fun
-  return (fun `app` args)
+applyFunction :: BS.ByteString -> [Term] -> Type -> Parser Term
+applyFunction name args' res = do
+  i <- individual
+  f@(_ ::: ty) <- lookupFunction (FunType (replicate (length args') i) res) name
+  unless (map typ args' == args ty) $ typeError f args'
+  return (f :@: args')
 
 {-# NOINLINE typeError #-}
-typeError kind showTy app args args' fun = do
+typeError f@(x ::: ty) args' = do
     let plural 1 x y = x 
         plural _ x y = y
-    fatalError $ "Type mismatch in term '" ++ prettyShow (fun `app` args) ++ "': " ++
-                 kind ++ " " ++ prettyShow fun ++
-                 if length args == length args' then
-                   " has type " ++ showTy args' fun ++
-                   " but was applied to " ++ plural (length args) "an argument" "arguments" ++
-                   " of type " ++ showArgs (map ty args)
+    fatalError $ "Type mismatch in term '" ++ prettyShow (f :@: args') ++ "': " ++
+                 "Constant " ++ prettyShow x ++
+                 if length (args ty) == length args' then
+                   " has type " ++ prettyShow ty ++
+                   " but was applied to " ++ plural (length args') "an argument" "arguments" ++
+                   " of type " ++ prettyShow (map typ args')
                  else
                    " has arity " ++ show (length args') ++
-                   " but was applied to " ++ show (length args) ++
-                   plural (length args) "argument" "arguments"
+                   " but was applied to " ++ show (length (args ty)) ++
+                   plural (length (args ty)) "argument" "arguments"
 
 {-# INLINE lookupFunction #-}
-lookupFunction :: Parser ([Type Name], Function Name) -> BS.ByteString -> Parser ([Type Name], Function Name)
-lookupFunction = look funs (\p x -> p { funs = x })
-
-{-# INLINE lookupPredicate #-}
-lookupPredicate :: Parser ([Type Name], Predicate Name) -> BS.ByteString -> Parser ([Type Name], Predicate Name)
-lookupPredicate = look preds (\p x -> p { preds = x })
-
-{-# INLINE look #-}
-look get put def name = do
-  MkState p i c <- getState
-  case Map.lookup name (get p) of
+lookupFunction :: FunType -> BS.ByteString -> Parser (Name ::: FunType)
+lookupFunction def name = do
+  MkState p t f i c n <- getState
+  case Map.lookup name f of
     Nothing -> do
-      f <- def
-      putState (MkState (put p (Map.insert name f (get p))) i c)
-      return f
+      let (n', name') = newNameFrom n name
+          decl = name' ::: def
+      putState (MkState p t (Map.insert name decl f) i c n')
+      return decl
     Just f -> return f
 
 -- The type $i (anything whose type is not specified gets this type)
 {-# INLINE individual #-}
-individual :: Parser (Type Name)
+individual :: Parser Type
 individual = do
-  MkState _ i _ <- getState
-  case i of
-    Nothing -> do
-      ind <- findType (BS.pack "$i")
-      MkState p _ c <- getState
-      putState (MkState p (Just ind) c)
-      return ind
-    Just x -> return x
+  MkState _ _ _ i _ _ <- getState
+  return i
 
 -- Parsing formulae.
 
-cnf, tff, fof :: Parser (Formula Name)
+cnf, tff, fof :: Parser Formula
 cnf = fatalError "cnf not implemented"
 tff =
   let ?binder = varDecl True
@@ -292,14 +263,19 @@ fof =
 -- A thing is either a term or a formula, or a literal that we don't know
 -- if it should be a term or a formula. Instead of a separate formula-parser
 -- and term-parser we have a combined thing-parser.
-data Thing = Apply !BS.ByteString ![Term Name]
-           | Term !(Term Name)
-           | Formula !(Formula Name)
+data Thing = Apply !BS.ByteString ![Term]
+           | Term !Term
+           | Formula !(Formula)
 
-instance Pretty Thing where
-  pPrintPrec l _ (Apply f xs) = prettyFunc l (pPrint f) xs
-  pPrintPrec l p (Term t) = pPrintPrec l p t
-  pPrintPrec l p (Formula f) = pPrintPrec l p f
+instance Show Thing where
+  show (Apply f []) = BS.unpack f
+  show (Apply f args) =
+    BS.unpack f ++
+      case args of
+        [] -> ""
+        args -> prettyShow args
+  show (Term t) = prettyShow t
+  show (Formula f) = prettyShow f
 
 -- However, often we do know whether we want a formula or a term,
 -- and there it's best to use a specialised parser (not least because
@@ -320,21 +296,21 @@ class TermLike a where
   fromThing :: Thing -> Parser a
   -- Parse a variable occurrence as a term on its own, if that's allowed.
   {-# INLINE var #-}
-  var :: (?ctx :: Map BS.ByteString (Variable Name)) => Parser a
+  var :: (?ctx :: Map BS.ByteString Variable) => Parser a
   -- A parser for this type.
-  parser :: (?binder :: Parser (Variable Name),
-             ?ctx :: Map BS.ByteString (Variable Name)) => Parser a
+  parser :: (?binder :: Parser Variable,
+             ?ctx :: Map BS.ByteString Variable) => Parser a
 
-instance TermLike (Formula Name) where
-  fromThing t@(Apply x xs) = fmap (Literal . Pos) (applyPredicate x xs)
+instance TermLike Formula where
+  fromThing t@(Apply x xs) = fmap (Literal . Pos . Tru) (applyFunction x xs O)
   fromThing (Term _) = mzero
   fromThing (Formula f) = return f
   -- A variable itself is not a valid formula.
   var = mzero
   parser = formula
 
-instance TermLike (Term Name) where
-  fromThing t@(Apply x xs) = applyFunction x xs
+instance TermLike Term where
+  fromThing t@(Apply x xs) = individual >>= applyFunction x xs
   fromThing (Term t) = return t
   fromThing (Formula _) = mzero
   parser = term
@@ -353,15 +329,15 @@ instance TermLike Thing where
 -- you can use 'formula'.
 class TermLike a => FormulaLike a where
   {-# INLINE fromFormula #-}
-  fromFormula :: Formula Name -> a
-instance FormulaLike (Formula Name) where fromFormula = id
+  fromFormula :: Formula -> a
+instance FormulaLike Formula where fromFormula = id
 instance FormulaLike Thing where fromFormula = Formula
 
 -- An atomic expression.
-{-# SPECIALISE term :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name)) => Parser (Term Name) #-}
-{-# SPECIALISE term :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name)) => Parser (Formula Name) #-}
-{-# SPECIALISE term :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name)) => Parser Thing #-}
-term :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name), TermLike a) => Parser a
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Term #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
+term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, TermLike a) => Parser a
 term = function <|> var <|> parens parser
   where {-# INLINE function #-}
         function = do
@@ -370,7 +346,7 @@ term = function <|> var <|> parens parser
           fromThing (Apply x args)
 
 literal, unitary, quantified, formula ::
-  (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name), FormulaLike a) => Parser a
+  (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, FormulaLike a) => Parser a
 {-# INLINE literal #-}
 literal = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
@@ -382,37 +358,37 @@ literal = true <|> false <|> binary <?> "literal"
           let {-# INLINE f #-}
               f p sign = do
                punct p
-               lhs <- fromThing x :: Parser (Term Name)
-               rhs <- term :: Parser (Term Name)
+               lhs <- fromThing x :: Parser Term
+               rhs <- term :: Parser Term
                let form = Literal . sign $ lhs :=: rhs
-               when (ty lhs /= ty rhs) $
+               when (typ lhs /= typ rhs) $
                  fatalError $ "Type mismatch in equality '" ++ prettyShow form ++ 
-                              "': left hand side has type " ++ prettyShow (ty lhs) ++
-                              " but right hand side has type " ++ prettyShow (ty rhs)
+                              "': left hand side has type " ++ prettyShow (typ lhs) ++
+                              " but right hand side has type " ++ prettyShow (typ rhs)
                return (fromFormula form)
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
-{-# SPECIALISE unitary :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name)) => Parser (Formula Name) #-}
-{-# SPECIALISE unitary :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name)) => Parser Thing #-}
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 unitary = negation <|> quantified <|> literal
   where {-# INLINE negation #-}
         negation = do
           punct L.Not
-          fmap (fromFormula . Not) (unitary :: Parser (Formula Name))
+          fmap (fromFormula . Not) (unitary :: Parser Formula)
 
 {-# INLINE quantified #-}
 quantified = do
   q <- (punct L.ForAll >> return ForAll) <|>
        (punct L.Exists >> return Exists)
   vars <- bracks (sepBy1 ?binder (punct Comma))
-  let ctx' = foldl' (\m v -> Map.insert (vname v) v m) ?ctx vars
+  let ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ?ctx vars
   punct Colon
-  rest <- let ?ctx = ctx' in (unitary :: Parser (Formula Name))
-  return (fromFormula (q (Set.fromList vars) rest))
+  rest <- let ?ctx = ctx' in (unitary :: Parser Formula)
+  return (fromFormula (q (NameMap.fromList vars) rest))
 
 -- A general formula.
-{-# SPECIALISE formula :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name)) => Parser (Formula Name) #-}
-{-# SPECIALISE formula :: (?binder :: Parser (Variable Name), ?ctx :: Map BS.ByteString (Variable Name)) => Parser Thing #-}
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 formula = do
   x <- unitary :: Parser Thing
   let binop op t u = op (A.Unit t `A.append` A.Unit u)
@@ -420,7 +396,7 @@ formula = do
       connective p op = do
         punct p
         lhs <- fromThing x
-        rhs <- formula :: Parser (Formula Name)
+        rhs <- formula :: Parser Formula
         return (fromFormula (op lhs rhs))
   connective L.And (binop And) <|> connective L.Or (binop Or) <|>
    connective Iff Equiv <|>
@@ -433,37 +409,38 @@ formula = do
 
 -- varDecl True: parse a typed variable binding X:a or an untyped one X
 -- varDecl False: parse an untyped variable binding X
-varDecl :: Bool -> Parser (Variable Name)
+varDecl :: Bool -> Parser Variable
 varDecl typed = do
   x <- variable
   ty <- do { punct Colon;
              when (not typed) $
                fatalError "Used a typed quantification in an untyped formula";
              type_ } <|> individual
-  return Variable { vname = x, vtype = ty }
+  MkState p t f i c n <- getState
+  let (n', name) = newNameFrom n x
+  putState (MkState p t f i c n')
+  return (name ::: ty)
 
 -- Parse a type
-type_ :: Parser (Type Name)
+type_ :: Parser Type
 type_ =
   do { name <- atom; findType name } <|>
   do { defined DI; individual }
 
 -- A little data type to help with parsing types.
-data Type_ = TType | O | Fun [Type Name] (Type Name)
-           | Pred [Type Name] | Prod [Type Name]
+data Type_ = TType | Fun [Type] Type | Prod [Type]
 
 prod :: Type_ -> Type_ -> Parser Type_
-prod (Prod tys) (Prod tys2) = return $ Prod (tys ++ tys2)
+prod (Prod tys) (Prod tys2) | not (O `elem` tys ++ tys2) = return $ Prod (tys ++ tys2)
 prod _ _ = fatalError "invalid type"
 
 arrow :: Type_ -> Type_ -> Parser Type_
 arrow (Prod ts) (Prod [x]) = return $ Fun ts x
-arrow (Prod ts) O = return $ Pred ts
 arrow _ _ = fatalError "invalid type"
 
 leaf :: Parser Type_
 leaf = do { defined DTType; return TType } <|>
-       do { defined DO; return O } <|>
+       do { defined DO; return (Prod [O]) } <|>
        do { ty <- type_; return (Prod [ty]) } <|>
        parens compoundType
 
@@ -482,8 +459,6 @@ typeDeclaration = do
     res <- compoundType
     case res of
       TType -> do { findType name; return () }
-      O -> do { newPredicate name []; return () }
-      Fun args res -> do { newFunction name args res; return () }
-      Pred args -> do { newPredicate name args; return () }
-      Prod [res] -> do { newFunction name [] res; return () }
+      Fun args res -> do { newFunction name (FunType args res); return () }
+      Prod [res] -> do { newFunction name (FunType [] res); return () }
       _ -> fatalError "invalid type"
