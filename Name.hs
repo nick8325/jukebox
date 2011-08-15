@@ -1,37 +1,92 @@
--- Names and binding.
-
-module Name where
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+module Name(
+  Name, uniqueId,
+  Named(name),
+  Closed, close, open, NameM, newName,
+  uniquify) where
 
 import qualified Data.ByteString.Char8 as BS
-import Data.HashMap(Map)
+import Data.Hashable
 import qualified Data.HashMap as Map
+import Utils
+import Data.List
+import Data.Ord
+import Data.Int
+import Control.Monad.State
 
--- Attempt 1: parametrise formulae on names.
--- Problem with this is: we need to do flattening, which is nasty.
--- So: allow generating a memo-function a -> Name for appropriate type a,
--- which does knot-tying by looking at the set of names in the final formula.
+data Name =
+  Name {
+    uniqueId :: {-# UNPACK #-} !Int64,
+    base :: BS.ByteString }
 
--- (But...I don't know...we would like to be able to keep existing names where possible...)
+instance Eq Name where
+  x == y = name x == name y
 
-class Names a where
-  names :: Applicative f => (forall a. Name a -> f (Name a)) -> a -> f a
+instance Ord Name where
+  compare = comparing name
 
-withNames :: (Names a, Named b) => ((b -> Name) -> a) -> a
+instance Hashable Name where
+  hashWithSalt s = hashWithSalt s . name
 
-data Name = Name { base :: BS.ByteString, id :: {-# UNPACK #-} !Int }
-data Named a = {-# UNPACK #-} !Name ::: !a
-data Bind a b = Bind { names :: !(Map Name a), contents :: !b }
+instance Show Name where
+  show Name { uniqueId = uniqueId, base = base } =
+    BS.unpack base ++ show uniqueId
 
-bind :: Map Name a -> ((Name -> a) -> b) -> Bind a b
+class Named a where
+  name :: a -> Name
+  baseName :: a -> BS.ByteString
+  baseName = base . name
 
-instance Functor Bind where
-  fmap f (Bind names contents) = Bind names (f contents)
+instance Named BS.ByteString where
+  name = error "Name.name: used a ByteString as a name"
+  baseName = id
 
-instance Monad Bind where
-  return x = Bind Map.empty x
-  x >>= f = join (fmap f x)
-    where join (Bind names (Bind names' contents)) =
-            Bind (Map.unionWith (error "Bind: same name bound twice") names names')
-                 contents
+instance Named Name where
+  name = id
 
-bind :: BS.ByteString -> c -> (
+newtype NameM a =
+  NameM { unNameM :: State Int64 a }
+    deriving (Functor, Monad)
+
+newName :: Named a => a -> NameM Name
+newName x = NameM $ do
+  idx <- get
+  let idx'= idx+1
+  when (idx' < 0) $ error "Name.newName: too many names"
+  put idx'
+  return (Name idx' (baseName x))
+
+data Closed a =
+  Closed {
+    maxIndex :: !Int64,
+    open :: !a }
+
+close :: Closed a -> (a -> NameM b) -> Closed b
+close Closed{ maxIndex = maxIndex, open = open } f =
+  case runState (unNameM (f open)) maxIndex of
+    (open', maxIndex') ->
+      Closed{ maxIndex = maxIndex', open = open' }
+
+uniquify :: [Name] -> (Name -> BS.ByteString)
+uniquify xs = f
+  where
+    baseMap =
+      -- Assign numbers to each baseName
+      Map.map (\xs -> Map.fromList (zip (usort xs) [0 :: Int ..])) .
+      -- Partition by baseName
+      foldl' (\m x -> Map.insertWith (++) (base x) [x] m) Map.empty $
+      xs
+    f x = combine (base x) b
+      where
+        b = Map.findWithDefault (error "Name.uniquify: name not found") x
+            (Map.findWithDefault (error "Name.uniquify: name not found") (baseName x) baseMap)
+    combine s 0 = s
+    combine s n = disambiguate (BS.append s (BS.pack ('_':show n)))
+    disambiguate s
+      | not (Map.member s baseMap) = s
+      | otherwise =
+        -- Odd situation: we have e.g. a name with baseName "f_1",
+        -- and two names with baseName "f", which would normally
+        -- become "f" and "f_1", but the "f_1" conflicts.
+        -- Try appending some suffix.
+        disambiguate (BS.snoc s 'a')
