@@ -8,7 +8,7 @@ fi
 if [ ! $prefix ]; then prefix=/usr/local; fi
 if [ ! $mode ]; then mode=global; fi
 if [ x$mode = xglobal ]; then
-    if [ ! $sudo ]; then sudo=sudo; fi
+    if [ ! $sudo ] && [ $USER != root ]; then sudo=sudo; fi
 else
     if [ ! $sudo ]; then sudo=; fi
 fi
