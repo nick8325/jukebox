@@ -1,11 +1,12 @@
 {-# LANGUAGE TypeOperators #-}
-module Formula where
+module Form where
 
 import qualified AppList as A
 import AppList(AppList)
 import Data.Hashable
 import qualified Data.HashMap as Map
 import NameMap(NameMap)
+import qualified NameMap
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Name
@@ -99,18 +100,39 @@ instance Functor Signed where
   fmap f (Neg x) = Neg (f x)
 type Literal = Signed Atomic
 
-data Formula
+data Form
   = Literal !Literal
-  | Not !Formula
-  | And !(AppList Formula)
-  | Or !(AppList Formula)
-  | Equiv !Formula !Formula
-  | ForAll !(NameMap Variable) !Formula
-  | Exists !(NameMap Variable) !Formula
+  | Not !Form
+  | And !(AppList Form)
+  | Or !(AppList Form)
+  | Equiv !Form !Form
+  | ForAll !(NameMap Variable) !Form
+  | Exists !(NameMap Variable) !Form
+
+true, false :: Form
+true = And A.Nil
+false = Or A.Nil
+
+type Clause = [Signed Atomic]
+data QClause = Clause !(NameMap Variable) !Clause
+
+toQClause :: Clause -> QClause
+toQClause c = Clause (NameMap.fromList (vars c)) c
+
+toForm :: QClause -> Form
+toForm (Clause xs ls) = ForAll xs (And (A.fromList (map Literal ls)))
 
 neg :: Signed a -> Signed a
 neg (Pos x) = Neg x
 neg (Neg x) = Pos x
+
+the :: Signed a -> a
+the (Pos x) = x
+the (Neg x) = x
+
+positive :: Signed a -> Bool
+positive (Pos _) = True
+positive (Neg _) = False
 
 data Kind = Axiom | NegatedConjecture deriving (Eq, Ord)
 
@@ -136,7 +158,7 @@ names s = fmap name (boundVars s) `mplus` do
   x <- terms s
   return (name x) `mplus` return (name (typ x))
 
-instance Symbolic Formula where
+instance Symbolic Form where
   terms (Literal l) = terms l
   terms (Not f) = terms f
   terms (And xs) = A.concat (fmap terms xs)

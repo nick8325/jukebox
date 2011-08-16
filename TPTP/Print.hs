@@ -7,7 +7,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Text.PrettyPrint.HughesPJ
 import qualified TPTP.Lexer as L
-import Formula
+import Form
 import Data.List
 import qualified Data.HashMap as Map
 import qualified AppList as A
@@ -124,7 +124,7 @@ instance Pretty Atomic where
 instance Show Atomic where
   show = chattyShow
 
-instance Pretty Formula where
+instance Pretty Form where
   -- We use two precedences, the lowest for binary connectives
   -- and the highest for everything else.
   pPrint p l env (Literal (Neg (t :=: u))) =

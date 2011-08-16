@@ -3,7 +3,7 @@ module Main where
 
 import TPTP.ParseProblem
 import System.Environment
-import Formula
+import Form
 -- import InferTypes
 import TPTP.Print
 import Name
@@ -19,5 +19,5 @@ main = do
       --     ?size = const Infinite
       -- in putStrLn (prettyShow (infer p))
       putStrLn $ "ok, " ++ show (length (open p)) ++ " clauses"
-      putStrLn (render (prettyProblem "tff" Chatty p))
-      putStrLn (render (prettyProblem "tff" Normal p))
+      -- putStrLn (render (prettyProblem "tff" Chatty p))
+      -- putStrLn (render (prettyProblem "tff" Normal p))

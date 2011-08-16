@@ -9,7 +9,7 @@ import TPTP.Parsec
 import TPTP.Print
 import qualified TPTP.Lexer as L
 import Control.Monad.Error
-import Formula hiding (Pos)
+import Form hiding (Pos)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Control.Monad.Identity
@@ -19,10 +19,10 @@ import Prelude hiding (catch)
 import Data.List
 import Name
 
-parseProblem :: FilePath -> IO (Either String (Problem Formula))
+parseProblem :: FilePath -> IO (Either String (Problem Form))
 parseProblem name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP []) pb name
 
-parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Formula))
+parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Form))
 parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile name Nothing "<command line>" (Pos 0 0) initialState))
   where err file (Pos l c) msg = throwError msg'
           where msg' = "Error at " ++ file ++ " (line " ++ show l ++ ", column " ++ show c ++ "):\n" ++ msg
@@ -79,5 +79,5 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
         merge x Nothing = x
         merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
-        finalise :: ParseState -> Problem Formula
+        finalise :: ParseState -> Problem Form
         finalise (MkState p _ _ _ _ n) = close_ n (return (reverse p))

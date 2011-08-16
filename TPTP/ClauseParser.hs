@@ -21,14 +21,14 @@ import TPTP.Lexer hiding
   (Pos, Error, Include, Var, Type, Not, ForAll,
    Exists, And, Or, Type, Apply, keyword, defined, kind)
 import qualified TPTP.Lexer as L
-import qualified Formula
-import Formula hiding (tag, kind, formula, Axiom, NegatedConjecture)
+import qualified Form
+import Form hiding (tag, kind, formula, Axiom, NegatedConjecture)
 import qualified Name
 
 -- The parser monad
 
 data ParseState =
-  MkState ![Input Formula]                        -- problem being constructed, inputs are in reverse order
+  MkState ![Input Form]                        -- problem being constructed, inputs are in reverse order
           !(Map BS.ByteString Type)               -- types
           !(Map BS.ByteString (Name ::: FunType)) -- functions
           !Type                                   -- the $i type
@@ -54,7 +54,7 @@ instance Stream TokenStream Token where
 testParser :: Parser a -> String -> Either [String] a
 testParser p s = snd (run (const []) p (UserState initialState (scan (BSL.pack s))))
 
-getProblem :: Parser [Input Formula]
+getProblem :: Parser [Input Form]
 getProblem = do
   MkState p _ _ _ _ _ <- getState
   return (reverse p)
@@ -139,18 +139,18 @@ input included = declaration Cnf (formulaIn cnf) <|>
         p _ = True
 
 -- A TPTP kind.
-kind :: Parser (Tag -> Formula -> Input Formula)
+kind :: Parser (Tag -> Form -> Input Form)
 kind = axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
        axiom Assumption <|> axiom Lemma <|> axiom Theorem <|>
-       general Conjecture Formula.NegatedConjecture Not <|>
-       general NegatedConjecture Formula.NegatedConjecture id <|>
-       general Question Formula.NegatedConjecture Not
-  where axiom t = general t Formula.Axiom id
+       general Conjecture Form.NegatedConjecture Not <|>
+       general NegatedConjecture Form.NegatedConjecture id <|>
+       general Question Form.NegatedConjecture Not
+  where axiom t = general t Form.Axiom id
         general k kind f = keyword k >> return (mk kind f)
         mk kind f tag form =
-          Input { Formula.tag = tag,
-                  Formula.kind = kind,
-                  Formula.formula = f form }
+          Input { Form.tag = tag,
+                  Form.kind = kind,
+                  Form.formula = f form }
 
 -- A formula name.
 tag :: Parser Tag
@@ -170,7 +170,7 @@ include = do
 
 -- Inserting types, functions and clauses.
 
-newFormula :: Input Formula -> Parser ()
+newFormula :: Input Form -> Parser ()
 newFormula input = do
   MkState p t f i c n <- getState
   putState (MkState (input:p) t f i c n)
@@ -244,7 +244,7 @@ individual = do
 
 -- Parsing formulae.
 
-cnf, tff, fof :: Parser Formula
+cnf, tff, fof :: Parser Form
 cnf = fatalError "cnf not implemented"
 tff =
   let ?binder = varDecl True
@@ -265,7 +265,7 @@ fof =
 -- and term-parser we have a combined thing-parser.
 data Thing = Apply !BS.ByteString ![Term]
            | Term !Term
-           | Formula !(Formula)
+           | Formula !Form
 
 instance Show Thing where
   show (Apply f []) = BS.unpack f
@@ -284,9 +284,9 @@ instance Show Thing where
 -- main parsers:
 --   * 'term' parses an atomic expression
 --   * 'formula' parses an arbitrary expression
--- You can instantiate 'term' for Term, Formula or Thing; in each case
+-- You can instantiate 'term' for Term, Form or Thing; in each case
 -- you get an appropriate parser. You can instantiate 'formula' for
--- Formula or Thing.
+-- Form or Thing.
 
 -- Types for which a term f(...) is a valid literal. These are the types on
 -- which you can use 'term'.
@@ -301,7 +301,7 @@ class TermLike a where
   parser :: (?binder :: Parser Variable,
              ?ctx :: Map BS.ByteString Variable) => Parser a
 
-instance TermLike Formula where
+instance TermLike Form where
   fromThing t@(Apply x xs) = fmap (Literal . Pos . Tru) (applyFunction x xs O)
   fromThing (Term _) = mzero
   fromThing (Formula f) = return f
@@ -329,13 +329,13 @@ instance TermLike Thing where
 -- you can use 'formula'.
 class TermLike a => FormulaLike a where
   {-# INLINE fromFormula #-}
-  fromFormula :: Formula -> a
-instance FormulaLike Formula where fromFormula = id
+  fromFormula :: Form -> a
+instance FormulaLike Form where fromFormula = id
 instance FormulaLike Thing where fromFormula = Formula
 
 -- An atomic expression.
 {-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Term #-}
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Form #-}
 {-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, TermLike a) => Parser a
 term = function <|> var <|> parens parser
@@ -368,13 +368,13 @@ literal = true <|> false <|> binary <?> "literal"
                return (fromFormula form)
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
-{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Form #-}
 {-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 unitary = negation <|> quantified <|> literal
   where {-# INLINE negation #-}
         negation = do
           punct L.Not
-          fmap (fromFormula . Not) (unitary :: Parser Formula)
+          fmap (fromFormula . Not) (unitary :: Parser Form)
 
 {-# INLINE quantified #-}
 quantified = do
@@ -383,11 +383,11 @@ quantified = do
   vars <- bracks (sepBy1 ?binder (punct Comma))
   let ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ?ctx vars
   punct Colon
-  rest <- let ?ctx = ctx' in (unitary :: Parser Formula)
+  rest <- let ?ctx = ctx' in (unitary :: Parser Form)
   return (fromFormula (q (NameMap.fromList vars) rest))
 
 -- A general formula.
-{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Formula #-}
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Form #-}
 {-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 formula = do
   x <- unitary :: Parser Thing
@@ -396,7 +396,7 @@ formula = do
       connective p op = do
         punct p
         lhs <- fromThing x
-        rhs <- formula :: Parser Formula
+        rhs <- formula :: Parser Form
         return (fromFormula (op lhs rhs))
   connective L.And (binop And) <|> connective L.Or (binop Or) <|>
    connective Iff Equiv <|>

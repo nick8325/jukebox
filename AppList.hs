@@ -10,12 +10,20 @@ data AppList a = Append !(AppList a) !(AppList a) | Unit !a | Nil
 
 class List f where
   fromList :: f a -> AppList a
+  toList :: f a -> [a]
 
 instance List [] where
   fromList = foldr cons Nil
+  toList = id
 
 instance List AppList where
   fromList = id
+  toList x = go [x]
+    -- (if you squint here you can see difference lists...)
+    where go (Nil:left) = go left
+          go (Unit x:left) = x:go left
+          go (Append x y:left) = go (x:y:left)
+          go [] = []
 
 appendA :: AppList a -> AppList a -> AppList a
 appendA Nil xs = xs
@@ -60,14 +68,6 @@ fold :: (b -> b -> b) -> (a -> b) -> b -> AppList a -> b
 fold app u n (Append x y) = app (fold app u n x) (fold app u n y)
 fold app u n (Unit x) = u x
 fold app u n Nil = n
-
-toList :: AppList a -> [a]
-toList x = go [x]
-  -- (if you squint here you can see difference lists...)
-  where go (Nil:left) = go left
-        go (Unit x:left) = x:go left
-        go (Append x y:left) = go (x:y:left)
-        go [] = []
 
 unique :: (Ord a, Hashable a, List f) => f a -> [a]
 unique = Set.toList . Set.fromList . toList . fromList
