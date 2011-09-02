@@ -10,7 +10,7 @@ import qualified TPTP.Lexer as L
 import Form
 import Data.List
 import qualified Data.HashMap as Map
-import qualified AppList as A
+import qualified Seq as S
 import qualified NameMap
 import NameMap(NameMap)
 import Name
@@ -79,15 +79,15 @@ instance Pretty [Type] where
                   (map (pPrint 0 lev env) args)))
 
 prettyProblem :: (Symbolic a, Pretty a) => String -> Level -> Problem a -> Doc
-prettyProblem family l prob = vcat (map typeDecl (A.unique (types prob')) ++
-                                    map funcDecl (A.unique (functions prob')) ++
+prettyProblem family l prob = vcat (map typeDecl (S.unique (types prob')) ++
+                                    map funcDecl (S.unique (functions prob')) ++
                                     map (prettyInput family l env) prob')
     where typeDecl ty | name ty `elem` open stdNames = empty
                       | otherwise = typeClause ty (text "$tType")
           funcDecl (f ::: ty) = typeClause f (pPrint 0 l env ty)
           typeClause name ty = prettyClause "tff" "type" "type"
                                       (pPrint 0 l env name <+> colon <+> ty)
-          env = uniquify (A.unique (names prob'))
+          env = uniquify (S.unique (names prob'))
           prob' = open prob
 
 prettyClause :: String -> String -> String -> Doc -> Doc
@@ -98,7 +98,7 @@ instance (Symbolic a, Pretty a) => Show (Problem a) where
   show = render . prettyProblem "tff" Chatty
 
 prettyInput :: Pretty a => String -> Level -> (Name -> BS.ByteString) -> Input a -> Doc
-prettyInput family l env i = prettyClause family (BS.unpack (tag i)) (show (kind i)) (pPrint 0 l env (formula i))
+prettyInput family l env i = prettyClause family (BS.unpack (tag i)) (show (kind i)) (pPrint 0 l env (what i))
 
 instance Pretty a => Pretty (Input a) where
   pPrint _ l env = prettyInput "tff" l env
@@ -132,8 +132,8 @@ instance Pretty Form where
   pPrint p l env (Literal (Neg t)) = pPrint p l env (Not (Literal (Pos t)))
   pPrint p l env (Literal (Pos t)) = pPrint p l env t
   pPrint p l env (Not f) = text "~" <> pPrint 1 l env f
-  pPrint p l env (And ts) = prettyConnective l p env "$true" "&" (A.toList ts)
-  pPrint p l env (Or ts) = prettyConnective l p env "$false" "|" (A.toList ts)
+  pPrint p l env (And ts) = prettyConnective l p env "$true" "&" (S.toList ts)
+  pPrint p l env (Or ts) = prettyConnective l p env "$false" "|" (S.toList ts)
   pPrint p l env (Equiv t u) = prettyConnective l p env undefined "<=>" [t, u]
   pPrint p l env (ForAll vs f) = prettyQuant l env "!" vs f
   pPrint p l env (Exists vs f) = prettyQuant l env "?" vs f

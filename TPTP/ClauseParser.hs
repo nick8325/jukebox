@@ -10,8 +10,8 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.HashMap as Map
 import Data.HashMap(Map)
-import qualified AppList as A
-import AppList(AppList)
+import qualified Seq as S
+import Seq(Seq)
 import Data.List
 import TPTP.Print
 import Name hiding (name)
@@ -22,7 +22,7 @@ import TPTP.Lexer hiding
    Exists, And, Or, Type, Apply, keyword, defined, kind)
 import qualified TPTP.Lexer as L
 import qualified Form
-import Form hiding (tag, kind, formula, Axiom, NegatedConjecture)
+import Form hiding (tag, kind, Axiom, NegatedConjecture)
 import qualified Name
 
 -- The parser monad
@@ -142,7 +142,7 @@ input included = declaration Cnf (formulaIn cnf) <|>
 kind :: Parser (Tag -> Form -> Input Form)
 kind = axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
        axiom Assumption <|> axiom Lemma <|> axiom Theorem <|>
-       general Conjecture Form.NegatedConjecture Not <|>
+       general Conjecture Form.NegatedConjecture nt <|>
        general NegatedConjecture Form.NegatedConjecture id <|>
        general Question Form.NegatedConjecture Not
   where axiom t = general t Form.Axiom id
@@ -150,7 +150,7 @@ kind = axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
         mk kind f tag form =
           Input { Form.tag = tag,
                   Form.kind = kind,
-                  Form.formula = f form }
+                  Form.what = f form }
 
 -- A formula name.
 tag :: Parser Tag
@@ -350,9 +350,9 @@ literal, unitary, quantified, formula ::
 {-# INLINE literal #-}
 literal = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
-        true = do { defined DTrue; return (fromFormula (And A.Nil)) }
+        true = do { defined DTrue; return (fromFormula (And S.Nil)) }
         {-# INLINE false #-}
-        false = do { defined DFalse; return (fromFormula (Or A.Nil)) }
+        false = do { defined DFalse; return (fromFormula (Or S.Nil)) }
         binary = do
           x <- term :: Parser Thing
           let {-# INLINE f #-}
@@ -391,7 +391,7 @@ quantified = do
 {-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
 formula = do
   x <- unitary :: Parser Thing
-  let binop op t u = op (A.Unit t `A.append` A.Unit u)
+  let binop op t u = op (S.Unit t `S.append` S.Unit u)
       {-# INLINE connective #-}
       connective p op = do
         punct p

@@ -11,7 +11,7 @@ import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJClass
 import TPTP.Print
 import Data.Hashable
-import qualified AppList as A
+import qualified Seq as S
 import Data.Ord
 
 -- Type names
@@ -73,8 +73,8 @@ inferFormula ctx (Literal l) =
   let ?ctx = \x -> Map.findWithDefault (error "inferFormula: unbound variable") x ctx in
   fmap (Literal . resign (sign l)) (inferAtom (value l))
 inferFormula ctx (Not f) = fmap Not (inferFormula ctx f)
-inferFormula ctx (And fs) = fmap (And . A.fromList) (mapM (inferFormula ctx) (A.toList fs))
-inferFormula ctx (Or fs) = fmap (Or . A.fromList) (mapM (inferFormula ctx) (A.toList fs))
+inferFormula ctx (And fs) = fmap (And . S.fromList) (mapM (inferFormula ctx) (S.toList fs))
+inferFormula ctx (Or fs) = fmap (Or . S.fromList) (mapM (inferFormula ctx) (S.toList fs))
 inferFormula ctx (Equiv f g) = liftM2 Equiv (inferFormula ctx f) (inferFormula ctx g)
 inferFormula ctx (ForAll xs f) = binder ForAll ctx xs f
 inferFormula ctx (Exists xs f) = binder Exists ctx xs f

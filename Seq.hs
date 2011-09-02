@@ -1,22 +1,22 @@
 -- Strict lists with efficient append.
-module AppList where
+module Seq where
 
-import Prelude hiding (concat)
-import Control.Monad
+import Prelude hiding (concat, length, mapM)
+import Control.Monad hiding (mapM)
 import Data.Hashable
 import qualified Data.HashSet as Set
 
-data AppList a = Append !(AppList a) !(AppList a) | Unit !a | Nil
+data Seq a = Append !(Seq a) !(Seq a) | Unit !a | Nil
 
 class List f where
-  fromList :: f a -> AppList a
+  fromList :: f a -> Seq a
   toList :: f a -> [a]
 
 instance List [] where
   fromList = foldr cons Nil
   toList = id
 
-instance List AppList where
+instance List Seq where
   fromList = id
   toList x = go [x]
     -- (if you squint here you can see difference lists...)
@@ -25,49 +25,59 @@ instance List AppList where
           go (Append x y:left) = go (x:y:left)
           go [] = []
 
-appendA :: AppList a -> AppList a -> AppList a
+appendA :: Seq a -> Seq a -> Seq a
 appendA Nil xs = xs
 appendA xs Nil = xs
 appendA xs ys = Append xs ys
 
-instance Show a => Show (AppList a) where
+instance Show a => Show (Seq a) where
   show = show . toList
 
-cons :: a -> AppList a -> AppList a
+cons :: a -> Seq a -> Seq a
 cons x xs = Unit x `appendA` xs
 
-snoc :: AppList a -> a -> AppList a
+snoc :: Seq a -> a -> Seq a
 snoc xs x = xs `appendA` Unit x
 
-append :: (List f, List g) => f a -> g a -> AppList a
+append :: (List f, List g) => f a -> g a -> Seq a
 append xs ys = fromList xs `appendA` fromList ys
 
-instance Functor AppList where
+instance Functor Seq where
   fmap f (Append x y) = Append (fmap f x) (fmap f y)
   fmap f (Unit x) = Unit (f x)
   fmap f Nil = Nil
 
-instance Monad AppList where
+instance Monad Seq where
   return = Unit
   x >>= f = concatA (fmap f x)
   fail _ = Nil
 
-instance MonadPlus AppList where
+instance MonadPlus Seq where
   mzero = Nil
   mplus = append
 
-concat :: (List f, List g) => f (g a) -> AppList a
+concat :: (List f, List g) => f (g a) -> Seq a
 concat xs = concatA (fmap fromList (fromList xs))
 
-concatA :: AppList (AppList a) -> AppList a
+concatA :: Seq (Seq a) -> Seq a
 concatA (Append x y) = concatA x `appendA` concatA y
 concatA (Unit x) = x
 concatA Nil = Nil
 
-fold :: (b -> b -> b) -> (a -> b) -> b -> AppList a -> b
+fold :: (b -> b -> b) -> (a -> b) -> b -> Seq a -> b
 fold app u n (Append x y) = app (fold app u n x) (fold app u n y)
 fold app u n (Unit x) = u x
 fold app u n Nil = n
 
 unique :: (Ord a, Hashable a, List f) => f a -> [a]
 unique = Set.toList . Set.fromList . toList . fromList
+
+length :: Seq a -> Int
+length Nil = 0
+length (Unit _) = 1
+length (Append x y) = length x + length y
+
+mapM :: Monad m => (a -> m b) -> Seq a -> m (Seq b)
+mapM f Nil = return Nil
+mapM f (Unit x) = liftM  Unit (f x)
+mapM f (Append x y) = liftM2 Append (mapM f x) (mapM f y)

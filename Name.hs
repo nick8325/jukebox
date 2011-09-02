@@ -1,7 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances #-}
 module Name(
   Name, uniqueId, base,
-  Named(name),
+  Named(..),
   Closed, close, close_, open, closed0, stdNames, nameO, nameI, NameM, newName,
   uniquify) where
 
@@ -12,7 +12,7 @@ import Utils
 import Data.List
 import Data.Ord
 import Data.Int
-import Control.Monad.State
+import Control.Monad.State.Strict
 
 data Name =
   Name {

@@ -1,8 +1,8 @@
 {-# LANGUAGE TypeOperators #-}
 module Form where
 
-import qualified AppList as A
-import AppList(AppList)
+import qualified Seq as S
+import Seq(Seq)
 import Data.Hashable
 import qualified Data.HashMap as Map
 import NameMap(NameMap)
@@ -11,6 +11,7 @@ import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Name
 import Control.Monad
+import Data.Monoid
 
 type Tag = BS.ByteString
 
@@ -73,12 +74,12 @@ instance Typed b => Typed (a ::: b) where
 type Problem a = Closed [Input a]
 
 data Input a = Input
-  { tag :: !Tag,
+  { tag ::  !Tag,
     kind :: !Kind,
-    formula :: !a }
+    what :: !a }
 
 instance Functor Input where
-  fmap f x = x { formula = f (formula x) }
+  fmap f x = x { what = f (what x) }
 
 type Variable = Name ::: Type
 type Function = Name ::: FunType
@@ -103,15 +104,68 @@ type Literal = Signed Atomic
 data Form
   = Literal !Literal
   | Not !Form
-  | And !(AppList Form)
-  | Or !(AppList Form)
+  | And !(Seq Form)
+  | Or !(Seq Form)
   | Equiv !Form !Form
   | ForAll !(NameMap Variable) !Form
   | Exists !(NameMap Variable) !Form
 
 true, false :: Form
-true = And A.Nil
-false = Or A.Nil
+true = And S.Nil
+false = Or S.Nil
+
+isTrue, isFalse :: Form -> Bool
+isTrue (And S.Nil) = True
+isTrue _ = False
+isFalse (Or S.Nil) = True
+isFalse _ = False
+
+nt :: Form -> Form
+nt (Not a) = a
+nt a       = Not a
+
+(.=>) :: Form -> Form -> Form
+p .=> q = nt p \/ q
+
+(/\), (\/) :: Form -> Form -> Form
+And as /\ And bs = And (as `S.append` bs)
+a      /\ b | isFalse a || isFalse b = false
+And as /\ b      = And (b `S.cons` as)
+a      /\ And bs = And (a `S.cons` bs)
+a      /\ b      = And (S.Unit a `S.append` S.Unit b)
+
+Or as \/ Or bs = Or (as `S.append` bs)
+a     \/ b | isTrue a || isTrue b = true
+Or as \/ b     = Or (b `S.cons` as)
+a     \/ Or bs = Or (a `S.cons` bs)
+a     \/ b     = Or (S.Unit a `S.append` S.Unit b)
+
+-- remove Not from a problem, replacing it with negated literals
+positive :: Form -> Form
+positive (Not (And as))      = Or (fmap nt as)
+positive (Not (Or as))       = And (fmap nt as)
+positive (Not (a `Equiv` b)) = nt a `Equiv` b
+positive (Not (Not a))       = positive a
+positive (Not (ForAll v a))  = Exists v (nt a)
+positive (Not (Exists v a))  = ForAll v (nt a)
+positive (Not (Literal l))   = Literal (neg l)
+positive a                   = a
+
+simple :: Form -> Form
+simple (Or as)       = Not (And (fmap nt as))
+simple (Exists vs a) = Not (ForAll vs (nt a))
+simple a             = a
+
+type Subst = NameMap (Name ::: Term)
+
+ids :: Subst
+ids = Map.empty
+
+(|=>) :: Named a => a -> Term -> Subst
+v |=> x = NameMap.singleton (name v ::: x)
+
+(|+|) :: Subst -> Subst -> Subst
+(|+|) = Map.union
 
 type Clause = [Signed Atomic]
 data QClause = Clause !(NameMap Variable) !Clause
@@ -120,7 +174,7 @@ toQClause :: Clause -> QClause
 toQClause c = Clause (NameMap.fromList (vars c)) c
 
 toForm :: QClause -> Form
-toForm (Clause xs ls) = ForAll xs (And (A.fromList (map Literal ls)))
+toForm (Clause xs ls) = ForAll xs (And (S.fromList (map Literal ls)))
 
 neg :: Signed a -> Signed a
 neg (Pos x) = Neg x
@@ -130,30 +184,32 @@ the :: Signed a -> a
 the (Pos x) = x
 the (Neg x) = x
 
-positive :: Signed a -> Bool
-positive (Pos _) = True
-positive (Neg _) = False
+pos :: Signed a -> Bool
+pos (Pos _) = True
+pos (Neg _) = False
 
 data Kind = Axiom | NegatedConjecture deriving (Eq, Ord)
 
 class Symbolic a where
-  terms :: a -> AppList Term
-  boundVars :: a -> AppList Variable
+  terms :: a -> Seq Term
+  boundVars :: a -> Seq Variable
+  free :: a -> NameMap Variable
+  subst :: Subst -> a -> a
 
-vars :: Symbolic a => a -> AppList Variable
+vars :: Symbolic a => a -> Seq Variable
 vars s = boundVars s `mplus` do
   Var x <- terms s
   return x
 
-functions :: Symbolic a => a -> AppList Function
+functions :: Symbolic a => a -> Seq Function
 functions s = do
   f :@: _ <- terms s
   return f
 
-types :: Symbolic a => a -> AppList Type
+types :: Symbolic a => a -> Seq Type
 types s = fmap typ (boundVars s) `mplus` fmap typ (terms s)
 
-names :: Symbolic a => a -> AppList Name
+names :: Symbolic a => a -> Seq Name
 names s = fmap name (boundVars s) `mplus` do
   x <- terms s
   return (name x) `mplus` return (name (typ x))
@@ -161,19 +217,19 @@ names s = fmap name (boundVars s) `mplus` do
 instance Symbolic Form where
   terms (Literal l) = terms l
   terms (Not f) = terms f
-  terms (And xs) = A.concat (fmap terms xs)
-  terms (Or xs) = A.concat (fmap terms xs)
-  terms (Equiv t u) = terms t `A.append` terms u
+  terms (And xs) = S.concat (fmap terms xs)
+  terms (Or xs) = S.concat (fmap terms xs)
+  terms (Equiv t u) = terms t `S.append` terms u
   terms (ForAll _ t) = terms t
   terms (Exists _ t) = terms t
   
-  boundVars (Literal _) = A.Nil
+  boundVars (Literal _) = S.Nil
   boundVars (Not f) = boundVars f
-  boundVars (And xs) = A.concat (fmap boundVars xs)
-  boundVars (Or xs) = A.concat (fmap boundVars xs)
-  boundVars (Equiv t u) = boundVars t `A.append` boundVars u
-  boundVars (ForAll x t) = A.fromList (Map.elems x) `A.append` boundVars t
-  boundVars (Exists x t) = A.fromList (Map.elems x) `A.append` boundVars t
+  boundVars (And xs) = S.concat (fmap boundVars xs)
+  boundVars (Or xs) = S.concat (fmap boundVars xs)
+  boundVars (Equiv t u) = boundVars t `S.append` boundVars u
+  boundVars (ForAll x t) = S.fromList (Map.elems x) `S.append` boundVars t
+  boundVars (Exists x t) = S.fromList (Map.elems x) `S.append` boundVars t
 
 instance Symbolic a => Symbolic (Signed a) where
   terms (Pos x) = terms x
@@ -182,19 +238,22 @@ instance Symbolic a => Symbolic (Signed a) where
   boundVars (Neg x) = boundVars x
 
 instance Symbolic Atomic where
-  terms (t :=: u) = terms t `A.append` terms u
-  boundVars (t :=: u) = boundVars t `A.append` boundVars u
+  terms (t :=: u) = terms t `S.append` terms u
+  boundVars (t :=: u) = boundVars t `S.append` boundVars u
 
 instance Symbolic Term where
-  terms t@Var{} = A.Unit t
-  terms t@(_ :@: ts) = A.Unit t `A.append` A.concat (fmap terms ts)
+  terms t@Var{} = S.Unit t
+  terms t@(_ :@: ts) = S.Unit t `S.append` S.concat (fmap terms ts)
   
-  boundVars _ = A.Nil
+  boundVars _ = S.Nil
 
 instance Symbolic a => Symbolic (Input a) where
-  boundVars = boundVars . formula
-  terms = terms . formula
+  boundVars = boundVars . what
+  terms = terms . what
   
 instance Symbolic a => Symbolic [a] where
-  boundVars = A.concat . map boundVars
-  terms = A.concat . map terms
+  boundVars = S.concat . map boundVars
+  terms = S.concat . map terms
+
+uniqueNames :: Form -> NameM Form
+uniqueNames = undefined
