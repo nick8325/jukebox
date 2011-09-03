@@ -1,5 +1,6 @@
-module NameMap(NameMap, insert, member, delete, (!), fromList, toList, singleton) where
+module NameMap(NameMap, lookup, insert, member, delete, (!), fromList, toList, singleton) where
 
+import Prelude hiding (lookup)
 import Name
 import Data.HashMap(Map)
 import qualified Data.HashMap as Map
@@ -7,6 +8,9 @@ import Data.Int
 import qualified Seq as S
 
 type NameMap a = Map Int64 a
+
+lookup :: Name -> NameMap a -> Maybe a
+lookup x m = Map.lookup (uniqueId x) m
 
 insert :: Named a => a -> NameMap a -> NameMap a
 insert x m = Map.insert (uniqueId (name x)) x m

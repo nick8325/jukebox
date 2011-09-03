@@ -47,8 +47,8 @@ clausify inps = close inps (run . clausifyInputs S.Nil S.Nil)
 split :: Form -> [Form]
 split p =
   case positive p of
-    ForAll xs p ->
-      [ ForAll xs p' | p' <- split p ]
+    ForAll (Bind xs p) ->
+      [ ForAll (Bind xs p') | p' <- split p ]
     
     And ps ->
       concatMap split (S.toList ps)
@@ -72,10 +72,10 @@ split p =
   
   first (n,x) (m,y) = n `compare` m
   
-  siz (And ps)      = S.length ps
-  siz (ForAll _ p)  = siz p
-  siz (_ `Equiv` _) = 2
-  siz _             = 0
+  siz (And ps)            = S.length ps
+  siz (ForAll (Bind _ p)) = siz p
+  siz (_ `Equiv` _)       = 2
+  siz _                   = 0
 
 {-  
     Or ps | S.size ps > 0 && n > 0 ->
@@ -114,28 +114,27 @@ miniscope (Not f) = fmap Not (miniscope f)
 miniscope (And fs) = fmap And (S.mapM miniscope fs)
 miniscope (Or fs) = fmap Or (S.mapM miniscope fs)
 miniscope (Equiv f g) = liftM2 Equiv (miniscope f) (miniscope g)
-miniscope (ForAll xs f) = miniscope f >>= forAll xs
-miniscope (Exists xs f) = miniscope f >>= forAll xs . nt >>= return . nt
+miniscope (ForAll (Bind xs f)) = miniscope f >>= forAll xs
+miniscope (Exists (Bind xs f)) = miniscope f >>= forAll xs . nt >>= return . nt
 
 forAll :: NameMap Variable -> Form -> M Form
+forAll xs a | Map.null xs = return a
 forAll xs a =
   case positive a of
     And as ->
       fmap And (S.mapM (forAll xs) as)
     
-    ForAll ys a
-      | Map.null m -> return (ForAll ys a)
-      | otherwise -> fmap (ForAll ys) (forAll m a)
+    ForAll (Bind ys a)
+      | Map.null m -> return (ForAll (Bind ys a))
+      | otherwise -> fmap (ForAll . Bind ys) (forAll m a)
       where m = xs Map.\\ ys
 
     Or as -> forAllOr xs [ (a, free a) | a <- S.toList as ]
 
-    _ -> return (ForAll xs a)
+    _ -> return (ForAll (Bind xs a))
 
 forAllOr :: NameMap Variable -> [(Form, NameMap Variable)] -> M Form
-forAllOr xs avss
-  | Map.null xs = return (orl (map fst avss))
-  | otherwise = do { y <- yes; forAll xs' (y \/ no) }
+forAllOr xs avss = do { y <- yes; forAll xs' (y \/ no) }
   where
     v         = head (NameMap.toList xs)
     xs'       = NameMap.delete v xs
@@ -145,7 +144,7 @@ forAllOr xs avss
     yes       = case bs1 of
                   []      -> return (orl [])
                   [(b,_)] -> forAll (NameMap.singleton v) b
-                  _       -> return (ForAll (NameMap.singleton v) body)
+                  _       -> return (ForAll (Bind (NameMap.singleton v) body))
     orl       = foldr (\/) true
 
 ----------------------------------------------------------------------
@@ -183,11 +182,11 @@ removeEquivAux inEquiv p =
                 , Or  (S.fromList negs)
                 )
 
-    ForAll xs p ->
+    ForAll (Bind xs p) ->
       do (defs,pos,neg) <- removeEquivAux inEquiv p
          return ( defs
-                , ForAll xs pos
-                , Exists xs neg
+                , ForAll (Bind xs pos)
+                , Exists (Bind xs neg)
                 )
 
     p `Equiv` q ->
@@ -223,11 +222,11 @@ makeCopyable inEquiv pos neg
        return (S.fromList [Literal (Neg dp) \/ pos, Literal (Pos dp) \/ neg], Literal (Pos dp), Literal (Neg dp))
  where
   -- a formula is small if it is already a literal
-  isSmall (Literal _)  = True
-  isSmall (Not p)      = isSmall p
-  isSmall (ForAll _ p) = isSmall p
-  isSmall (Exists _ p) = isSmall p
-  isSmall _            = False
+  isSmall (Literal _)         = True
+  isSmall (Not p)             = isSmall p
+  isSmall (ForAll (Bind _ p)) = isSmall p
+  isSmall (Exists (Bind _ p)) = isSmall p
+  isSmall _                   = False
 
 ----------------------------------------------------------------------
 -- skolemization
@@ -245,11 +244,11 @@ removeExists (Or ps) =
   do ps <- sequence [ removeExists p | p <- S.toList ps ]
      return (Or (S.fromList ps))
     
-removeExists (ForAll xs p) =
+removeExists (ForAll (Bind xs p)) =
   do p' <- removeExists p
-     return (ForAll xs p')
+     return (ForAll (Bind xs p'))
     
-removeExists t@(Exists xs p) =
+removeExists t@(Exists (Bind xs p)) =
   -- skolemterms have only variables as arguments, arities are large(r)
   do ss <- sequence [ fmap (x |=>) (skolem x (free t)) | x <- NameMap.toList xs ]
      removeExists (subst (foldr (|+|) ids ss) p)
@@ -306,9 +305,9 @@ removeExpensiveOrAux (Or ps) =
      (defs2,p,c) <- makeOr (sortBy (comparing snd) (zip ps costs))
      return (S.concat defss `S.append` defs2,p,c)
 
-removeExpensiveOrAux (ForAll xs p) =
+removeExpensiveOrAux (ForAll (Bind xs p)) =
   do (defs,p',cost) <- removeExpensiveOrAux p
-     return (fmap (ForAll xs) defs, ForAll xs p', cost)
+     return (fmap (ForAll . Bind xs) defs, ForAll (Bind xs p'), cost)
 
 removeExpensiveOrAux lit =
   do return (S.Nil, lit, unitCost)
@@ -348,10 +347,10 @@ makeOr fcs
 --        and each variable is only bound once
 --   POST: And (map Or cs) is equivalent to p
 cnf :: Form -> Seq (Seq Literal)
-cnf (ForAll _ p) = cnf p
-cnf (And ps)     = S.concat (fmap cnf ps)
-cnf (Or ps)      = cross (fmap cnf ps)
-cnf (Literal x)  = S.Unit (S.Unit x)
+cnf (ForAll (Bind _ p)) = cnf p
+cnf (And ps)            = S.concat (fmap cnf ps)
+cnf (Or ps)             = cross (fmap cnf ps)
+cnf (Literal x)         = S.Unit (S.Unit x)
 
 cross :: Seq (Seq (Seq Literal)) -> Seq (Seq Literal)
 cross S.Nil = S.Unit S.Nil

@@ -135,8 +135,8 @@ instance Pretty Form where
   pPrint p l env (And ts) = prettyConnective l p env "$true" "&" (S.toList ts)
   pPrint p l env (Or ts) = prettyConnective l p env "$false" "|" (S.toList ts)
   pPrint p l env (Equiv t u) = prettyConnective l p env undefined "<=>" [t, u]
-  pPrint p l env (ForAll vs f) = prettyQuant l env "!" vs f
-  pPrint p l env (Exists vs f) = prettyQuant l env "?" vs f
+  pPrint p l env (ForAll (Bind vs f)) = prettyQuant l env "!" vs f
+  pPrint p l env (Exists (Bind vs f)) = prettyQuant l env "?" vs f
 
 prettyConnective l p env ident op [] = text ident
 prettyConnective l p env ident op [x] = pPrint p l env x

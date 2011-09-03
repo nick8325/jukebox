@@ -384,7 +384,7 @@ quantified = do
   let ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ?ctx vars
   punct Colon
   rest <- let ?ctx = ctx' in (unitary :: Parser Form)
-  return (fromFormula (q (NameMap.fromList vars) rest))
+  return (fromFormula (q (Bind (NameMap.fromList vars) rest)))
 
 -- A general formula.
 {-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Form #-}

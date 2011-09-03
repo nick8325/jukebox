@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators, ImplicitParams #-}
 module Form where
 
 import qualified Seq as S
@@ -11,7 +11,11 @@ import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Name
 import Control.Monad
-import Data.Monoid
+import Control.Monad.Trans
+import Control.Monad.Identity
+import Control.Monad.Maybe
+import Control.Monad.Writer
+import Data.Maybe
 
 type Tag = BS.ByteString
 
@@ -102,13 +106,15 @@ instance Functor Signed where
 type Literal = Signed Atomic
 
 data Form
-  = Literal !Literal
-  | Not !Form
-  | And !(Seq Form)
-  | Or !(Seq Form)
-  | Equiv !Form !Form
-  | ForAll !(NameMap Variable) !Form
-  | Exists !(NameMap Variable) !Form
+  = Literal Literal
+  | Not Form
+  | And (Seq Form)
+  | Or (Seq Form)
+  | Equiv Form Form
+  | ForAll (Bind Form)
+  | Exists (Bind Form)
+
+data Bind a = Bind !(NameMap Variable) !a
 
 true, false :: Form
 true = And S.Nil
@@ -142,19 +148,19 @@ a     \/ b     = Or (S.Unit a `S.append` S.Unit b)
 
 -- remove Not from a problem, replacing it with negated literals
 positive :: Form -> Form
-positive (Not (And as))      = Or (fmap nt as)
-positive (Not (Or as))       = And (fmap nt as)
-positive (Not (a `Equiv` b)) = nt a `Equiv` b
-positive (Not (Not a))       = positive a
-positive (Not (ForAll v a))  = Exists v (nt a)
-positive (Not (Exists v a))  = ForAll v (nt a)
-positive (Not (Literal l))   = Literal (neg l)
-positive a                   = a
+positive (Not (And as))             = Or (fmap nt as)
+positive (Not (Or as))              = And (fmap nt as)
+positive (Not (a `Equiv` b))        = nt a `Equiv` b
+positive (Not (Not a))              = positive a
+positive (Not (ForAll (Bind vs a))) = Exists (Bind vs (nt a))
+positive (Not (Exists (Bind vs a))) = ForAll (Bind vs (nt a))
+positive (Not (Literal l))          = Literal (neg l)
+positive a                          = a
 
 simple :: Form -> Form
-simple (Or as)       = Not (And (fmap nt as))
-simple (Exists vs a) = Not (ForAll vs (nt a))
-simple a             = a
+simple (Or as)              = Not (And (fmap nt as))
+simple (Exists (Bind vs a)) = Not (ForAll (Bind vs (nt a)))
+simple a                    = a
 
 type Subst = NameMap (Name ::: Term)
 
@@ -168,13 +174,12 @@ v |=> x = NameMap.singleton (name v ::: x)
 (|+|) = Map.union
 
 type Clause = [Signed Atomic]
-data QClause = Clause !(NameMap Variable) !Clause
 
-toQClause :: Clause -> QClause
-toQClause c = Clause (NameMap.fromList (vars c)) c
+bind :: Symbolic a => a -> Bind a
+bind x = Bind (free x) x
 
-toForm :: QClause -> Form
-toForm (Clause xs ls) = ForAll xs (And (S.fromList (map Literal ls)))
+toForm :: Bind Clause -> Form
+toForm (Bind xs ls) = ForAll (Bind xs (And (S.fromList (map Literal ls))))
 
 neg :: Signed a -> Signed a
 neg (Pos x) = Neg x
@@ -191,69 +196,111 @@ pos (Neg _) = False
 data Kind = Axiom | NegatedConjecture deriving (Eq, Ord)
 
 class Symbolic a where
-  terms :: a -> Seq Term
-  boundVars :: a -> Seq Variable
-  free :: a -> NameMap Variable
-  subst :: Subst -> a -> a
+  things :: (Variable -> Seq b) -> (Term -> Seq b) -> a -> Seq b
+  substM ::
+    (Monad m,
+     ?lookup :: Variable -> s -> MaybeT m Term,
+     ?bind :: NameMap Variable -> s -> s) =>
+    s -> a -> MaybeT m a
+
+subterms :: Symbolic a => a -> Seq Term
+subterms = things (const S.Nil) S.Unit
+
+free :: Symbolic a => a -> NameMap Variable
+free x =
+  let ?lookup = \v _ -> do { tell (NameMap.singleton v); fail "" }
+      ?bind = \_ -> id
+  in execWriterT (runMaybeT (substM () x)) Map.empty
+
+subst :: Symbolic a => Subst -> a -> a
+subst s x =
+  let ?lookup = \v s ->
+        case NameMap.lookup (name v) s of
+          Nothing -> fail ""
+          Just (_ ::: t) -> return t
+      ?bind = \vs s -> s Map.\\ vs
+  in fromMaybe x (runIdentity (runMaybeT (substM s x)))
 
 vars :: Symbolic a => a -> Seq Variable
-vars s = boundVars s `mplus` do
-  Var x <- terms s
-  return x
+vars = things S.Unit f
+  where f (Var x) = S.Unit x
+        f _ = S.Nil
 
 functions :: Symbolic a => a -> Seq Function
-functions s = do
-  f :@: _ <- terms s
-  return f
+functions = things (const S.Nil) f
+  where f (x :@: _) = S.Unit x
+        f _ = S.Nil
 
 types :: Symbolic a => a -> Seq Type
-types s = fmap typ (boundVars s) `mplus` fmap typ (terms s)
+types = things (S.Unit . typ) (S.Unit . typ)
 
 names :: Symbolic a => a -> Seq Name
-names s = fmap name (boundVars s) `mplus` do
-  x <- terms s
-  return (name x) `mplus` return (name (typ x))
+names = things f f
+  where f :: (Named a, Typed a) => a -> Seq Name
+        f x = S.Unit (name x) `S.append` S.Unit (name (typ x))
 
 instance Symbolic Form where
-  terms (Literal l) = terms l
-  terms (Not f) = terms f
-  terms (And xs) = S.concat (fmap terms xs)
-  terms (Or xs) = S.concat (fmap terms xs)
-  terms (Equiv t u) = terms t `S.append` terms u
-  terms (ForAll _ t) = terms t
-  terms (Exists _ t) = terms t
-  
-  boundVars (Literal _) = S.Nil
-  boundVars (Not f) = boundVars f
-  boundVars (And xs) = S.concat (fmap boundVars xs)
-  boundVars (Or xs) = S.concat (fmap boundVars xs)
-  boundVars (Equiv t u) = boundVars t `S.append` boundVars u
-  boundVars (ForAll x t) = S.fromList (Map.elems x) `S.append` boundVars t
-  boundVars (Exists x t) = S.fromList (Map.elems x) `S.append` boundVars t
+  things f g (Literal l) = things f g l
+  things f g (Not t) = things f g t
+  things f g (And xs) = things f g xs
+  things f g (Or xs) = things f g xs
+  things f g (Equiv t u) = things f g (t, u)
+  things f g (ForAll t) = things f g t
+  things f g (Exists t) = things f g t
+
+  substM s (Literal l) = liftM Literal (substM s l)
+  substM s (Not t) = liftM Not (substM s t)
+  substM s (And xs) = liftM And (substM s xs)
+  substM s (Or xs) = liftM Or (substM s xs)
+  substM s (Equiv t u) = liftM (uncurry Equiv) (substM s (t, u))
+  substM s (ForAll t) = liftM ForAll (substM s t)
+  substM s (Exists t) = liftM Exists (substM s t)
+
+instance Symbolic a => Symbolic (Bind a) where
+  things f g (Bind vs x) = S.concat (map f (NameMap.toList vs)) `S.append` things f g x
+  substM s (Bind vs x) = liftM (Bind vs) (substM (?bind vs s) x)
 
 instance Symbolic a => Symbolic (Signed a) where
-  terms (Pos x) = terms x
-  terms (Neg x) = terms x
-  boundVars (Pos x) = boundVars x
-  boundVars (Neg x) = boundVars x
+  things f g (Pos x) = things f g x
+  things f g (Neg x) = things f g x
+  
+  substM s (Pos x) = liftM Pos (substM s x)
+  substM s (Neg x) = liftM Neg (substM s x)
 
 instance Symbolic Atomic where
-  terms (t :=: u) = terms t `S.append` terms u
-  boundVars (t :=: u) = boundVars t `S.append` boundVars u
+  things f g (t :=: u) = things f g (t, u)
+  substM s (t :=: u) = liftM (uncurry (:=:)) (substM s (t, u))
 
 instance Symbolic Term where
-  terms t@Var{} = S.Unit t
-  terms t@(_ :@: ts) = S.Unit t `S.append` S.concat (fmap terms ts)
+  things f g t@Var{} = g t
+  things f g t@(_ :@: ts) = g t `S.append` S.concat (fmap (things f g) ts)
   
-  boundVars _ = S.Nil
+  substM s t@(Var v) = ?lookup v s
+  substM s (f :@: ts) = liftM (f :@:) (substM s ts)
 
 instance Symbolic a => Symbolic (Input a) where
-  boundVars = boundVars . what
-  terms = terms . what
+  things f g = things f g . what
+  substM s (Input tag kind what) = liftM (Input tag kind) (substM s what)
   
 instance Symbolic a => Symbolic [a] where
-  boundVars = S.concat . map boundVars
-  terms = S.concat . map terms
+  things f g = things f g . S.fromList
+  substM s [] = return []
+  substM s (x:xs) = liftM (uncurry (:)) (substM s (x, xs))
+
+instance Symbolic a => Symbolic (Seq a) where
+  things f g = S.concat . fmap (things f g)
+  substM s S.Nil = return S.Nil
+  substM s (S.Unit x) = liftM S.Unit (substM s x)
+  substM s (S.Append x y) = liftM (uncurry S.Append) (substM s (x, y))
+  
+instance (Symbolic a, Symbolic b) => Symbolic (a, b) where
+  things f g (x, y) = things f g x `S.append` things f g y
+  substM s (x, y) = do
+    x' <- lift (runMaybeT (substM s x))
+    y' <- lift (runMaybeT (substM s y))
+    case (x', y') of
+      (Nothing, Nothing) -> fail ""
+      _ -> return (fromMaybe x x', fromMaybe y y')
 
 uniqueNames :: Form -> NameM Form
 uniqueNames = undefined

@@ -6,7 +6,7 @@ import Control.Monad hiding (mapM)
 import Data.Hashable
 import qualified Data.HashSet as Set
 
-data Seq a = Append !(Seq a) !(Seq a) | Unit !a | Nil
+data Seq a = Append (Seq a) (Seq a) | Unit a | Nil
 
 class List f where
   fromList :: f a -> Seq a
