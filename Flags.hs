@@ -41,17 +41,17 @@ import GHC.Environment
   ( getFullArgs
   )
 
-import System
+import System.Exit
 
-import List
+import Data.List
   ( groupBy
   , intersperse
   , (\\)
   )
 
-import Char
+import Data.Char
 
-import CPUTime
+import System.CPUTime
 
 import Control.Monad.Instances()
 

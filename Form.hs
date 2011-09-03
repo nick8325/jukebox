@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, ImplicitParams #-}
+{-# LANGUAGE TypeOperators, ImplicitParams, GeneralizedNewtypeDeriving #-}
 module Form where
 
 import qualified Seq as S
@@ -173,13 +173,13 @@ v |=> x = NameMap.singleton (name v ::: x)
 (|+|) :: Subst -> Subst -> Subst
 (|+|) = Map.union
 
-type Clause = [Signed Atomic]
+newtype Clause = Clause [Signed Atomic] deriving Symbolic
 
 bind :: Symbolic a => a -> Bind a
 bind x = Bind (free x) x
 
 toForm :: Bind Clause -> Form
-toForm (Bind xs ls) = ForAll (Bind xs (And (S.fromList (map Literal ls))))
+toForm (Bind xs (Clause ls)) = ForAll (Bind xs (And (S.fromList (map Literal ls))))
 
 neg :: Signed a -> Signed a
 neg (Pos x) = Neg x
@@ -193,6 +193,8 @@ pos :: Signed a -> Bool
 pos (Pos _) = True
 pos (Neg _) = False
 
+-- fixme fix the conjecture stuff and add a simplification pass in Clausify.hs
+-- (because the parser doesn't bother making the formulas nice at all)
 data Kind = Axiom | NegatedConjecture deriving (Eq, Ord)
 
 class Symbolic a where
@@ -269,7 +271,9 @@ instance Symbolic a => Symbolic (Signed a) where
 
 instance Symbolic Atomic where
   things f g (t :=: u) = things f g (t, u)
+  things f g (Tru p) = things f g p
   substM s (t :=: u) = liftM (uncurry (:=:)) (substM s (t, u))
+  substM s (Tru p) = liftM Tru (substM s p)
 
 instance Symbolic Term where
   things f g t@Var{} = g t

@@ -102,7 +102,7 @@ clausForm s p =
        noExistsPs      <-  sequence [ removeExists      p         | p <- noEquivPs ]
        noExpensiveOrPs <- csequence [ removeExpensiveOr p         | p <- noExistsPs ]
        noForAllPs      <-  sequence [ lift (lift (uniqueNames p)) | p <- noExpensiveOrPs ]
-       return (map S.toList (S.toList (S.concat [ cnf p | p <- noForAllPs ])))
+       return (map (Clause . S.toList) (S.toList (S.concat [ cnf p | p <- noForAllPs ])))
  where
   csequence = fmap concat . sequence
 

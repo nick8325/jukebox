@@ -124,13 +124,18 @@ instance Pretty Atomic where
 instance Show Atomic where
   show = chattyShow
 
+instance Pretty Clause where
+  pPrint p l env (Clause ts) = prettyConnective l p env "$false" "|" (map Literal ts)
+
 instance Pretty Form where
   -- We use two precedences, the lowest for binary connectives
   -- and the highest for everything else.
+  pPrint p l env (Literal (Pos (t :=: u))) =
+    pPrint 0 l env t <> text "=" <> pPrint 0 l env u
   pPrint p l env (Literal (Neg (t :=: u))) =
     pPrint 0 l env t <> text "!=" <> pPrint 0 l env u
-  pPrint p l env (Literal (Neg t)) = pPrint p l env (Not (Literal (Pos t)))
   pPrint p l env (Literal (Pos t)) = pPrint p l env t
+  pPrint p l env (Literal (Neg t)) = pPrint p l env (Not (Literal (Pos t)))
   pPrint p l env (Not f) = text "~" <> pPrint 1 l env f
   pPrint p l env (And ts) = prettyConnective l p env "$true" "&" (S.toList ts)
   pPrint p l env (Or ts) = prettyConnective l p env "$false" "|" (S.toList ts)
