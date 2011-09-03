@@ -15,7 +15,9 @@ import Control.Monad.Trans
 import Control.Monad.Identity
 import Control.Monad.Maybe
 import Control.Monad.Writer
+import Control.Monad.State
 import Data.Maybe
+import Data.List
 
 type Tag = BS.ByteString
 
@@ -116,6 +118,28 @@ data Form
 
 data Bind a = Bind !(NameMap Variable) !a
 
+simplify :: Form -> Form
+simplify t@Literal{} = t
+simplify (Not (Literal l)) = Literal (neg l)
+simplify (Not (Not t)) = simplify t
+simplify (Not t) = Not (simplify t)
+simplify (And ts) = S.fold (/\) id true (fmap simplify ts)
+simplify (Or ts) = S.fold (\/) id false (fmap simplify ts)
+simplify (Equiv t u) = equiv t u
+  where equiv t u | isTrue t = u
+                  | isTrue u = t
+                  | isFalse t = nt u
+                  | isFalse u = nt t
+                  | otherwise = Equiv t u
+simplify (ForAll (Bind vs t)) = forAll vs (simplify t)
+  where forAll vs t | Map.null vs = t
+        forAll vs (ForAll (Bind vs' t)) = ForAll (Bind (Map.union vs vs') t)
+        forAll vs t = ForAll (Bind vs t)
+simplify (Exists (Bind vs t)) = exists vs (simplify t)
+  where exists vs t | Map.null vs = t
+        exists vs (Exists (Bind vs' t)) = Exists (Bind (Map.union vs vs') t)
+        exists vs t = Exists (Bind vs t)
+
 true, false :: Form
 true = And S.Nil
 false = Or S.Nil
@@ -202,7 +226,7 @@ class Symbolic a where
   substM ::
     (Monad m,
      ?lookup :: Variable -> s -> MaybeT m Term,
-     ?bind :: NameMap Variable -> s -> s) =>
+     ?bind :: NameMap Variable -> s -> m (NameMap Variable, s)) =>
     s -> a -> MaybeT m a
 
 subterms :: Symbolic a => a -> Seq Term
@@ -211,7 +235,7 @@ subterms = things (const S.Nil) S.Unit
 free :: Symbolic a => a -> NameMap Variable
 free x =
   let ?lookup = \v _ -> do { tell (NameMap.singleton v); fail "" }
-      ?bind = \_ -> id
+      ?bind = \vs x -> return (vs, x)
   in execWriterT (runMaybeT (substM () x)) Map.empty
 
 subst :: Symbolic a => Subst -> a -> a
@@ -220,7 +244,7 @@ subst s x =
         case NameMap.lookup (name v) s of
           Nothing -> fail ""
           Just (_ ::: t) -> return t
-      ?bind = \vs s -> s Map.\\ vs
+      ?bind = \vs s -> return (vs, s Map.\\ vs)
   in fromMaybe x (runIdentity (runMaybeT (substM s x)))
 
 vars :: Symbolic a => a -> Seq Variable
@@ -260,7 +284,9 @@ instance Symbolic Form where
 
 instance Symbolic a => Symbolic (Bind a) where
   things f g (Bind vs x) = S.concat (map f (NameMap.toList vs)) `S.append` things f g x
-  substM s (Bind vs x) = liftM (Bind vs) (substM (?bind vs s) x)
+  substM s (Bind vs x) = do
+    (vs', s') <- lift (?bind vs s)
+    liftM (Bind vs') (substM s' x)
 
 instance Symbolic a => Symbolic (Signed a) where
   things f g (Pos x) = things f g x
@@ -306,5 +332,21 @@ instance (Symbolic a, Symbolic b) => Symbolic (a, b) where
       (Nothing, Nothing) -> fail ""
       _ -> return (fromMaybe x x', fromMaybe y y')
 
-uniqueNames :: Form -> NameM Form
-uniqueNames = undefined
+uniqueNames :: Symbolic a => a -> NameM a
+uniqueNames x =
+  let f Nothing = x
+      f (Just (Bind _ x)) = x in
+  let ?lookup = \v s ->
+        case NameMap.lookup (name v) s of
+          Nothing -> fail ""          
+          Just (_ ::: t) -> return t
+      ?bind = \vs s -> do
+        used <- get
+        let (stale, fresh) = partition (`NameMap.member` used) (NameMap.toList vs)
+        stale' <- sequence [ fmap (::: t) (lift (newName x)) | x ::: t <- stale ]
+        put (used `Map.union` NameMap.fromList fresh `Map.union` NameMap.fromList stale')
+        case stale of
+          [] -> return (vs, s)
+          _ -> return (NameMap.fromList (stale' ++ fresh),
+                       NameMap.fromList [name x ::: Var y | (x, y) <- stale `zip` stale'] `Map.union` s)
+  in fmap f (evalStateT (runMaybeT (substM Map.empty (bind x))) Map.empty)

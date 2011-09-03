@@ -1,8 +1,5 @@
 {-# LANGUAGE ImplicitParams, TypeOperators #-}
-module Clausify
-  ( clausify
-  )
- where
+module Clausify where
 
 import Form
 import qualified Form
@@ -18,6 +15,7 @@ import qualified NameMap
 import NameMap(NameMap)
 import qualified Data.HashMap as Map
 import qualified Data.ByteString.Char8 as BS
+import TPTP.Print
 
 ----------------------------------------------------------------------
 -- clausify
@@ -97,7 +95,7 @@ split p =
 clausForm :: BS.ByteString -> Form -> M [Clause]
 clausForm s p =
   withName s $
-    do miniscoped      <-             miniscope         p
+    do miniscoped      <-             miniscope         (simplify p)
        noEquivPs       <-             removeEquiv       miniscoped
        noExistsPs      <-  sequence [ removeExists      p         | p <- noEquivPs ]
        noExpensiveOrPs <- csequence [ removeExpensiveOr p         | p <- noExistsPs ]
@@ -145,14 +143,14 @@ forAllOr xs avss = do { y <- yes; forAll xs' (y \/ no) }
                   []      -> return (orl [])
                   [(b,_)] -> forAll (NameMap.singleton v) b
                   _       -> return (ForAll (Bind (NameMap.singleton v) body))
-    orl       = foldr (\/) true
+    orl       = foldr (\/) false
 
 ----------------------------------------------------------------------
 -- removing equivalences
 
 -- removeEquiv p -> ps :
 --   POST: And ps is equivalent to p (modulo extra symbols)
---   POST: ps has no Equiv and only Not on Atoms
+--   POST: ps has no Equiv and no Not
 removeEquiv :: Form -> M [Form]
 removeEquiv p =
   do (defs,pos,_) <- removeEquivAux False p
@@ -199,8 +197,8 @@ removeEquivAux inEquiv p =
                 , (negp' \/ negq') /\ (posp' \/ posq')
                 )
 
-    atom ->
-      do return (S.Nil,atom,nt atom)
+    Literal l ->
+      do return (S.Nil,Literal l,Literal (neg l))
 
 -- makeCopyable turns an argument to an Equiv into something that we are
 -- willing to copy. There are two such cases: (1) when the Equiv is
@@ -351,6 +349,7 @@ cnf (ForAll (Bind _ p)) = cnf p
 cnf (And ps)            = S.concat (fmap cnf ps)
 cnf (Or ps)             = cross (fmap cnf ps)
 cnf (Literal x)         = S.Unit (S.Unit x)
+cnf t                   = error $ "cnf: " ++ show t
 
 cross :: Seq (Seq (Seq Literal)) -> Seq (Seq Literal)
 cross S.Nil = S.Unit S.Nil

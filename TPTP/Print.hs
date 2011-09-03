@@ -127,6 +127,9 @@ instance Show Atomic where
 instance Pretty Clause where
   pPrint p l env (Clause ts) = prettyConnective l p env "$false" "|" (map Literal ts)
 
+instance Show Clause where
+  show = chattyShow
+
 instance Pretty Form where
   -- We use two precedences, the lowest for binary connectives
   -- and the highest for everything else.
@@ -142,6 +145,9 @@ instance Pretty Form where
   pPrint p l env (Equiv t u) = prettyConnective l p env undefined "<=>" [t, u]
   pPrint p l env (ForAll (Bind vs f)) = prettyQuant l env "!" vs f
   pPrint p l env (Exists (Bind vs f)) = prettyQuant l env "?" vs f
+
+instance Show Form where
+  show = chattyShow
 
 prettyConnective l p env ident op [] = text ident
 prettyConnective l p env ident op [x] = pPrint p l env x
