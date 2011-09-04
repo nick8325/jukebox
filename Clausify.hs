@@ -349,7 +349,6 @@ cnf (ForAll (Bind _ p)) = cnf p
 cnf (And ps)            = S.concat (fmap cnf ps)
 cnf (Or ps)             = cross (fmap cnf ps)
 cnf (Literal x)         = S.Unit (S.Unit x)
-cnf t                   = error $ "cnf: " ++ show t
 
 cross :: Seq (Seq (Seq Literal)) -> Seq (Seq Literal)
 cross S.Nil = S.Unit S.Nil
