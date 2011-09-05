@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE Rank2Types, CPP, TemplateHaskell, PatternGuards, GADTs, TypeOperators, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, Rank2Types, PatternGuards, GADTs, TypeOperators, ScopedTypeVariables #-}
 module Form where
 
 import qualified Seq as S
@@ -243,11 +243,14 @@ data TypeRep a where
   ClauseRep :: TypeRep Clause
   TermRep :: TypeRep Term
   AtomicRep :: TypeRep Atomic
-  SignedRep :: Symbolic a => TypeRep (Signed a)
-  BindRep :: Symbolic a => TypeRep (Bind a)
-  ListRep :: Symbolic a => TypeRep [a]
-  SeqRep :: Symbolic a => TypeRep (Seq a)
-  InputRep :: Symbolic a => TypeRep (Input a)
+  -- The Symbolic (Signed a) etc. witnesses are unnecessary
+  -- but cause GHC to generate better code
+  -- (without them it needlessly recomputes the dictionaries)
+  SignedRep :: (Symbolic a, Symbolic (Signed a)) => TypeRep (Signed a)
+  BindRep :: (Symbolic a, Symbolic (Bind a)) => TypeRep (Bind a)
+  ListRep :: (Symbolic a, Symbolic [a]) => TypeRep [a]
+  SeqRep :: (Symbolic a, Symbolic (Seq a)) => TypeRep (Seq a)
+  InputRep :: (Symbolic a, Symbolic (Input a)) => TypeRep (Input a)
 
 class Symbolic a where
   typeRep_ :: TypeRep a
@@ -275,6 +278,8 @@ data Unpacked a where
 class Unpack a where
   unpack' :: a -> Unpacked a
 
+-- This inline declaration is crucial so that
+-- pattern-matching on an unpack degenerates into typecase.
 {-# INLINE unpack #-}
 unpack :: Symbolic a => a -> Unpacked a
 unpack x = -- $(mkUnpack ''TypeRep [| unpack' x |] [| typeRep x |])
@@ -328,25 +333,10 @@ instance Symbolic a => Unpack (Seq a) where
 instance Symbolic a => Unpack (Input a) where
   unpack' (Input tag kind what) = Unary (Input tag kind) what
 
-#define SYMBOLIC(f, ty) \
-  f :: Symbolic q => ty(q); \
-  {-# SPECIALIZE f :: ty(Form) #-}; \
-  {-# SPECIALIZE f :: ty(Bind Form) #-}; \
-  {-# SPECIALIZE f :: ty(Seq Form) #-}; \
-  {-# SPECIALIZE f :: ty(Literal) #-}; \
-  {-# SPECIALIZE f :: ty(Atomic) #-}; \
-  {-# SPECIALIZE f :: ty(Term) #-}; \
-  {-# SPECIALIZE f :: ty([Term]) #-}; \
-  {-# SPECIALIZE f :: ty(Clause) #-}; \
-  {-# SPECIALIZE f :: ty([Literal]) #-}; \
-  {-# SPECIALIZE f :: ty([Input Form]) #-}; \
-  {-# SPECIALIZE f :: ty(Input Form) #-};
-
 ----------------------------------------------------------------------
 -- Functions operating on symbolic terms
 
-#define subst_ty(a) Subst -> a -> a
-SYMBOLIC(subst, subst_ty)
+subst :: Symbolic a => Subst -> a -> a
 subst s x = aux s (typeRep x) x (unpack x)
   where
     aux s TermRep Var{} _ | Just (_ ::: t) <- NameMap.lookup (name x) s = t
@@ -355,11 +345,10 @@ subst s x = aux s (typeRep x) x (unpack x)
     aux s _ _ (Unary f x) = f (subst s x)
     aux s _ _ (Binary f x y) = f (subst s x) (subst s y)
 
-#define collect_aux_ty(a) a -> Seq b
 {-# INLINE collect #-}
 collect :: forall a b. Symbolic a => (forall a. TypeRep a -> a -> Seq b) -> a -> Seq b
 collect f = aux
-  where SYMBOLIC(aux, collect_aux_ty)
+  where aux :: forall a. Symbolic a => a -> Seq b
         aux x =
           f (typeRep x) x `S.append` 
           case unpack x of
@@ -367,8 +356,7 @@ collect f = aux
             Unary _ x -> aux x
             Binary _ x y -> aux x `S.append` aux y
 
-#define free_ty(a) a -> NameMap Variable
-SYMBOLIC(free, free_ty)
+free :: Symbolic a => a -> NameMap Variable
 free x = aux (typeRep x) x (unpack x)
   where aux TermRep (Var v) _ = NameMap.singleton v
         aux BindRep (Bind vs x) t = free x Map.\\ vs
@@ -379,8 +367,7 @@ free x = aux (typeRep x) x (unpack x)
 bind :: Symbolic a => a -> Bind a
 bind x = Bind (free x) x
 
-#define names_ty(a) a -> Seq Name
-SYMBOLIC(names, names_ty)
+names :: Symbolic a => a -> Seq Name
 names = collect f
   where {-# INLINE f #-}
         f :: TypeRep a -> a -> Seq Name
