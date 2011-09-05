@@ -95,12 +95,12 @@ split p =
 clausForm :: BS.ByteString -> Form -> M [Clause]
 clausForm s p =
   withName s $
-    do miniscoped      <-             miniscope         (simplify p)
-       noEquivPs       <-             removeEquiv       miniscoped
-       noExistsPs      <-  sequence [ removeExists      p         | p <- noEquivPs ]
-       noExpensiveOrPs <- csequence [ removeExpensiveOr p         | p <- noExistsPs ]
-       noForAllPs      <-  sequence [ lift (lift (uniqueNames p)) | p <- noExpensiveOrPs ]
-       return (map (Clause . S.toList) (S.toList (S.concat [ cnf p | p <- noForAllPs ])))
+    do miniscoped      <-             miniscope         (check (simplify (check p)))
+       noEquivPs       <-             removeEquiv       (check miniscoped)
+       noExistsPs      <-  sequence [ removeExists      p         | p <- check noEquivPs ]
+       noExpensiveOrPs <- csequence [ removeExpensiveOr p         | p <- check noExistsPs ]
+       noForAllPs      <-  sequence [ lift (lift (uniqueNames p)) | p <- check noExpensiveOrPs ]
+       return (check (map clause (S.toList (S.concat [ cnf p | p <- check noForAllPs ]))))
  where
   csequence = fmap concat . sequence
 

@@ -25,7 +25,8 @@ main = do
       putStrLn $ "ok, " ++ show (length (open p)) ++ " clauses"
       let ?flags = fl
       let cs = close (clausify p) (\(cs, _) -> return [ Input (BS.pack "foo") Axiom c | c <- cs ])
-      putStrLn (render (prettyProblem "tff" Normal p))
-      putStrLn (render (prettyProblem "tff" Normal cs))
+      putStrLn $ "ok, " ++ show (length (open cs)) ++ "clauses"
+      -- putStrLn (render (prettyProblem "tff" Normal p))
+      -- putStrLn (render (prettyProblem "tff" Normal cs))
       -- putStrLn (render (prettyProblem "tff" Chatty p))
       -- putStrLn (render (prettyProblem "tff" Normal p))

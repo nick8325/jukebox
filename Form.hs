@@ -18,6 +18,10 @@ import qualified Changing as C
 import Control.Monad.State.Strict
 import Data.List
 
+-- Set to True to switch on some sanity checks
+debugging :: Bool
+debugging = True
+
 ----------------------------------------------------------------------
 -- Types
 
@@ -117,6 +121,10 @@ pos (Neg _) = False
 ----------------------------------------------------------------------
 -- Formulae
 
+-- Invariant: each name is bound only once on each path
+-- i.e. nested quantification of the same variable twice is not allowed
+-- Not OK: ![X]: (... ![X]: ...)
+-- OK:     (![X]: ...) & (![X]: ...)
 data Form
   = Literal Literal
   | Not Form
@@ -214,10 +222,13 @@ v |=> x = NameMap.singleton (name v ::: x)
 ----------------------------------------------------------------------
 -- Clauses
 
-newtype Clause = Clause [Signed Atomic]
+newtype Clause = Clause (Bind [Signed Atomic])
 
-toForm :: Bind Clause -> Form
-toForm (Bind xs (Clause ls)) = ForAll (Bind xs (And (S.fromList (map Literal ls))))
+clause :: S.List f => f (Signed Atomic) -> Clause
+clause xs = Clause (bind (S.toList xs))
+
+toForm :: Clause -> Form
+toForm (Clause (Bind vs ls)) = ForAll (Bind vs (And (S.fromList (map Literal ls))))
 
 ----------------------------------------------------------------------
 -- Problems
@@ -350,7 +361,7 @@ subst' s t = aux s (typeRep t) t (unpack t)
       case NameMap.lookup (name t) s of
         Just (_ ::: u) -> C.changed u
         Nothing -> C.unchanged
-    aux s BindRep (Bind vs x) _ = fmap (Bind vs) (subst' (s Map.\\ vs) x)
+    aux s BindRep (Bind vs x) _ = fmap (Bind vs) (subst' (checkBinder vs (s Map.\\ vs)) x)
     aux s _ _ Const{} = C.unchanged
     aux s _ _ (Unary f x) = fmap f (subst' s x)
     aux s _ _ (Binary f x y) = C.lift2 f x (subst' s x) y (subst' s y)
@@ -430,3 +441,26 @@ uniqueNames x = fmap (C.value x) (evalStateT (aux Map.empty x) (free x))
              x' <- aux s x
              y' <- aux s y
              return (C.lift2 f x x' y y')
+
+-- Check that each variable is bound,
+-- and that there aren't two nested binders binding the same variable
+check :: Symbolic a => a -> a
+check x | not debugging = x
+        | aux Map.empty x = x
+        | otherwise = error "Form.check: invariant broken"
+  where aux :: Symbolic a => NameMap Variable -> a -> Bool
+        aux vars x = aux' vars (typeRep x) x (unpack x)
+        aux' :: NameMap Variable -> TypeRep a -> a -> Unpacked a -> Bool
+        aux' vars TermRep (Var v) _ = v `NameMap.member` vars
+        aux' vars BindRep (Bind vs t) _ =
+          Map.null (vs `Map.intersection` vars) &&
+          aux (vs `Map.union` vars) t
+        aux' vars _ _ Const{} = True
+        aux' vars _ _ (Unary _ x) = aux vars x
+        aux' vars _ _ (Binary _ x y) = aux vars x && aux vars y
+
+-- Check that a binder doesn't capture variables from a substitution.
+checkBinder :: NameMap Variable -> Subst -> Subst
+checkBinder vs s | not debugging = s
+                 | Map.null (free [ t | _ ::: t <- NameMap.toList s ] `Map.intersection` vs) = s
+                 | otherwise = error "Form.checkBinder: capturing substitution"

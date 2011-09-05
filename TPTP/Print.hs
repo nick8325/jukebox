@@ -125,7 +125,7 @@ instance Show Atomic where
   show = chattyShow
 
 instance Pretty Clause where
-  pPrint p l env (Clause ts) = prettyConnective l p env "$false" "|" (map Literal ts)
+  pPrint p l env (Clause (Bind _ ts)) = prettyConnective l p env "$false" "|" (map Literal ts)
 
 instance Show Clause where
   show = chattyShow
