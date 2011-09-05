@@ -20,7 +20,7 @@ import Data.List
 
 -- Set to True to switch on some sanity checks
 debugging :: Bool
-debugging = True
+debugging = False
 
 ----------------------------------------------------------------------
 -- Types
