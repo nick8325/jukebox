@@ -1,3 +1,7 @@
+-- Formulae, inputs, terms and so on.
+--
+-- "Show" instances for several of these types are found in TPTP.Print.
+
 {-# LANGUAGE TypeOperators, ImplicitParams, GeneralizedNewtypeDeriving #-}
 module Form where
 
@@ -19,16 +23,8 @@ import Control.Monad.State
 import Data.Maybe
 import Data.List
 
-type Tag = BS.ByteString
-
-data a ::: b = !a ::: !b
-
-instance Named a => Eq (a ::: b) where s == t = name s == name t
-instance Named a => Ord (a ::: b) where compare = comparing name
-instance Named a => Hashable (a ::: b) where hashWithSalt s = hashWithSalt s . name
-
-instance Named a => Named (a ::: b) where
-  name (a ::: b) = name a
+----------------------------------------------------------------------
+-- Types
 
 data DomainSize = Finite !Int | Infinite deriving (Eq, Ord, Show)
 
@@ -45,26 +41,25 @@ data Type =
 
 data FunType = FunType { args :: [Type], res :: !Type } deriving Eq
 
+-- Helper function for defining (Eq, Ord, Hashable) instances
+typeRepr :: Type -> Maybe Name
+typeRepr O = Nothing
+typeRepr Type{tname = t} = Just t
+
 instance Eq Type where
-  O == O = True
-  Type { tname = t1 } == Type { tname = t2 } = t1 == t2
-  _ == _ = False
+  t1 == t2 = typeRepr t1 == typeRepr t2
 
 instance Ord Type where
-  compare O O = EQ
-  compare O Type{} = LT
-  compare Type{} O = GT
-  compare Type{tname = t1} Type{tname = t2} = compare t1 t2
+  compare = comparing typeRepr
 
 instance Hashable Type where
-  hashWithSalt s = hashWithSalt s . toMaybe
-    where toMaybe O = Nothing
-          toMaybe Type { tname = t } = Just t
+  hashWithSalt s = hashWithSalt s . typeRepr
 
 instance Named Type where
   name O = nameO
   name Type{tname = t} = t
 
+-- Typeclass of "things that have a type"
 class Typed a where
   typ :: a -> Type
 
@@ -73,19 +68,21 @@ instance Typed Type where
 
 instance Typed FunType where
   typ = res
+
+----------------------------------------------------------------------
+-- Terms
+
+data a ::: b = !a ::: !b
+
+instance Named a => Eq (a ::: b) where s == t = name s == name t
+instance Named a => Ord (a ::: b) where compare = comparing name
+instance Named a => Hashable (a ::: b) where hashWithSalt s = hashWithSalt s . name
+
+instance Named a => Named (a ::: b) where
+  name (a ::: b) = name a
   
 instance Typed b => Typed (a ::: b) where
   typ (_ ::: t) = typ t
-
-type Problem a = Closed [Input a]
-
-data Input a = Input
-  { tag ::  !Tag,
-    kind :: !Kind,
-    what :: !a }
-
-instance Functor Input where
-  fmap f x = x { what = f (what x) }
 
 type Variable = Name ::: Type
 type Function = Name ::: FunType
@@ -99,6 +96,9 @@ instance Typed Term where
   typ (Var x) = typ x
   typ (f :@: _) = typ f
 
+----------------------------------------------------------------------
+-- Literals
+
 data Atomic = !Term :=: !Term | Tru !Term
 data Signed a = Pos !a | Neg !a deriving Show
 
@@ -106,6 +106,21 @@ instance Functor Signed where
   fmap f (Pos x) = Pos (f x)
   fmap f (Neg x) = Neg (f x)
 type Literal = Signed Atomic
+
+neg :: Signed a -> Signed a
+neg (Pos x) = Neg x
+neg (Neg x) = Pos x
+
+the :: Signed a -> a
+the (Pos x) = x
+the (Neg x) = x
+
+pos :: Signed a -> Bool
+pos (Pos _) = True
+pos (Neg _) = False
+
+----------------------------------------------------------------------
+-- Formulae
 
 data Form
   = Literal Literal
@@ -117,28 +132,6 @@ data Form
   | Exists (Bind Form)
 
 data Bind a = Bind !(NameMap Variable) !a
-
-simplify :: Form -> Form
-simplify t@Literal{} = t
-simplify (Not (Literal l)) = Literal (neg l)
-simplify (Not (Not t)) = simplify t
-simplify (Not t) = Not (simplify t)
-simplify (And ts) = S.fold (/\) id true (fmap simplify ts)
-simplify (Or ts) = S.fold (\/) id false (fmap simplify ts)
-simplify (Equiv t u) = equiv t u
-  where equiv t u | isTrue t = u
-                  | isTrue u = t
-                  | isFalse t = nt u
-                  | isFalse u = nt t
-                  | otherwise = Equiv t u
-simplify (ForAll (Bind vs t)) = forAll vs (simplify t)
-  where forAll vs t | Map.null vs = t
-        forAll vs (ForAll (Bind vs' t)) = ForAll (Bind (Map.union vs vs') t)
-        forAll vs t = ForAll (Bind vs t)
-simplify (Exists (Bind vs t)) = exists vs (simplify t)
-  where exists vs t | Map.null vs = t
-        exists vs (Exists (Bind vs' t)) = Exists (Bind (Map.union vs vs') t)
-        exists vs t = Exists (Bind vs t)
 
 true, false :: Form
 true = And S.Nil
@@ -181,10 +174,37 @@ positive (Not (Exists (Bind vs a))) = ForAll (Bind vs (nt a))
 positive (Not (Literal l))          = Literal (neg l)
 positive a                          = a
 
+-- remove Exists and Or from the top level of a formula
 simple :: Form -> Form
 simple (Or as)              = Not (And (fmap nt as))
 simple (Exists (Bind vs a)) = Not (ForAll (Bind vs (nt a)))
 simple a                    = a
+
+-- perform some easy algebraic simplifications
+simplify :: Form -> Form
+simplify t@Literal{} = t
+simplify (Not (Literal l)) = Literal (neg l)
+simplify (Not (Not t)) = simplify t
+simplify (Not t) = Not (simplify t)
+simplify (And ts) = S.fold (/\) id true (fmap simplify ts)
+simplify (Or ts) = S.fold (\/) id false (fmap simplify ts)
+simplify (Equiv t u) = equiv t u
+  where equiv t u | isTrue t = u
+                  | isTrue u = t
+                  | isFalse t = nt u
+                  | isFalse u = nt t
+                  | otherwise = Equiv t u
+simplify (ForAll (Bind vs t)) = forAll vs (simplify t)
+  where forAll vs t | Map.null vs = t
+        forAll vs (ForAll (Bind vs' t)) = ForAll (Bind (Map.union vs vs') t)
+        forAll vs t = ForAll (Bind vs t)
+simplify (Exists (Bind vs t)) = exists vs (simplify t)
+  where exists vs t | Map.null vs = t
+        exists vs (Exists (Bind vs' t)) = Exists (Bind (Map.union vs vs') t)
+        exists vs t = Exists (Bind vs t)
+
+----------------------------------------------------------------------
+-- Substitutions
 
 type Subst = NameMap (Name ::: Term)
 
@@ -197,29 +217,36 @@ v |=> x = NameMap.singleton (name v ::: x)
 (|+|) :: Subst -> Subst -> Subst
 (|+|) = Map.union
 
-newtype Clause = Clause [Signed Atomic] deriving Symbolic
+----------------------------------------------------------------------
+-- Clauses
 
-bind :: Symbolic a => a -> Bind a
-bind x = Bind (free x) x
+newtype Clause = Clause [Signed Atomic] deriving Symbolic
 
 toForm :: Bind Clause -> Form
 toForm (Bind xs (Clause ls)) = ForAll (Bind xs (And (S.fromList (map Literal ls))))
 
-neg :: Signed a -> Signed a
-neg (Pos x) = Neg x
-neg (Neg x) = Pos x
+----------------------------------------------------------------------
+-- Problems
 
-the :: Signed a -> a
-the (Pos x) = x
-the (Neg x) = x
+type Tag = BS.ByteString
 
-pos :: Signed a -> Bool
-pos (Pos _) = True
-pos (Neg _) = False
-
--- fixme fix the conjecture stuff and add a simplification pass in Clausify.hs
--- (because the parser doesn't bother making the formulas nice at all)
 data Kind = Axiom | NegatedConjecture deriving (Eq, Ord)
+
+data Input a = Input
+  { tag ::  !Tag,
+    kind :: !Kind,
+    what :: !a }
+
+type Problem a = Closed [Input a]
+
+instance Functor Input where
+  fmap f x = x { what = f (what x) }
+
+----------------------------------------------------------------------
+-- Symbolic stuff (will all change)
+
+bind :: Symbolic a => a -> Bind a
+bind x = Bind (free x) x
 
 class Symbolic a where
   things :: (Variable -> Seq b) -> (Term -> Seq b) -> a -> Seq b
