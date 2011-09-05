@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE FlexibleContexts, Rank2Types, PatternGuards, GADTs, TypeOperators, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables #-}
 module Form where
 
 import qualified Seq as S
@@ -14,6 +14,7 @@ import qualified NameMap
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Name
+import qualified Changing as C
 
 ----------------------------------------------------------------------
 -- Types
@@ -173,7 +174,6 @@ simple (Exists (Bind vs a)) = Not (ForAll (Bind vs (nt a)))
 simple a                    = a
 
 -- perform some easy algebraic simplifications
-simplify :: Form -> Form
 simplify t@Literal{} = t
 simplify (Not (Literal l)) = Literal (neg l)
 simplify (Not (Not t)) = simplify t
@@ -337,13 +337,19 @@ instance Symbolic a => Unpack (Input a) where
 -- Functions operating on symbolic terms
 
 subst :: Symbolic a => Subst -> a -> a
-subst s x = aux s (typeRep x) x (unpack x)
+subst s x = C.value x (subst' s x)
+
+subst' :: Symbolic a => Subst -> a -> C.Changing a
+subst' s t = aux s (typeRep t) t (unpack t)
   where
-    aux s TermRep Var{} _ | Just (_ ::: t) <- NameMap.lookup (name x) s = t
-    aux s BindRep (Bind vs x) _ = Bind vs (subst (s Map.\\ vs) x)
-    aux s _ _ Const{} = x
-    aux s _ _ (Unary f x) = f (subst s x)
-    aux s _ _ (Binary f x y) = f (subst s x) (subst s y)
+    aux s TermRep Var{} _ =
+      case NameMap.lookup (name t) s of
+        Just (_ ::: u) -> C.changed u
+        Nothing -> C.unchanged
+    aux s BindRep (Bind vs x) _ = fmap (Bind vs) (subst' (s Map.\\ vs) x)
+    aux s _ _ Const{} = C.unchanged
+    aux s _ _ (Unary f x) = fmap f (subst' s x)
+    aux s _ _ (Binary f x y) = C.lift2 f x (subst' s x) y (subst' s y)
 
 {-# INLINE collect #-}
 collect :: forall a b. Symbolic a => (forall a. TypeRep a -> a -> Seq b) -> a -> Seq b
