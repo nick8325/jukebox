@@ -124,8 +124,10 @@ forAll xs a =
     
     ForAll (Bind ys a)
       | Map.null m -> return (ForAll (Bind ys a))
-      | otherwise -> fmap (ForAll . Bind ys) (forAll m a)
+      | otherwise -> fmap (forAll' ys) (forAll m a)
       where m = xs Map.\\ ys
+            forAll' vs (ForAll (Bind vs' t)) = ForAll (Bind (vs `Map.union` vs') t)
+            forAll' vs t = ForAll (Bind vs t)
 
     Or as -> forAllOr xs [ (a, free a) | a <- S.toList as ]
 
