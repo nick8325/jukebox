@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE TypeFamilies, CPP, TemplateHaskell, PatternGuards, GADTs, TypeOperators, ImplicitParams, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE Rank2Types, CPP, TemplateHaskell, PatternGuards, GADTs, TypeOperators, ScopedTypeVariables #-}
 module Form where
 
 import qualified Seq as S
@@ -250,18 +250,21 @@ data TypeRep a where
   InputRep :: Symbolic a => TypeRep (Input a)
 
 class Symbolic a where
-  typeRep :: a -> TypeRep a
+  typeRep_ :: TypeRep a
+
+typeRep :: Symbolic a => a -> TypeRep a
+typeRep _ = typeRep_
 
 -- $(symbolicInstances ''TypeRep ''Symbolic 'typeRep)
-instance Symbolic Form where typeRep _ = FormRep
-instance Symbolic Clause where typeRep _ = ClauseRep
-instance Symbolic Term where typeRep _ = TermRep
-instance Symbolic Atomic where typeRep _ = AtomicRep
-instance Symbolic a => Symbolic (Signed a) where typeRep _ = SignedRep
-instance Symbolic a => Symbolic (Bind a) where typeRep _ = BindRep
-instance Symbolic a => Symbolic [a] where typeRep _ = ListRep
-instance Symbolic a => Symbolic (Seq a) where typeRep _ = SeqRep
-instance Symbolic a => Symbolic (Input a) where typeRep _ = InputRep
+instance Symbolic Form where typeRep_ = FormRep
+instance Symbolic Clause where typeRep_ = ClauseRep
+instance Symbolic Term where typeRep_ = TermRep
+instance Symbolic Atomic where typeRep_ = AtomicRep
+instance Symbolic a => Symbolic (Signed a) where typeRep_ = SignedRep
+instance Symbolic a => Symbolic (Bind a) where typeRep_ = BindRep
+instance Symbolic a => Symbolic [a] where typeRep_ = ListRep
+instance Symbolic a => Symbolic (Seq a) where typeRep_ = SeqRep
+instance Symbolic a => Symbolic (Input a) where typeRep_ = InputRep
 
 -- Unpacking a type
 data Unpacked a where
@@ -272,6 +275,7 @@ data Unpacked a where
 class Unpack a where
   unpack' :: a -> Unpacked a
 
+{-# INLINE unpack #-}
 unpack :: Symbolic a => a -> Unpacked a
 unpack x = -- $(mkUnpack ''TypeRep [| unpack' x |] [| typeRep x |])
   case typeRep x of
@@ -325,7 +329,7 @@ instance Symbolic a => Unpack (Input a) where
   unpack' (Input tag kind what) = Unary (Input tag kind) what
 
 #define SYMBOLIC(f, ty) \
-  f :: Symbolic a => ty(a); \
+  f :: Symbolic q => ty(q); \
   {-# SPECIALIZE f :: ty(Form) #-}; \
   {-# SPECIALIZE f :: ty(Bind Form) #-}; \
   {-# SPECIALIZE f :: ty(Seq Form) #-}; \
@@ -351,11 +355,38 @@ subst s x = aux s (typeRep x) x (unpack x)
     aux s _ _ (Unary f x) = f (subst s x)
     aux s _ _ (Binary f x y) = f (subst s x) (subst s y)
 
+#define collect_aux_ty(a) a -> Seq b
+{-# INLINE collect #-}
+collect :: forall a b. Symbolic a => (forall a. TypeRep a -> a -> Seq b) -> a -> Seq b
+collect f = aux
+  where SYMBOLIC(aux, collect_aux_ty)
+        aux x =
+          f (typeRep x) x `S.append` 
+          case unpack x of
+            Const{} -> S.Nil
+            Unary _ x -> aux x
+            Binary _ x y -> aux x `S.append` aux y
+
+#define free_ty(a) a -> NameMap Variable
+SYMBOLIC(free, free_ty)
+free x = aux (typeRep x) x (unpack x)
+  where aux TermRep (Var v) _ = NameMap.singleton v
+        aux BindRep (Bind vs x) t = free x Map.\\ vs
+        aux _ _ Const{} = Map.empty
+        aux _ _ (Unary _ x) = free x
+        aux _ _ (Binary _ x y) = free x `Map.union` free y
+
 bind :: Symbolic a => a -> Bind a
 bind x = Bind (free x) x
 
-free :: Symbolic a => a -> NameMap Variable
-free = undefined
+#define names_ty(a) a -> Seq Name
+SYMBOLIC(names, names_ty)
+names = collect f
+  where {-# INLINE f #-}
+        f :: TypeRep a -> a -> Seq Name
+        f TermRep t = S.Unit (name t)
+        f BindRep (Bind vs _) = S.fromList (map name (NameMap.toList vs))
+        f _ _ = S.Nil
 
 -- uniqueNames :: Symbolic a => a -> NameM a
 -- uniqueNames x =
