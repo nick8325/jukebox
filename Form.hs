@@ -15,6 +15,8 @@ import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Name
 import qualified Changing as C
+import Control.Monad.State.Strict
+import Data.List
 
 ----------------------------------------------------------------------
 -- Types
@@ -282,17 +284,19 @@ class Unpack a where
 -- pattern-matching on an unpack degenerates into typecase.
 {-# INLINE unpack #-}
 unpack :: Symbolic a => a -> Unpacked a
-unpack x = -- $(mkUnpack ''TypeRep [| unpack' x |] [| typeRep x |])
-  case typeRep x of
-    FormRep -> unpack' x
-    ClauseRep -> unpack' x
-    TermRep -> unpack' x
-    AtomicRep -> unpack' x
-    SignedRep -> unpack' x
-    BindRep -> unpack' x
-    ListRep -> unpack' x
-    SeqRep -> unpack' x
-    InputRep -> unpack' x
+unpack x = unpackRep (typeRep x) x -- $(mkUnpack ''TypeRep [| unpack' x |] [| typeRep x |])
+
+{-# INLINE unpackRep #-}
+unpackRep :: TypeRep a -> a -> Unpacked a
+unpackRep FormRep = unpack'
+unpackRep ClauseRep = unpack'
+unpackRep TermRep = unpack'
+unpackRep AtomicRep = unpack'
+unpackRep SignedRep = unpack'
+unpackRep BindRep = unpack'
+unpackRep ListRep = unpack'
+unpackRep SeqRep = unpack'
+unpackRep InputRep = unpack'
 
 instance Unpack Form where
   unpack' (Literal l) = Unary Literal l
@@ -377,25 +381,52 @@ names :: Symbolic a => a -> Seq Name
 names = collect f
   where {-# INLINE f #-}
         f :: TypeRep a -> a -> Seq Name
-        f TermRep t = S.Unit (name t)
+        f TermRep t = S.Unit (name t) `S.append` S.Unit (name (typ t))
         f BindRep (Bind vs _) = S.fromList (map name (NameMap.toList vs))
         f _ _ = S.Nil
 
--- uniqueNames :: Symbolic a => a -> NameM a
--- uniqueNames x =
---   let f Nothing = x
---       f (Just (Bind _ x)) = x in
---   let ?lookup = \v s ->
---         case NameMap.lookup (name v) s of
---           Nothing -> fail ""          
---           Just (_ ::: t) -> return t
---       ?bind = \vs s -> do
---         used <- get
---         let (stale, fresh) = partition (`NameMap.member` used) (NameMap.toList vs)
---         stale' <- sequence [ fmap (::: t) (lift (newName x)) | x ::: t <- stale ]
---         put (used `Map.union` NameMap.fromList fresh `Map.union` NameMap.fromList stale')
---         case stale of
---           [] -> return (vs, s)
---           _ -> return (NameMap.fromList (stale' ++ fresh),
---                        NameMap.fromList [name x ::: Var y | (x, y) <- stale `zip` stale'] `Map.union` s)
---   in fmap f (evalStateT (runMaybeT (substM Map.empty (bind x))) Map.empty)
+types :: Symbolic a => a -> Seq Type
+types = collect f
+  where {-# INLINE f #-}
+        f :: TypeRep a -> a -> Seq Type
+        f TermRep t = S.Unit (typ t)
+        f BindRep (Bind vs _) = S.fromList (map typ (NameMap.toList vs))
+        f _ _ = S.Nil
+
+functions :: Symbolic a => a -> Seq Function
+functions = collect f
+  where {-# INLINE f #-}
+        f :: TypeRep a -> a -> Seq Function
+        f TermRep (f :@: _) = S.Unit f
+        f _ _ = S.Nil
+
+uniqueNames :: Symbolic a => a -> NameM a
+uniqueNames x = fmap (C.value x) (evalStateT (aux Map.empty x) (free x))
+  where aux :: Symbolic a => Subst -> a -> StateT (NameMap Variable) NameM (C.Changing a)
+        aux s x = aux' s (typeRep x) x
+        aux' :: Subst -> TypeRep a -> a -> StateT (NameMap Variable) NameM (C.Changing a)
+        aux' s TermRep (Var v) = do
+          case NameMap.lookup (name v) s of
+            Nothing -> return C.unchanged
+            Just (_ ::: t) -> return (C.changed t)
+        aux' s BindRep (Bind vs x) = do
+          used <- get
+          let (stale, fresh) = partition (`NameMap.member` used) (NameMap.toList vs)
+          stale' <- sequence [ fmap (::: t) (lift (newName x)) | x ::: t <- stale ]
+          put (used `Map.union` NameMap.fromList fresh `Map.union` NameMap.fromList stale')
+          case stale of
+            [] -> fmap (fmap (Bind vs)) (aux s x)
+            _ ->
+              do
+                let s' = NameMap.fromList [name x ::: Var y | (x, y) <- stale `zip` stale'] `Map.union` s
+                    vs' = NameMap.fromList (stale' ++ fresh)
+                x' <- aux s' x
+                return (C.changed (Bind vs' (C.value x x')))
+        aux' s r x =
+          case unpackRep r x of
+           Const{} -> return C.unchanged
+           Unary f x -> fmap (fmap f) (aux s x)
+           Binary f x y -> do
+             x' <- aux s x
+             y' <- aux s y
+             return (C.lift2 f x x' y y')
