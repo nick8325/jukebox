@@ -1,7 +1,7 @@
 -- Strict lists with efficient append.
 module Seq where
 
-import Prelude hiding (concat, length, mapM)
+import Prelude hiding (concat, concatMap, length, mapM)
 import Control.Monad hiding (mapM)
 import Data.Hashable
 import qualified Data.HashSet as Set
@@ -49,7 +49,7 @@ instance Functor Seq where
 
 instance Monad Seq where
   return = Unit
-  x >>= f = concatA (fmap f x)
+  x >>= f = concatMapA f x
   fail _ = Nil
 
 instance MonadPlus Seq where
@@ -57,12 +57,16 @@ instance MonadPlus Seq where
   mplus = append
 
 concat :: (List f, List g) => f (g a) -> Seq a
-concat xs = concatA (fmap fromList (fromList xs))
+concat = concatMap id
 
-concatA :: Seq (Seq a) -> Seq a
-concatA (Append x y) = concatA x `appendA` concatA y
-concatA (Unit x) = x
-concatA Nil = Nil
+concatMap :: (List f, List g) => (a -> g b) -> f a -> Seq b
+concatMap f xs = concatMapA (fromList . f) (fromList xs)
+
+concatMapA :: (a -> Seq b) -> Seq a -> Seq b
+concatMapA f = aux
+  where aux (Append x y) = aux x `appendA` aux y
+        aux (Unit x) = f x
+        aux Nil = Nil
 
 fold :: (b -> b -> b) -> (a -> b) -> b -> Seq a -> b
 fold app u n (Append x y) = app (fold app u n x) (fold app u n y)
