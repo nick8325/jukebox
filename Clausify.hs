@@ -15,7 +15,6 @@ import qualified NameMap
 import NameMap(NameMap)
 import qualified Data.HashMap as Map
 import qualified Data.ByteString.Char8 as BS
-import TPTP.Print
 
 ----------------------------------------------------------------------
 -- clausify
@@ -230,9 +229,9 @@ makeCopyable inEquiv pos neg
 -- skolemization
 
 -- removeExists p -> p'
---   PRE: p has no Equiv
+--   PRE: p has no Equiv and no Not
 --   POST: p' is equivalent to p (modulo extra symbols)
---   POST: p' has no Equiv, no Exists, and only Not on Atoms
+--   POST: p' has no Equiv, no Exists, and no Not
 removeExists :: Form -> M Form
 removeExists (And ps) =
   do ps <- sequence [ removeExists p | p <- S.toList ps ]
@@ -323,10 +322,10 @@ makeOr fcs
     do return (S.Nil, Or (S.fromList (map fst fcs1)), orCost (map snd fcs1))
 
   | otherwise =
-    do d <- Literal `fmap` Pos `fmap` literal "or" (free (map fst fcs2))
-       (defs,p,_) <- makeOr ((nt d,unitCost):fcs2)
+    do d <- literal "or" (free (map fst fcs2))
+       (defs,p,_) <- makeOr ((Literal (Neg d),unitCost):fcs2)
        return ( defs `S.snoc` p
-              , Or (S.fromList (d : map fst fcs1))
+              , Or (S.fromList (Literal (Pos d) : map fst fcs1))
               , orCost (unitCost : map snd fcs1)
               )
  where

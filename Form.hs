@@ -165,7 +165,7 @@ Or as \/ b     = Or (b `S.cons` as)
 a     \/ Or bs = Or (a `S.cons` bs)
 a     \/ b     = Or (S.Unit a `S.append` S.Unit b)
 
--- remove Not from a problem, replacing it with negated literals
+-- remove Not from the root of a problem
 positive :: Form -> Form
 positive (Not (And as))             = Or (fmap nt as)
 positive (Not (Or as))              = And (fmap nt as)
