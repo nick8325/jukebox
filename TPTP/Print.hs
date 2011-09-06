@@ -165,7 +165,8 @@ prettyQuant l env q vs f =
 
 instance Show Kind where
   show Axiom = "axiom"
-  show NegatedConjecture = "negated_conjecture"
+  show Conjecture = "conjecture"
+  show Question = "question"
 
 prettyShow, chattyShow :: Pretty a => a -> String
 prettyShow = render . pPrint 0 Normal base

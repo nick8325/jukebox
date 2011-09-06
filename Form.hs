@@ -234,7 +234,7 @@ toForm (Clause (Bind vs ls)) = ForAll (Bind vs (And (S.fromList (map Literal ls)
 
 type Tag = BS.ByteString
 
-data Kind = Axiom | NegatedConjecture deriving (Eq, Ord)
+data Kind = Axiom | Conjecture | Question deriving (Eq, Ord)
 
 data Input a = Input
   { tag ::  !Tag,

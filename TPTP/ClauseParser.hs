@@ -22,7 +22,7 @@ import TPTP.Lexer hiding
    Exists, And, Or, Type, Apply, keyword, defined, kind)
 import qualified TPTP.Lexer as L
 import qualified Form
-import Form hiding (tag, kind, Axiom, NegatedConjecture)
+import Form hiding (tag, kind, Axiom, Conjecture, Question)
 import qualified Name
 
 -- The parser monad
@@ -142,15 +142,15 @@ input included = declaration Cnf (formulaIn cnf) <|>
 kind :: Parser (Tag -> Form -> Input Form)
 kind = axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
        axiom Assumption <|> axiom Lemma <|> axiom Theorem <|>
-       general Conjecture Form.NegatedConjecture nt <|>
-       general NegatedConjecture Form.NegatedConjecture id <|>
-       general Question Form.NegatedConjecture Not
-  where axiom t = general t Form.Axiom id
-        general k kind f = keyword k >> return (mk kind f)
-        mk kind f tag form =
+       general Conjecture Form.Conjecture <|>
+       general NegatedConjecture Form.Axiom <|>
+       general Question Form.Question
+  where axiom t = general t Form.Axiom
+        general k kind = keyword k >> return (mk kind)
+        mk kind tag form =
           Input { Form.tag = tag,
                   Form.kind = kind,
-                  Form.what = f form }
+                  Form.what = form }
 
 -- A formula name.
 tag :: Parser Tag
