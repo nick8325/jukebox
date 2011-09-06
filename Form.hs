@@ -14,7 +14,6 @@ import qualified NameMap
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Name
-import qualified Changing as C
 import Control.Monad.State.Strict
 import Data.List
 
@@ -284,9 +283,9 @@ instance Symbolic a => Symbolic (Input a) where typeRep_ = InputRep
 
 -- Unpacking a type
 data Unpacked a where
-  Const :: a -> Unpacked a
-  Unary :: Symbolic a => (a -> b) -> a -> Unpacked b
-  Binary :: (Symbolic a, Symbolic b) => (a -> b -> c) -> a -> b -> Unpacked c
+  Const :: !a -> Unpacked a
+  Unary :: Symbolic a => (a -> b) -> !a -> Unpacked b
+  Binary :: (Symbolic a, Symbolic b) => (a -> b -> c) -> !a -> !b -> Unpacked c
 
 class Unpack a where
   unpack' :: a -> Unpacked a
@@ -352,19 +351,16 @@ instance Symbolic a => Unpack (Input a) where
 -- Functions operating on symbolic terms
 
 subst :: Symbolic a => Subst -> a -> a
-subst s x = C.value x (subst' s x)
-
-subst' :: Symbolic a => Subst -> a -> C.Changing a
-subst' s t = aux s (typeRep t) t (unpack t)
+subst s t = aux s (typeRep t) t (unpack t)
   where
     aux s TermRep Var{} _ =
       case NameMap.lookup (name t) s of
-        Just (_ ::: u) -> C.changed u
-        Nothing -> C.unchanged
-    aux s BindRep (Bind vs x) _ = fmap (Bind vs) (subst' (checkBinder vs (s Map.\\ vs)) x)
-    aux s _ _ Const{} = C.unchanged
-    aux s _ _ (Unary f x) = fmap f (subst' s x)
-    aux s _ _ (Binary f x y) = C.lift2 f x (subst' s x) y (subst' s y)
+        Just (_ ::: u) -> u
+        Nothing -> t
+    aux s BindRep (Bind vs x) _ = Bind vs (subst (checkBinder vs (s Map.\\ vs)) x)
+    aux s _ _ Const{} = t
+    aux s _ _ (Unary f x) = f (subst s x)
+    aux s _ _ (Binary f x y) = f (subst s x) (subst s y)
 
 {-# INLINE collect #-}
 collect :: forall a b. Symbolic a => (forall a. TypeRep a -> a -> Seq b) -> a -> Seq b
@@ -412,35 +408,31 @@ functions = collect f
         f _ _ = S.Nil
 
 uniqueNames :: Symbolic a => a -> NameM a
-uniqueNames x = fmap (C.value x) (evalStateT (aux Map.empty x) (free x))
-  where aux :: Symbolic a => Subst -> a -> StateT (NameMap Variable) NameM (C.Changing a)
+uniqueNames x = evalStateT (aux Map.empty x) (free x)
+  where aux :: Symbolic a => Subst -> a -> StateT (NameMap Variable) NameM a
         aux s x = aux' s (typeRep x) x
-        aux' :: Subst -> TypeRep a -> a -> StateT (NameMap Variable) NameM (C.Changing a)
-        aux' s TermRep (Var v) = do
+        aux' :: Subst -> TypeRep a -> a -> StateT (NameMap Variable) NameM a
+        aux' s TermRep t@(Var v) = do
           case NameMap.lookup (name v) s of
-            Nothing -> return C.unchanged
-            Just (_ ::: t) -> return (C.changed t)
+            Nothing -> return t
+            Just (_ ::: t) -> return t
         aux' s BindRep (Bind vs x) = do
           used <- get
           let (stale, fresh) = partition (`NameMap.member` used) (NameMap.toList vs)
           stale' <- sequence [ fmap (::: t) (lift (newName x)) | x ::: t <- stale ]
           put (used `Map.union` NameMap.fromList fresh `Map.union` NameMap.fromList stale')
           case stale of
-            [] -> fmap (fmap (Bind vs)) (aux s x)
+            [] -> fmap (Bind vs) (aux s x)
             _ ->
               do
                 let s' = NameMap.fromList [name x ::: Var y | (x, y) <- stale `zip` stale'] `Map.union` s
                     vs' = NameMap.fromList (stale' ++ fresh)
-                x' <- aux s' x
-                return (C.changed (Bind vs' (C.value x x')))
-        aux' s r x =
-          case unpackRep r x of
-           Const{} -> return C.unchanged
-           Unary f x -> fmap (fmap f) (aux s x)
-           Binary f x y -> do
-             x' <- aux s x
-             y' <- aux s y
-             return (C.lift2 f x x' y y')
+                fmap (Bind vs') (aux s' x)
+        aux' s r t =
+          case unpackRep r t of
+           Const{} -> return t
+           Unary f x -> fmap f (aux s x)
+           Binary f x y -> liftM2 f (aux s x) (aux s y)
 
 -- Check that each variable is bound,
 -- and that there aren't two nested binders binding the same variable
