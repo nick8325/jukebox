@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns #-}
 module Form where
 
 import qualified Seq as S
@@ -284,8 +284,8 @@ instance Symbolic a => Symbolic (Input a) where typeRep_ = InputRep
 -- Unpacking a type
 data Unpacked a where
   Const :: !a -> Unpacked a
-  Unary :: Symbolic a => (a -> b) -> !a -> Unpacked b
-  Binary :: (Symbolic a, Symbolic b) => (a -> b -> c) -> !a -> !b -> Unpacked c
+  Unary :: Symbolic a => (a -> b) -> a -> Unpacked b
+  Binary :: (Symbolic a, Symbolic b) => (a -> b -> c) -> a -> b -> Unpacked c
 
 class Unpack a where
   unpack' :: a -> Unpacked a
@@ -433,6 +433,16 @@ uniqueNames x = evalStateT (aux Map.empty x) (free x)
            Const{} -> return t
            Unary f x -> fmap f (aux s x)
            Binary f x y -> liftM2 f (aux s x) (aux s y)
+
+-- Force a value.
+force :: Symbolic a => a -> a
+force x = aux x `seq` x
+  where aux :: Symbolic a => a -> ()
+        aux x =
+          case unpack x of
+            Const !_ -> ()
+            Unary _ x -> aux x
+            Binary _ x y -> aux x `seq` aux y
 
 -- Check that each variable is bound,
 -- and that there aren't two nested binders binding the same variable

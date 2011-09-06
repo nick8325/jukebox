@@ -28,14 +28,14 @@ clausify inps = close inps (run . clausifyInputs S.Nil S.Nil)
   
   clausifyInputs theory obligs (inp:inps) =
     do cs <- clausForm (tag inp) (what inp)
-       clausifyInputs (theory `S.append` S.fromList cs) obligs inps
+       clausifyInputs (theory `S.append` cs) obligs inps
 
   clausifyObligs theory obligs s [] inps =
     do clausifyInputs theory obligs inps
   
   clausifyObligs theory obligs s (a:as) inps =
     do cs <- clausForm s (nt a)
-       clausifyObligs theory (obligs `S.append` S.fromList [cs]) s as inps
+       clausifyObligs theory (obligs `S.append` S.Unit cs) s as inps
 
   split' a | splitting ?flags = if null split_a then [true] else split_a
    where
@@ -92,17 +92,15 @@ split p =
 ----------------------------------------------------------------------
 -- core clausification algorithm
 
-clausForm :: BS.ByteString -> Form -> M [Clause]
+clausForm :: BS.ByteString -> Form -> M (Seq Clause)
 clausForm s p =
   withName s $
-    do miniscoped      <-             miniscope         (check (simplify (check p)))
-       noEquivPs       <-             removeEquiv       (check miniscoped)
-       noExistsPs      <-  sequence [ removeExists      p         | p <- check noEquivPs ]
-       noExpensiveOrPs <- csequence [ removeExpensiveOr p         | p <- check noExistsPs ]
-       noForAllPs      <-  sequence [ lift (lift (uniqueNames p)) | p <- check noExpensiveOrPs ]
-       return (check (map clause (S.toList (S.concat [ cnf p | p <- check noForAllPs ]))))
- where
-  csequence = fmap concat . sequence
+    do miniscoped      <- miniscope . check . simplify                      . check $ p
+       noEquivPs       <- removeEquiv                                       . check $ miniscoped
+       noExistsPs      <- mapM removeExists                                 . check $ noEquivPs
+       noExpensiveOrPs <- fmap concat . mapM removeExpensiveOr              . check $ noExistsPs
+       noForAllPs      <- lift . lift . mapM uniqueNames                    . check $ noExpensiveOrPs
+       return $! force . check . fmap (clause . S.toList) . S.concatMap cnf . check $ noForAllPs
 
 ----------------------------------------------------------------------
 -- miniscoping
@@ -348,14 +346,14 @@ makeOr fcs
 --   POST: And (map Or cs) is equivalent to p
 cnf :: Form -> Seq (Seq Literal)
 cnf (ForAll (Bind _ p)) = cnf p
-cnf (And ps)            = S.concat (fmap cnf ps)
+cnf (And ps)            = S.concatMap cnf ps
 cnf (Or ps)             = cross (fmap cnf ps)
 cnf (Literal x)         = S.Unit (S.Unit x)
 
 cross :: Seq (Seq (Seq Literal)) -> Seq (Seq Literal)
 cross S.Nil = S.Unit S.Nil
 cross (S.Unit x) = x
-cross (S.Append cs1 cs2) = do { c1 <- cross cs1; c2 <- cross cs2; return (c1 `S.append` c2) }
+cross (S.Append cs1 cs2) = liftM2 S.append (cross cs1) (cross cs2)
 
 ----------------------------------------------------------------------
 -- monad

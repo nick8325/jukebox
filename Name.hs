@@ -17,7 +17,7 @@ import Control.Monad.State.Strict
 data Name =
   Name {
     uniqueId :: {-# UNPACK #-} !Int64,
-    base :: BS.ByteString }
+    base :: {-# UNPACK #-} !BS.ByteString }
 
 instance Eq Name where
   x == y = uniqueId x == uniqueId y
@@ -57,12 +57,12 @@ newName x = NameM $ do
   idx <- get
   let idx'= idx+1
   when (idx' < 0) $ error "Name.newName: too many names"
-  put idx'
-  return (Name idx' (baseName x))
+  put $! idx'
+  return $! Name idx' (baseName x)
 
 data Closed a =
   Closed {
-    maxIndex :: !Int64,
+    maxIndex :: {-# UNPACK #-} !Int64,
     open :: !a }
 
 closed0 :: Closed ()
