@@ -124,6 +124,7 @@ pos (Neg _) = False
 -- i.e. nested quantification of the same variable twice is not allowed
 -- Not OK: ![X]: (... ![X]: ...)
 -- OK:     (![X]: ...) & (![X]: ...)
+-- Free variables must also not be bound inside subformulae
 data Form
   = Literal Literal
   | Not Form
@@ -444,11 +445,10 @@ force x = aux x `seq` x
             Unary _ x -> aux x
             Binary _ x y -> aux x `seq` aux y
 
--- Check that each variable is bound,
--- and that there aren't two nested binders binding the same variable
+-- Check that there aren't two nested binders binding the same variable
 check :: Symbolic a => a -> a
 check x | not debugging = x
-        | aux Map.empty x = x
+        | aux (free x) x = x
         | otherwise = error "Form.check: invariant broken"
   where aux :: Symbolic a => NameMap Variable -> a -> Bool
         aux vars x = aux' vars (typeRep x) x (unpack x)

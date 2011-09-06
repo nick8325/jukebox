@@ -65,6 +65,9 @@ data Closed a =
     maxIndex :: {-# UNPACK #-} !Int64,
     open :: !a }
 
+instance Functor Closed where
+  fmap f (Closed m x) = Closed m (f x)
+
 closed0 :: Closed ()
 nameO, nameI :: Name
 
