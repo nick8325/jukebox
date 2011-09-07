@@ -28,9 +28,10 @@ import qualified Name
 -- The parser monad
 
 data ParseState =
-  MkState ![Input Form]                        -- problem being constructed, inputs are in reverse order
+  MkState ![Input Form]                           -- problem being constructed, inputs are in reverse order
           !(Map BS.ByteString Type)               -- types
           !(Map BS.ByteString (Name ::: FunType)) -- functions
+          !(Map BS.ByteString (Name ::: Type))    -- free variables in CNF clause
           !Type                                   -- the $i type
           !Int                                    -- the next type equivalence class
           !(Closed ())                            -- name generation
@@ -42,7 +43,7 @@ data IncludeStatement = Include BS.ByteString (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = MkState [] (Map.insert (BS.pack "$i") typeI Map.empty) Map.empty typeI 1 closed0
+initialState = MkState [] (Map.insert (BS.pack "$i") typeI Map.empty) Map.empty Map.empty typeI 1 closed0
   where typeI = Type nameI Infinite Infinite 0
 
 instance Stream TokenStream Token where
@@ -56,7 +57,7 @@ testParser p s = snd (run (const []) p (UserState initialState (scan (BSL.pack s
 
 getProblem :: Parser [Input Form]
 getProblem = do
-  MkState p _ _ _ _ _ <- getState
+  MkState p _ _ _ _ _ _ <- getState
   return (reverse p)
 
 -- Primitive parsers.
@@ -172,8 +173,8 @@ include = do
 
 newFormula :: Input Form -> Parser ()
 newFormula input = do
-  MkState p t f i c n <- getState
-  putState (MkState (input:p) t f i c n)
+  MkState p t f v i c n <- getState
+  putState (MkState (input:p) t f Map.empty i c n)
   
 newNameFrom :: Named a => Closed () -> a -> (Closed (), Name)
 newNameFrom n name = (close_ n' (return ()), open n')
@@ -182,12 +183,12 @@ newNameFrom n name = (close_ n' (return ()), open n')
 {-# INLINE findType #-}
 findType :: BS.ByteString -> Parser Type
 findType name = do
-  MkState p t f i c n <- getState
+  MkState p t f v i c n <- getState
   case Map.lookup name t of
     Nothing -> do
       let (n', name') = newNameFrom n name
           ty = Type { tname = name', tmonotone = Infinite, tsize = Infinite, tclass = c }
-      putState (MkState p (Map.insert name ty t) f i (c+1) n')
+      putState (MkState p (Map.insert name ty t) f v i (c+1) n')
       return ty
     Just x -> return x
 
@@ -226,12 +227,12 @@ typeError f@(x ::: ty) args' = do
 {-# INLINE lookupFunction #-}
 lookupFunction :: FunType -> BS.ByteString -> Parser (Name ::: FunType)
 lookupFunction def name = do
-  MkState p t f i c n <- getState
+  MkState p t f v i c n <- getState
   case Map.lookup name f of
     Nothing -> do
       let (n', name') = newNameFrom n name
           decl = name' ::: def
-      putState (MkState p t (Map.insert name decl f) i c n')
+      putState (MkState p t (Map.insert name decl f) v i c n')
       return decl
     Just f -> return f
 
@@ -239,20 +240,23 @@ lookupFunction def name = do
 {-# INLINE individual #-}
 individual :: Parser Type
 individual = do
-  MkState _ _ _ i _ _ <- getState
+  MkState _ _ _ _ i _ _ <- getState
   return i
 
 -- Parsing formulae.
 
 cnf, tff, fof :: Parser Form
-cnf = fatalError "cnf not implemented"
+cnf =
+  let ?binder = fatalError "Can't use quantifiers in CNF"
+      ?ctx = Nothing
+  in fmap (ForAll . bind) formula
 tff =
   let ?binder = varDecl True
-      ?ctx = Map.empty
+      ?ctx = Just Map.empty
   in formula
 fof =
   let ?binder = varDecl False
-      ?ctx = Map.empty
+      ?ctx = Just Map.empty
   in formula
 
 -- We cannot always know whether what we are parsing is a formula or a
@@ -296,10 +300,10 @@ class TermLike a where
   fromThing :: Thing -> Parser a
   -- Parse a variable occurrence as a term on its own, if that's allowed.
   {-# INLINE var #-}
-  var :: (?ctx :: Map BS.ByteString Variable) => Parser a
+  var :: (?ctx :: Maybe (Map BS.ByteString Variable)) => Parser a
   -- A parser for this type.
   parser :: (?binder :: Parser Variable,
-             ?ctx :: Map BS.ByteString Variable) => Parser a
+             ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser a
 
 instance TermLike Form where
   fromThing t@(Apply x xs) = fmap (Literal . Pos . Tru) (applyFunction x xs O)
@@ -316,9 +320,20 @@ instance TermLike Term where
   parser = term
   var = do
     x <- variable
-    case Map.lookup x ?ctx of
-      Just v -> return (Var v)
-      Nothing -> fatalError $ "unbound variable " ++ BS.unpack x
+    case ?ctx of
+      Nothing -> do
+        MkState p t f vs i c n <- getState
+        case Map.lookup x vs of
+          Just v -> return (Var v)
+          Nothing -> do
+            let (n', name) = newNameFrom n x
+                v = name ::: i
+            putState (MkState p t f (Map.insert x v vs) i c n')
+            return (Var v)
+      Just ctx ->
+        case Map.lookup x ctx of
+          Just v -> return (Var v)
+          Nothing -> fatalError $ "unbound variable " ++ BS.unpack x
 
 instance TermLike Thing where
   fromThing = return
@@ -334,10 +349,10 @@ instance FormulaLike Form where fromFormula = id
 instance FormulaLike Thing where fromFormula = Formula
 
 -- An atomic expression.
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Term #-}
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Form #-}
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
-term :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, TermLike a) => Parser a
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Term #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Form #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Thing #-}
+term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable), TermLike a) => Parser a
 term = function <|> var <|> parens parser
   where {-# INLINE function #-}
         function = do
@@ -346,7 +361,7 @@ term = function <|> var <|> parens parser
           fromThing (Apply x args)
 
 literal, unitary, quantified, formula ::
-  (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable, FormulaLike a) => Parser a
+  (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable), FormulaLike a) => Parser a
 {-# INLINE literal #-}
 literal = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
@@ -368,8 +383,8 @@ literal = true <|> false <|> binary <?> "literal"
                return (fromFormula form)
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
-{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Form #-}
-{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Form #-}
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Thing #-}
 unitary = negation <|> quantified <|> literal
   where {-# INLINE negation #-}
         negation = do
@@ -381,14 +396,15 @@ quantified = do
   q <- (punct L.ForAll >> return ForAll) <|>
        (punct L.Exists >> return Exists)
   vars <- bracks (sepBy1 ?binder (punct Comma))
-  let ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ?ctx vars
+  let Just ctx = ?ctx
+      ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ctx vars
   punct Colon
-  rest <- let ?ctx = ctx' in (unitary :: Parser Form)
+  rest <- let ?ctx = Just ctx' in (unitary :: Parser Form)
   return (fromFormula (q (Bind (NameMap.fromList vars) rest)))
 
 -- A general formula.
-{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Form #-}
-{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Map BS.ByteString Variable) => Parser Thing #-}
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Form #-}
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Thing #-}
 formula = do
   x <- unitary :: Parser Thing
   let binop op t u = op (S.Unit t `S.append` S.Unit u)
@@ -416,9 +432,9 @@ varDecl typed = do
              when (not typed) $
                fatalError "Used a typed quantification in an untyped formula";
              type_ } <|> individual
-  MkState p t f i c n <- getState
+  MkState p t f v i c n <- getState
   let (n', name) = newNameFrom n x
-  putState (MkState p t f i c n')
+  putState (MkState p t f v i c n')
   return (name ::: ty)
 
 -- Parse a type

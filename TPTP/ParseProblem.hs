@@ -80,4 +80,4 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
         merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
         finalise :: ParseState -> Problem Form
-        finalise (MkState p _ _ _ _ n) = close_ n (return (reverse p))
+        finalise (MkState p _ _ _ _ _ n) = close_ n (return (reverse p))
