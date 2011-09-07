@@ -19,7 +19,8 @@ import qualified NameMap
 
 import TPTP.Lexer hiding
   (Pos, Error, Include, Var, Type, Not, ForAll,
-   Exists, And, Or, Type, Apply, keyword, defined, kind)
+   Exists, And, Or, Type, Apply, Implies, Follows, Xor, Nand, Nor,
+   keyword, defined, kind)
 import qualified TPTP.Lexer as L
 import qualified Form
 import Form hiding (tag, kind, Axiom, Conjecture, Question)
@@ -416,11 +417,11 @@ formula = do
         return (fromFormula (op lhs rhs))
   connective L.And (binop And) <|> connective L.Or (binop Or) <|>
    connective Iff Equiv <|>
-   connective Implies (\t u -> binop Or (Not t) u) <|>
-   connective Follows (\t u -> binop Or t (Not u)) <|>
-   connective Xor (\t u -> Not (t `Equiv` u)) <|>
-   connective Nor (\t u -> Not (binop Or t u)) <|>
-   connective Nand (\t u -> Not (binop And t u)) <|>
+   connective L.Implies (Connective Implies) <|>
+   connective L.Follows (Connective Follows) <|>
+   connective L.Xor (Connective Xor) <|>
+   connective L.Nor (Connective Nor) <|>
+   connective L.Nand (Connective Nand) <|>
    fromThing x
 
 -- varDecl True: parse a typed variable binding X:a or an untyped one X

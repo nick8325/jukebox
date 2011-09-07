@@ -133,6 +133,19 @@ data Form
   | Equiv Form Form
   | ForAll (Bind Form)
   | Exists (Bind Form)
+    -- Just exists so that parsing followed by pretty-printing is
+    -- somewhat lossless; the simplify function will get rid of it
+  | Connective Connective Form Form
+
+-- Miscellaneous connectives that exist in TPTP
+data Connective = Implies | Follows | Xor | Nor | Nand
+
+connective :: Connective -> Form -> Form -> Form
+connective Implies t u = nt t \/ u
+connective Follows t u = t \/ nt u
+connective Xor t u = nt (t `Equiv` u)
+connective Nor t u = nt (t \/ u)
+connective Nand t u = nt (t /\ u)
 
 data Bind a = Bind !(NameMap Variable) !a
 
@@ -151,7 +164,7 @@ nt (Not a) = a
 nt a       = Not a
 
 (.=>) :: Form -> Form -> Form
-p .=> q = nt p \/ q
+(.=>) = connective Implies
 
 (/\), (\/) :: Form -> Form -> Form
 And as /\ And bs = And (as `S.append` bs)
@@ -181,10 +194,12 @@ positive a                          = a
 simple :: Form -> Form
 simple (Or as)              = Not (And (fmap nt as))
 simple (Exists (Bind vs a)) = Not (ForAll (Bind vs (nt a)))
+simple (Connective c t u)   = simple (connective c t u)
 simple a                    = a
 
 -- perform some easy algebraic simplifications
 simplify t@Literal{} = t
+simplify (Connective c t u) = simplify (connective c t u)
 simplify (Not (Literal l)) = Literal (neg l)
 simplify (Not (Not t)) = simplify t
 simplify (Not t) = Not (simplify t)
@@ -317,6 +332,7 @@ instance Unpack Form where
   unpack' (Equiv t u) = Binary Equiv t u
   unpack' (ForAll b) = Unary ForAll b
   unpack' (Exists b) = Unary Exists b
+  unpack' (Connective c t u) = Binary (Connective c) t u
 
 instance Unpack Clause where
   unpack' (Clause ls) = Unary Clause ls

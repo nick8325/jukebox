@@ -145,9 +145,17 @@ instance Pretty Form where
   pPrint p l env (Equiv t u) = prettyConnective l p env undefined "<=>" [t, u]
   pPrint p l env (ForAll (Bind vs f)) = prettyQuant l env "!" vs f
   pPrint p l env (Exists (Bind vs f)) = prettyQuant l env "?" vs f
+  pPrint p l env (Connective c t u) = prettyConnective l p env (error "pPrint: Connective") (show c) [t, u]
 
 instance Show Form where
   show = chattyShow
+
+instance Show Connective where
+  show Implies = "=>"
+  show Follows = "<="
+  show Xor = "<~>"
+  show Nor = "~|"
+  show Nand = "~&"
 
 prettyConnective l p env ident op [] = text ident
 prettyConnective l p env ident op [x] = pPrint p l env x
