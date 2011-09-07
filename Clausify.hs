@@ -23,11 +23,14 @@ clausify :: (?flags :: Flags) => Problem Form -> Closed ([Clause],[[Clause]])
 clausify inps = close inps (run . clausifyInputs S.Nil S.Nil)
  where
   clausifyInputs theory obligs [] =
-    do return ( S.toList theory , S.toList obligs )
+    do return ( S.toList theory , map S.toList (S.toList obligs) )
   
-  clausifyInputs theory obligs (inp:inps) =
+  clausifyInputs theory obligs (inp:inps) | kind inp == Axiom =
     do cs <- clausForm (tag inp) (what inp)
        clausifyInputs (theory `S.append` cs) obligs inps
+
+  clausifyInputs theory obligs (inp:inps) | kind inp `elem` [Conjecture, Question] =
+    do clausifyObligs theory obligs (tag inp) (split' (what inp)) inps
 
   clausifyObligs theory obligs s [] inps =
     do clausifyInputs theory obligs inps
