@@ -29,4 +29,4 @@ main = do
       -- putStrLn (render (prettyProblem "tff" Normal p))
       -- putStrLn (render (prettyProblem "tff" Normal cs))
       -- putStrLn (render (prettyProblem "tff" Chatty p))
-      -- putStrLn (render (prettyProblem "tff" Normal p))
+      -- putStrLn (render (prettyProblem "tff" Chatty cs))

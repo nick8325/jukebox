@@ -188,6 +188,8 @@ positive (Not (Not a))              = positive a
 positive (Not (ForAll (Bind vs a))) = Exists (Bind vs (nt a))
 positive (Not (Exists (Bind vs a))) = ForAll (Bind vs (nt a))
 positive (Not (Literal l))          = Literal (neg l)
+-- Some connectives are fairly not-ish
+positive (Connective c t u)         = positive (connective c t u)
 positive a                          = a
 
 -- remove Exists and Or from the top level of a formula
@@ -205,7 +207,7 @@ simplify (Not (Not t)) = simplify t
 simplify (Not t) = Not (simplify t)
 simplify (And ts) = S.fold (/\) id true (fmap simplify ts)
 simplify (Or ts) = S.fold (\/) id false (fmap simplify ts)
-simplify (Equiv t u) = equiv t u
+simplify (Equiv t u) = equiv (simplify t) (simplify u)
   where equiv t u | isTrue t = u
                   | isTrue u = t
                   | isFalse t = nt u

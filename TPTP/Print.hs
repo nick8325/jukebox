@@ -1,4 +1,4 @@
--- Pretty-printing of formulae.
+-- Pretty-printing of formulae. WARNING: icky code inside!
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances #-}
 module TPTP.Print(prettyShow, chattyShow, prettyProblem, Level(..))
        where
@@ -38,10 +38,10 @@ instance Pretty Type where
   pPrint prec lev env O = pPrint prec lev env nameO
   pPrint prec lev env t
     | lev >= Chatty = 
-      hcat (punctuate (text "/")
-        [pPrint prec lev env (tname t),
-         size (tmonotone t),
-         size (tsize t)])
+      hcat . punctuate (text "/") $
+        [pPrint prec lev env (tname t)] ++
+        [size (tmonotone t) | tmonotone t /= Infinite || tsize t /= Infinite] ++
+        [size (tsize t) | tsize t /= Infinite]
     | otherwise = pPrint prec lev env (tname t)
     where size Infinite = empty
           size (Finite n) = int n
