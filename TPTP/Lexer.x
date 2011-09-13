@@ -197,6 +197,10 @@ data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !
 alexInputPrevChar :: AlexInput -> Char
 alexInputPrevChar (Input p c x xs) = c
 
+{-# INLINE alexGetByte #-}
+alexGetByte :: AlexInput -> Maybe (Word8,AlexInput)
+alexGetByte i = fmap f (alexGetChar i)
+  where f (c, i') = (fromIntegral (ord c), i')
 {-# INLINE alexGetChar #-}
 alexGetChar :: AlexInput -> Maybe (Char,AlexInput)
 alexGetChar (Input p _ x xs) | not (BS.null x) = getCharNonEmpty p x xs
