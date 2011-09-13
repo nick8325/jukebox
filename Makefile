@@ -2,7 +2,7 @@ all: jukebox
 
 .PHONY: jukebox
 jukebox: clean1
-	cabal install --bindir=.
+	cabal install --bindir=. --ghc-options="-rtsopts -with-rtsopts=-K64M"
 	ln -sf ../dist/build/jukebox/jukebox-tmp/TPTP/Lexer.hs TPTP
 
 clean: clean1
