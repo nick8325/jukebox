@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators #-}
-module Monotonicity where
+module Monotonox.Monotonicity where
 
 import Name
 import Form hiding (Form, clause, true, false)
