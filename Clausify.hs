@@ -4,7 +4,7 @@ module Clausify where
 import Form
 import qualified Form
 import Name
-import Data.List( nub, maximumBy, sortBy, partition )
+import Data.List( maximumBy, sortBy, partition )
 import Data.Ord
 import Flags
 import Control.Monad.Reader
@@ -14,7 +14,9 @@ import Seq(Seq)
 import qualified NameMap
 import NameMap(NameMap)
 import qualified Data.HashMap as Map
+import qualified Data.HashSet as Set
 import qualified Data.ByteString.Char8 as BS
+import Utils
 
 ----------------------------------------------------------------------
 -- clausify
@@ -94,7 +96,7 @@ split p =
 ----------------------------------------------------------------------
 -- core clausification algorithm
 
-clausForm :: BS.ByteString -> Form -> M (Seq Clause)
+clausForm :: BS.ByteString -> Form -> M [Clause]
 clausForm s p =
   withName s $
     do miniscoped      <- miniscope . check . simplify                      . check $ p
@@ -102,7 +104,9 @@ clausForm s p =
        noExistsPs      <- mapM removeExists                                 . check $ noEquivPs
        noExpensiveOrPs <- fmap concat . mapM removeExpensiveOr              . check $ noExistsPs
        noForAllPs      <- lift . lift . mapM uniqueNames                    . check $ noExpensiveOrPs
-       return $! force . check . fmap (clause . S.toList) . S.concatMap cnf . check $ noForAllPs
+       let !cnf_        = S.concatMap cnf                                   . check $ noForAllPs
+           !simp        = simplifyCNF . fmap S.toList                       . check $ cnf_
+       return $! force . check . S.toList . fmap clause                             $ simp
 
 ----------------------------------------------------------------------
 -- miniscoping
@@ -356,6 +360,31 @@ cross :: Seq (Seq (Seq Literal)) -> Seq (Seq Literal)
 cross S.Nil = S.Unit S.Nil
 cross (S.Unit x) = x
 cross (S.Append cs1 cs2) = liftM2 S.append (cross cs1) (cross cs2)
+
+----------------------------------------------------------------------
+-- simplification of CNF
+
+simplifyCNF :: Seq [Literal] -> [[Literal]]
+simplifyCNF =
+  -- nub: don't generate multiple copies of identical clauses
+  nub . S.concatMap (tautElim . unify [])
+  where -- remove negative variable equalities X != Y by substitution
+        unify xs [] = xs
+        unify xs (Neg (Var v :=: t@Var{}):ys) =
+          unify (subst (v |=> t) xs) (subst (v |=> t) ys)
+        unify xs (l:ys) = unify (l:xs) ys
+        -- simplify p | ~p or t = t to true.
+        tautElim ls
+          | Set.null (pos `Set.intersection` neg) && not (any tauto ls)
+            -- reorder the order of the literals in the clause
+            -- so that more clauses become equal;
+            -- also, remove duplicate literals from the clause
+            = S.Unit (map Neg (Set.toList neg) ++ map Pos (Set.toList pos))
+          | otherwise = S.Nil
+          where pos = Set.fromList [ l | Pos l <- ls ]
+                neg = Set.fromList [ l | Neg l <- ls ]
+                tauto (Pos (t :=: u)) = t == u
+                tauto _ = False
 
 ----------------------------------------------------------------------
 -- monad

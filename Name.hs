@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances #-}
 module Name(
   Name, uniqueId, base,
-  (:::)(..),
+  (:::)(..), lhs, rhs,
   Named(..),
   Closed, close, close_, open, closed0, stdNames, nameO, nameI, NameM, newName,
   uniquify) where
@@ -50,6 +50,12 @@ instance Named Name where
   name = id
 
 data a ::: b = !a ::: !b
+
+lhs :: (a ::: b) -> a
+lhs (x ::: _) = x
+
+rhs :: (a ::: b) -> b
+rhs (_ ::: y) = y
 
 instance Named a => Eq (a ::: b) where s == t = name s == name t
 instance Named a => Ord (a ::: b) where compare = comparing name

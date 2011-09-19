@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns #-}
+{-# LANGUAGE TemplateHaskell, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns #-}
 module Form where
 
 import qualified Seq as S
@@ -17,6 +17,8 @@ import Name
 import Control.Monad.State.Strict
 import Data.List hiding (nub)
 import Utils
+import Data.DeriveTH
+import Data.Derive.Hashable
 
 -- Set to True to switch on some sanity checks
 debugging :: Bool
@@ -76,7 +78,8 @@ instance Typed b => Typed (a ::: b) where
 
 type Variable = Name ::: Type
 type Function = Name ::: FunType
-data Term = Var !Variable | !Function :@: [Term]
+data Term = Var !Variable | !Function :@: [Term] deriving (Eq, Ord)
+$(derive makeHashable ''Term)
 
 instance Named Term where
   name (Var x) = name x
@@ -90,7 +93,24 @@ instance Typed Term where
 -- Literals
 
 data Atomic = !Term :=: !Term | Tru !Term
-data Signed a = Pos !a | Neg !a deriving Show
+
+-- Helper for (Eq Atomic, Ord Atomic, Hashable Atomic) instances
+normAtomic :: Atomic -> Either (Term, Term) Term
+normAtomic (t1 :=: t2) | t1 > t2 = Left (t2, t1)
+                       | otherwise = Left (t1, t2)
+normAtomic (Tru p) = Right p
+
+instance Eq Atomic where
+  t1 == t2 = normAtomic t1 == normAtomic t2
+
+instance Ord Atomic where
+  compare = comparing normAtomic
+
+instance Hashable Atomic where
+  hashWithSalt s = hashWithSalt s . normAtomic
+
+data Signed a = Pos !a | Neg !a deriving (Show, Eq, Ord)
+$(derive makeHashable ''Signed)
 
 instance Functor Signed where
   fmap f (Pos x) = Pos (f x)
