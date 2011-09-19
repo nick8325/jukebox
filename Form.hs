@@ -38,7 +38,7 @@ data Type =
       -- if there is a model of size >= tsize then there is a model of size tsize
       tsize :: DomainSize,
       -- two types in the same class have to have the same size
-      tclass :: Int } deriving Show
+      tclass :: Int }
 
 data FunType = FunType { args :: [Type], res :: !Type } deriving Eq
 
@@ -251,13 +251,16 @@ v |=> x = NameMap.singleton (name v ::: x)
 ----------------------------------------------------------------------
 -- Clauses
 
-newtype Clause = Clause (Bind [Signed Atomic])
+newtype Clause = Clause (Bind [Literal])
 
 clause :: S.List f => f (Signed Atomic) -> Clause
 clause xs = Clause (bind (S.toList xs))
 
 toForm :: Clause -> Form
 toForm (Clause (Bind vs ls)) = ForAll (Bind vs (And (S.fromList (map Literal ls))))
+
+toLiterals :: Clause -> [Literal]
+toLiterals (Clause (Bind _ ls)) = ls
 
 ----------------------------------------------------------------------
 -- Problems

@@ -46,6 +46,9 @@ instance Pretty Type where
     where size Infinite = empty
           size (Finite n) = int n
 
+instance Show Type where
+  show = chattyShow
+
 instance Show L.Token where
   show L.Atom{L.name = x} = BS.unpack (escapeAtom x)
   show L.Defined{L.defined = x} = show x
@@ -71,6 +74,9 @@ instance Pretty FunType where
       [] -> pPrint prec lev env res
       args -> pPrint prec lev env args <+> text ">" <+>
               pPrint prec lev env res
+
+instance Show FunType where
+  show = chattyShow
 
 instance Pretty [Type] where
   pPrint prec lev env [arg] = pPrint prec lev env arg

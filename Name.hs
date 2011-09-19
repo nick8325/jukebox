@@ -49,7 +49,7 @@ instance Named [Char] where
 instance Named Name where
   name = id
 
-data a ::: b = !a ::: !b
+data a ::: b = !a ::: !b deriving Show
 
 lhs :: (a ::: b) -> a
 lhs (x ::: _) = x

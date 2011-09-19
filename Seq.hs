@@ -85,3 +85,6 @@ mapM :: Monad m => (a -> m b) -> Seq a -> m (Seq b)
 mapM f Nil = return Nil
 mapM f (Unit x) = liftM Unit (f x)
 mapM f (Append x y) = liftM2 Append (mapM f x) (mapM f y)
+
+sequence :: Monad m => Seq (m a) -> m (Seq a)
+sequence = mapM id
