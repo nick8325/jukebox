@@ -15,7 +15,8 @@ import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Name
 import Control.Monad.State.Strict
-import Data.List
+import Data.List hiding (nub)
+import Utils
 
 -- Set to True to switch on some sanity checks
 debugging :: Bool
@@ -403,24 +404,24 @@ free x = aux (typeRep x) x (unpack x)
 bind :: Symbolic a => a -> Bind a
 bind x = Bind (free x) x
 
-names :: Symbolic a => a -> Seq Name
-names = collect f
+names :: Symbolic a => a -> [Name]
+names = nub . collect f
   where {-# INLINE f #-}
         f :: TypeRep a -> a -> Seq Name
         f TermRep t = S.Unit (name t) `S.append` S.Unit (name (typ t))
         f BindRep (Bind vs _) = S.fromList (map name (NameMap.toList vs))
         f _ _ = S.Nil
 
-types :: Symbolic a => a -> Seq Type
-types = collect f
+types :: Symbolic a => a -> [Type]
+types = nub . collect f
   where {-# INLINE f #-}
         f :: TypeRep a -> a -> Seq Type
         f TermRep t = S.Unit (typ t)
         f BindRep (Bind vs _) = S.fromList (map typ (NameMap.toList vs))
         f _ _ = S.Nil
 
-functions :: Symbolic a => a -> Seq Function
-functions = collect f
+functions :: Symbolic a => a -> [Function]
+functions = nub . collect f
   where {-# INLINE f #-}
         f :: TypeRep a -> a -> Seq Function
         f TermRep (f :@: _) = S.Unit f

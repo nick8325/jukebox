@@ -12,6 +12,7 @@ import Clausify
 import Flags
 import qualified Data.ByteString.Char8 as BS
 import Control.Monad
+import Monotonicity
 
 main = do
   args <- getArgs

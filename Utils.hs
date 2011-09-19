@@ -1,6 +1,9 @@
 module Utils where
 
 import Data.List
+import qualified Seq as Seq
+import qualified Data.HashSet as Set
+import Data.Hashable
 
 usort :: Ord a => [a] -> [a]
 usort = map head . group . sort
@@ -13,3 +16,6 @@ merge (x:xs) (y:ys) =
     LT -> x:merge xs (y:ys)
     EQ -> x:merge xs ys
     GT -> y:merge (x:xs) ys
+
+nub :: (Seq.List f, Ord a, Hashable a) => f a -> [a]
+nub = Set.toList . Set.fromList . Seq.toList
