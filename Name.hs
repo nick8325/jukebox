@@ -1,6 +1,7 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, FlexibleInstances #-}
+{-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances #-}
 module Name(
   Name, uniqueId, base,
+  (:::)(..),
   Named(..),
   Closed, close, close_, open, closed0, stdNames, nameO, nameI, NameM, newName,
   uniquify) where
@@ -47,6 +48,15 @@ instance Named [Char] where
 
 instance Named Name where
   name = id
+
+data a ::: b = !a ::: !b
+
+instance Named a => Eq (a ::: b) where s == t = name s == name t
+instance Named a => Ord (a ::: b) where compare = comparing name
+instance Named a => Hashable (a ::: b) where hashWithSalt s = hashWithSalt s . name
+
+instance Named a => Named (a ::: b) where
+  name (a ::: b) = name a
 
 newtype NameM a =
   NameM { unNameM :: State Int64 a }

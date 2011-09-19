@@ -68,20 +68,11 @@ instance Typed Type where
 instance Typed FunType where
   typ = res
 
-----------------------------------------------------------------------
--- Terms
-
-data a ::: b = !a ::: !b
-
-instance Named a => Eq (a ::: b) where s == t = name s == name t
-instance Named a => Ord (a ::: b) where compare = comparing name
-instance Named a => Hashable (a ::: b) where hashWithSalt s = hashWithSalt s . name
-
-instance Named a => Named (a ::: b) where
-  name (a ::: b) = name a
-  
 instance Typed b => Typed (a ::: b) where
   typ (_ ::: t) = typ t
+
+----------------------------------------------------------------------
+-- Terms
 
 type Variable = Name ::: Type
 type Function = Name ::: FunType
