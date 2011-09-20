@@ -282,7 +282,7 @@ removeExpensiveOr p =
      return (S.toList (defs `S.append` S.Unit p'))
 
 -- cost: represents how it expensive it is to clausify a formula
-type Cost = (Int,Int) -- (#clauses, #literals)
+type Cost = (Integer,Integer) -- (#clauses, #literals)
 
 unitCost :: Cost
 unitCost = (1,1)
