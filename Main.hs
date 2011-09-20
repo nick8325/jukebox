@@ -26,10 +26,10 @@ main = do
         -- let ?monotone = const Infinite
         --     ?size = const Infinite
         -- in putStrLn (prettyShow (infer p))
-        putStrLn $ "ok, " ++ show (length (open p)) ++ " clauses"
+        putStrLn "Clausifying problem..."
         let ?flags = fl
-        let cs = close (clausify p) (\(cs, css) -> return [ Input (BS.pack "foo") Axiom c | c <- cs ++ concat (take 1 css) ])
-        putStrLn $ "ok, " ++ show (length (open cs)) ++ " clauses"
+        let !cs = close (clausify p) (\(cs, css) -> return [ Input (BS.pack "foo") Axiom c | c <- cs ++ concat (take 1 css) ])
+        putStrLn "Monotonicity analysis..."
         m <- monotone (map what (open cs))
         forM_ (NameMap.toList m) $ \(ty ::: x) ->
           case x of

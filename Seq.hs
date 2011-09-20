@@ -1,8 +1,8 @@
 -- Strict lists with efficient append.
 module Seq where
 
-import Prelude hiding (concat, concatMap, length, mapM)
-import Control.Monad hiding (mapM)
+import Prelude hiding (concat, concatMap, length, mapM, mapM_)
+import Control.Monad hiding (mapM, mapM_)
 import Data.Hashable
 import qualified Data.HashSet as Set
 
@@ -85,6 +85,11 @@ mapM :: Monad m => (a -> m b) -> Seq a -> m (Seq b)
 mapM f Nil = return Nil
 mapM f (Unit x) = liftM Unit (f x)
 mapM f (Append x y) = liftM2 Append (mapM f x) (mapM f y)
+
+mapM_ :: Monad m => (a -> m ()) -> Seq a -> m ()
+mapM_ f Nil = return ()
+mapM_ f (Unit x) = f x
+mapM_ f (Append x y) = mapM_ f x >> mapM_ f y
 
 sequence :: Monad m => Seq (m a) -> m (Seq a)
 sequence = mapM id
