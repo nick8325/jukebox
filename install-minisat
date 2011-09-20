@@ -28,6 +28,6 @@ export MINISAT_LIB="-L$prefix/lib -lminisat"
 make -C $dir/c
 $sudo make -C $dir/c install
 
-cd $dir/haskell && $sudo cabal install --extra-include-dirs=$prefix/include --extra-lib-dirs=$prefix/lib --$mode
+cd $dir/haskell && $sudo cabal install --extra-include-dirs=$prefix/include --extra-lib-dirs=$prefix/lib --$mode -p
 
 rm -r $dir -f
