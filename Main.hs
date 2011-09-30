@@ -31,6 +31,11 @@ main = do
         putStrLn "Clausifying problem..."
         let ?flags = fl
         let !cs = close (clausify p) (\(cs, css) -> return [ Input (BS.pack "foo") Axiom c | c <- cs ++ concat (take 1 css) ])
+        return ()
+        putStrLn "Writing clauses..."
+        BSL.writeFile (arg ++ ".clauses") (encode cs)
+        putStrLn "Reading clauses..."
+        !cs <- fmap decode (BSL.readFile (arg ++ ".clauses"))
         putStrLn "Monotonicity analysis..."
         m <- monotone (map what (open cs))
         forM_ (NameMap.toList m) $ \(ty ::: x) ->

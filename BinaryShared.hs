@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ExistentialQuantification, GeneralizedNewtypeDeriving, TemplateHaskell #-}
+{-# LANGUAGE ExistentialQuantification, GeneralizedNewtypeDeriving, TemplateHaskell #-}
 module BinaryShared where
 
 import qualified Data.Binary.Put as Put
@@ -25,7 +25,6 @@ import Unsafe.Coerce
 default ()
 
 data Shared a b = Shared [a] b
-newtype Unshared a = Unshared { getUnshared :: a }
 
 newtype Put a = Put { runPut :: ReaderT (S Obj Id) Put.PutM a } deriving (Functor, Monad, MonadReader (S Obj Id))
 newtype Get a = Get { runGet :: ReaderT (S Id Any) Get.Get a } deriving (Functor, Monad, MonadReader (S Id Any))
@@ -35,6 +34,10 @@ data S a b = S {-# UNPACK #-} !Word !(Map.Map a b)
 class Binary a where
   get :: Get a
   put :: a -> Put ()
+
+class BinaryUnshared a where
+  getUnshared :: Get a
+  putUnshared :: a -> Put ()
 
 liftGet :: Get.Get a -> Get a
 liftGet = Get . lift
@@ -56,14 +59,14 @@ withObjs xs swap m = withReaderT f m
   where f (S lev map) = S (lev+1) (map `Map.union` map' lev)
         map' lev = Map.fromList [ swap x (Id lev n) | (n, x) <- zip [0..] xs ]
 
-instance (Binary (Unshared a), Typeable a, Hashable a, Ord a, Binary b) => Binary (Shared a b) where
+instance (BinaryUnshared a, Typeable a, Hashable a, Ord a, Binary b) => Binary (Shared a b) where
   get = do
-    xs <- fmap (map getUnshared) get
+    xs <- getList getUnshared
     x <- Get (withObjs xs (\x y -> (y, unsafeCoerce x)) (runGet get))
     return (Shared xs x)
 
   put (Shared xs x) = do
-    put (map Unshared xs)
+    putList putUnshared xs
     Put (withObjs xs (\x y -> (Obj x, y)) (runPut (put x)))
 
 putShared :: (Typeable a, Ord a, Hashable a) => a -> Put ()
@@ -140,12 +143,16 @@ instance Binary Word where
   put = putIntegral
 
 instance Binary a => Binary [a] where
-  get = do
-    len <- get :: Get Int
-    replicateM len get
-  put xs = do
+  get = getList get
+  put = putList put
+
+getList get_ = do
+  len <- get :: Get Int
+  replicateM len get_
+
+putList put_ xs = do
     put (length xs :: Int)
-    mapM_ put xs
+    mapM_ put_ xs
 
 instance Binary BS.ByteString where
   get = do
