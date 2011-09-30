@@ -14,6 +14,7 @@ import Control.Monad.Trans
 import Data.Word
 import Data.Typeable
 import qualified Data.ByteString.Lazy as BSL
+import Codec.Compression.GZip
 
 $(derive makeBinaryShared ''DomainSize)
 $(derive makeBinaryShared ''Form)
@@ -83,9 +84,9 @@ instance Binary a => Binary (AllShared a) where
     put (Shared ns (Shared tys (Shared vs (Shared fs x))))
 
 encode :: (Binary a, Symbolic a) => Closed a -> BSL.ByteString
-encode x = B.encode (AllShared (names (open x)) (types (open x)) (vars (open x)) (functions (open x)) x)
+encode x = compress (B.encode (AllShared (names (open x)) (types (open x)) (vars (open x)) (functions (open x)) x))
 
 decode :: (Binary a, Symbolic a) => BSL.ByteString -> Closed a
 decode s =
-  let AllShared _ _ _ _ x = B.decode s
+  let AllShared _ _ _ _ x = B.decode (decompress s)
   in x
