@@ -4,5 +4,6 @@
 /TPTP/Lexer.hs
 /minisat
 *.o
+*.p_o
 *.hi
 *.swp
