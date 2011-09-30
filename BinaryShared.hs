@@ -19,6 +19,8 @@ import Data.Word
 import Data.Typeable
 import Data.Maybe
 import System.IO.Unsafe
+import GHC.Prim(Any)
+import Unsafe.Coerce
 
 default ()
 
@@ -26,9 +28,9 @@ data Shared a b = Shared [a] b
 newtype Unshared a = Unshared { getUnshared :: a }
 
 newtype Put a = Put { runPut :: ReaderT (S Obj Id) Put.PutM a } deriving (Functor, Monad, MonadReader (S Obj Id))
-newtype Get a = Get { runGet :: ReaderT (S Id Obj) Get.Get a } deriving (Functor, Monad, MonadReader (S Id Obj))
-data Id = Id {-# UNPACK #-} !Word8 {-# UNPACK #-} !Word deriving (Eq, Ord)
-data S a b = S {-# UNPACK #-} !Word8 !(Map.Map a b)
+newtype Get a = Get { runGet :: ReaderT (S Id Any) Get.Get a } deriving (Functor, Monad, MonadReader (S Id Any))
+data Id = Id {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving (Eq, Ord)
+data S a b = S {-# UNPACK #-} !Word !(Map.Map a b)
 
 class Binary a where
   get :: Get a
@@ -47,22 +49,22 @@ putWord8 :: Word8 -> Put ()
 putWord8 = liftPut . Put.putWord8
 
 withObjs :: (Monad m, Typeable a, Hashable a, Ord a, Hashable b, Ord b) =>
-            [a] -> (Obj -> Id -> (b, c)) ->
+            [a] -> (a -> Id -> (b, c)) ->
             ReaderT (S b c) m d ->
             ReaderT (S b c) m d
 withObjs xs swap m = withReaderT f m
   where f (S lev map) = S (lev+1) (map `Map.union` map' lev)
-        map' lev = Map.fromList [ swap (Obj x) (Id lev n) | (n, x) <- zip [0..] xs ]
+        map' lev = Map.fromList [ swap x (Id lev n) | (n, x) <- zip [0..] xs ]
 
 instance (Binary (Unshared a), Typeable a, Hashable a, Ord a, Binary b) => Binary (Shared a b) where
   get = do
     xs <- fmap (map getUnshared) get
-    x <- Get (withObjs xs (\x y -> (y, x)) (runGet get))
+    x <- Get (withObjs xs (\x y -> (y, unsafeCoerce x)) (runGet get))
     return (Shared xs x)
 
   put (Shared xs x) = do
     put (map Unshared xs)
-    Put (withObjs xs (,) (runPut (put x)))
+    Put (withObjs xs (\x y -> (Obj x, y)) (runPut (put x)))
 
 putShared :: (Typeable a, Ord a, Hashable a) => a -> Put ()
 putShared x = do
@@ -73,8 +75,7 @@ getShared :: (Typeable a, Ord a, Hashable a) => Get a
 getShared = do
   S _ map <- ask
   x <- get
-  case Map.findWithDefault (error "getShared: key not found") x map of
-    Obj y -> return $! fromMaybe (error "getShared: wrong type") (cast y)
+  return $! unsafeCoerce (Map.findWithDefault (error "getShared: key not found") x map)
 
 data Obj = forall a. (Typeable a, Ord a, Hashable a) => Obj a
 

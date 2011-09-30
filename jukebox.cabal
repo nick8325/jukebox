@@ -5,6 +5,6 @@ Build-type: Simple
 
 Executable jukebox
   Main-is: Main.hs
-  Build-depends: bytestring, base >= 4, array, mtl, parsec >= 3.1, containers, directory, filepath, bytestring-progress, pretty, hashmap, hashable, derive, minisat, binary
+  Build-depends: bytestring, base >= 4, array, mtl, parsec >= 3.1, containers, directory, filepath, bytestring-progress, pretty, hashmap, hashable, derive, minisat, binary, ghc-prim
   Build-tools: alex
   Other-modules: TPTP.Lexer
