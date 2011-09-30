@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
 module Sat where
 
 import MiniSat
@@ -42,7 +42,7 @@ runSat w idxs x = go idxs Map.empty
           withNewSolver $ \s -> go idxs (Map.insert idx (SatState s Map.empty) m)
 
 atIndex :: (Ord a, Hashable a, Ord b, Hashable b) => b -> Sat1 a c -> Sat a b c
-atIndex idx m = do
+atIndex !idx m = do
   watch <- Sat ask
   SatState s ls <- Sat (gets (Map.findWithDefault (error "withSolver: index not found") idx))
   (x, ls') <- liftIO (runStateT (runReaderT (runReaderT (runSat1 m) s) watch) ls)

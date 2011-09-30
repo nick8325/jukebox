@@ -1,4 +1,4 @@
-{-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ImplicitParams, BangPatterns #-}
 module Main where
 
 import TPTP.ParseProblem
@@ -11,9 +11,11 @@ import Text.PrettyPrint.HughesPJ
 import Clausify
 import Flags
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as BSL
 import Control.Monad
 import Monotonox.Monotonicity
 import NameMap
+import TPTP.Binary
 
 main = do
   args <- getArgs

@@ -9,9 +9,9 @@ instance Hashable alpha => Hashable (Sample alpha) where
   hashWithSalt s x =
     let variant n s = if length [First{}, Second{}, Third{}] > 1 then s `combine` n else s in
     case x of
-      First -> variant 0 s
-      Second x1 x2 -> variant 1 s `hashWithSalt` x1 `hashWithSalt` x2
-      Third x1 -> variant 2 s `hashWithSalt` x1
+      First -> variant (0 :: Int) s
+      Second x1 x2 -> variant (1 :: Int) s `hashWithSalt` x1 `hashWithSalt` x2
+      Third x1 -> variant (2 :: Int) s `hashWithSalt` x1
 -}
 
 -- GENERATED START
@@ -54,8 +54,10 @@ dslHashable =
     MapField (App "Var" (List [App "UnQual" (List [App "Ident" (List [
     Concat (List [String "x",ShowInt FieldIndex])])])]))),List [
     Application (List [App "Var" (List [App "UnQual" (List [App
-    "Ident" (List [String "variant"])])]),App "Lit" (List [App "Int" (
-    List [CtorIndex])]),App "Var" (List [App "UnQual" (List [App
-    "Ident" (List [String "s"])])])])]]))]),App "BDecls" (List [List [
-    ]])]))])])]),App "BDecls" (List [List []])])]])])])]
+    "Ident" (List [String "variant"])])]),App "Paren" (List [App
+    "ExpTypeSig" (List [App "Lit" (List [App "Int" (List [CtorIndex])]
+    ),App "TyCon" (List [App "UnQual" (List [App "Ident" (List [String
+    "Int"])])])])]),App "Var" (List [App "UnQual" (List [App "Ident" (
+    List [String "s"])])])])]]))]),App "BDecls" (List [List []])]))])]
+    )]),App "BDecls" (List [List []])])]])])])]
 -- GENERATED STOP

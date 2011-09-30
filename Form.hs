@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE TemplateHaskell, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns #-}
+{-# LANGUAGE DeriveDataTypeable, TemplateHaskell, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns #-}
 module Form where
 
 import qualified Seq as S
@@ -19,6 +19,7 @@ import Data.List hiding (nub)
 import Utils
 import Data.DeriveTH
 import Data.Derive.Hashable
+import Data.Typeable(Typeable)
 
 -- Set to True to switch on some sanity checks
 debugging :: Bool
@@ -27,7 +28,7 @@ debugging = False
 ----------------------------------------------------------------------
 -- Types
 
-data DomainSize = Finite !Int | Infinite deriving (Eq, Ord, Show)
+data DomainSize = Finite Int | Infinite deriving (Eq, Ord, Show, Typeable)
 
 data Type =
     O
@@ -38,9 +39,9 @@ data Type =
       -- if there is a model of size >= tsize then there is a model of size tsize
       tsize :: DomainSize,
       -- two types in the same class have to have the same size
-      tclass :: Int }
+      tclass :: Int } deriving Typeable
 
-data FunType = FunType { args :: [Type], res :: !Type } deriving Eq
+data FunType = FunType { args :: [Type], res :: !Type } deriving (Eq, Typeable)
 
 -- Helper function for defining (Eq, Ord, Hashable) instances
 typeMaybeName :: Type -> Maybe Name
@@ -432,6 +433,14 @@ types = nub . collect f
         f :: TypeRep a -> a -> Seq Type
         f TermRep t = S.Unit (typ t)
         f BindRep (Bind vs _) = S.fromList (map typ (NameMap.toList vs))
+        f _ _ = S.Nil
+
+vars :: Symbolic a => a -> [Variable]
+vars = nub . collect f
+  where {-# INLINE f #-}
+        f :: TypeRep a -> a -> Seq Variable
+        f TermRep (Var x) = S.Unit x
+        f BindRep (Bind vs _) = S.fromList (NameMap.toList vs)
         f _ _ = S.Nil
 
 functions :: Symbolic a => a -> [Function]

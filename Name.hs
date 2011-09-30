@@ -1,9 +1,11 @@
-{-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances #-}
+{-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances, DeriveDataTypeable #-}
 module Name(
   Name, uniqueId, base,
+  unsafeMakeName,
   (:::)(..), lhs, rhs,
   Named(..),
   Closed, close, close_, open, closed0, stdNames, nameO, nameI, NameM, newName,
+  unsafeClose, maxIndex,
   uniquify) where
 
 import qualified Data.ByteString.Char8 as BS
@@ -13,12 +15,15 @@ import Utils
 import Data.List
 import Data.Ord
 import Data.Int
+import Data.Typeable
 import Control.Monad.State.Strict
 
 data Name =
   Name {
     uniqueId :: {-# UNPACK #-} !Int64,
-    base :: {-# UNPACK #-} !BS.ByteString }
+    base :: BS.ByteString } deriving Typeable
+
+unsafeMakeName = Name
 
 instance Eq Name where
   x == y = uniqueId x == uniqueId y
@@ -49,7 +54,7 @@ instance Named [Char] where
 instance Named Name where
   name = id
 
-data a ::: b = !a ::: !b deriving Show
+data a ::: b = !a ::: !b deriving (Show, Typeable)
 
 lhs :: (a ::: b) -> a
 lhs (x ::: _) = x
@@ -79,7 +84,9 @@ newName x = NameM $ do
 data Closed a =
   Closed {
     maxIndex :: {-# UNPACK #-} !Int64,
-    open :: !a }
+    open :: !a } deriving Typeable
+
+unsafeClose = Closed
 
 instance Functor Closed where
   fmap f (Closed m x) = Closed m (f x)
