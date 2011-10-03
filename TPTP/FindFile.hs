@@ -3,9 +3,12 @@ module TPTP.FindFile where
 import System.FilePath
 import System.Directory
 import System.Environment
+import Control.Applicative
 import Control.Exception
 import Control.Monad
 import Prelude hiding (catch)
+import Options
+import Data.Traversable(sequenceA)
 
 findFile :: [FilePath] -> FilePath -> IO (Maybe FilePath)
 findFile [] file = return Nothing
@@ -17,9 +20,22 @@ findFile (path:paths) file = do
 
 findFileTPTP :: [FilePath] -> FilePath -> IO (Maybe FilePath)
 findFileTPTP dirs file = do
-  let f :: IOException -> IO [FilePath]
-      f _ = return []
-  tptp <- do { dir <- getEnv "TPTP"; return [dir] } `catch` f
   let candidates = [file, "Problems" </> file,
                     "Problems" </> take 3 file </> file]
-  fmap msum (mapM (findFile (".":dirs++tptp)) candidates)
+  fmap msum (mapM (findFile dirs) candidates)
+
+getTPTPDirs :: IO [FilePath]
+getTPTPDirs = do { dir <- getEnv "TPTP"; return [dir] } `catch` f
+  where f :: IOException -> IO [FilePath]
+        f _ = return []
+
+findFileFlags =
+  concat <$>
+  sequenceA [
+    pure ["."],
+    flag "root"
+      ["Extra search directories for TPTP input files"]
+      []
+      argFiles,
+    io getTPTPDirs
+    ]

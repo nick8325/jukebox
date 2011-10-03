@@ -1,4 +1,4 @@
-{-# LANGUAGE ImplicitParams, TypeOperators #-}
+{-# LANGUAGE TypeOperators #-}
 module Clausify where
 
 import Form
@@ -6,7 +6,6 @@ import qualified Form
 import Name
 import Data.List( maximumBy, sortBy, partition )
 import Data.Ord
-import Flags
 import Control.Monad.Reader
 import Control.Monad.State.Strict
 import qualified Seq as S
@@ -17,12 +16,23 @@ import qualified Data.HashMap as Map
 import qualified Data.HashSet as Set
 import qualified Data.ByteString.Char8 as BS
 import Utils
+import Options
+import Control.Applicative
+
+newtype ClausifyFlags = ClausifyFlags { splitting :: Bool } deriving Show
+
+clausifyFlags =
+  inGroup "Clausifier options" $
+  ClausifyFlags <$>
+    bool "split"
+      ["Split the conjecture into several sub-conjectures.",
+       "Default: (off)"]
 
 ----------------------------------------------------------------------
 -- clausify
 
-clausify :: (?flags :: Flags) => Problem Form -> Closed ([Clause],[[Clause]])
-clausify inps = close inps (run . clausifyInputs S.Nil S.Nil)
+clausify :: ClausifyFlags -> Problem Form -> Closed ([Clause],[[Clause]])
+clausify flags inps = close inps (run . clausifyInputs S.Nil S.Nil)
  where
   clausifyInputs theory obligs [] =
     do return ( S.toList theory , map S.toList (S.toList obligs) )
@@ -41,10 +51,10 @@ clausify inps = close inps (run . clausifyInputs S.Nil S.Nil)
     do cs <- clausForm s (nt a)
        clausifyObligs theory (obligs `S.append` S.Unit cs) s as inps
 
-  split' a | splitting ?flags = if null split_a then [true] else split_a
+  split' a | splitting flags = if null split_a then [true] else split_a
    where
     split_a = split a
-  split' a                    = [a]
+  split' a                   = [a]
 
 split :: Form -> [Form]
 split p =

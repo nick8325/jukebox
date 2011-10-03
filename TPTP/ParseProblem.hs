@@ -19,8 +19,8 @@ import Prelude hiding (catch)
 import Data.List
 import Name
 
-parseProblem :: FilePath -> IO (Either String (Problem Form))
-parseProblem name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP []) pb name
+parseProblem :: [FilePath] -> FilePath -> IO (Either String (Problem Form))
+parseProblem dirs name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP dirs) pb name
 
 parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Form))
 parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile name Nothing "<command line>" (Pos 0 0) initialState))

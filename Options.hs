@@ -60,6 +60,16 @@ argNum = arg "<num>" "expected a number" f
 argFile :: ArgParser FilePath
 argFile = arg "<file>" "expected a file" Just
 
+argFiles :: ArgParser [FilePath]
+argFiles = arg "<files>" "expected a list of files" $ \x ->
+  Just $ elts $ x ++ ","
+  where
+    elts [] = []
+    elts s  = w:elts r
+      where
+        w = takeWhile (/= ',') s
+        r = tail (dropWhile (/= ',') s)
+
 argName :: ArgParser FilePath
 argName = arg "<name>" "expected a name" Just
 
