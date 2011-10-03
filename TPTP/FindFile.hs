@@ -34,7 +34,7 @@ findFileFlags =
   sequenceA [
     pure ["."],
     flag "root"
-      ["Extra search directories for TPTP input files"]
+      ["Extra directories that will be searched for TPTP input files."]
       []
       argFiles,
     io getTPTPDirs

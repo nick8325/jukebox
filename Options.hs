@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Options where
 
 import Control.Applicative
@@ -6,6 +7,7 @@ import Data.Char
 import Data.List
 import Data.Monoid
 import System.Environment
+import System.Exit
 
 ----------------------------------------------------------------------
 -- A parser of some kind annotated with a help text of some kind
@@ -20,6 +22,11 @@ instance (Monoid d, Applicative p) => Applicative (Annotated d p) where
   pure = Annotated mempty . pure
   Annotated d f <*> Annotated d' x =
     Annotated (d `mappend` d') (f <*> x)
+
+instance (Monoid d, Monoid (p a)) => Monoid (Annotated d p a) where
+  mempty = Annotated mempty mempty
+  Annotated d p `mappend` Annotated d' p' =
+    Annotated (d `mappend` d') (p `mappend` p')
 
 ----------------------------------------------------------------------
 -- Parsing of single arguments (e.g. integers)
@@ -198,7 +205,16 @@ inGroup x (Annotated fls f) = Annotated [fl{ flagGroup = x } | fl <- fls] f
 ----------------------------------------------------------------------
 -- Selecting a particular tool.
 
-type ToolParser = Annotated [(String, String)] PrefixParser
+type ToolParser = Annotated [Tool] PrefixParser
+data Tool = Tool
+  { toolName :: String,
+    toolVersion :: String,
+    toolHelp :: String }
+
+toolProgName :: Tool -> String
+toolProgName = small . toolName
+  where small (c:cs) = toLower c:cs
+        small [] = []
 
 newtype PrefixParser a = PrefixParser (String -> Maybe (ParParser a))
 
@@ -217,24 +233,84 @@ runPref (PrefixParser f) (x:xs) =
     Nothing -> Left ("No such tool " ++ x)
     Just p -> runPar p xs
 
-tool :: String -> String -> OptionParser a -> ToolParser a
-tool name help p =
-  Annotated [(name, help)] (PrefixParser f)
-  where f x | x == name = Just (parser p)
+tool :: Tool -> OptionParser a -> ToolParser a
+tool t p =
+  Annotated [t] (PrefixParser f)
+  where f x | x == toolProgName t = Just (parser p <* helpParser)
         f _ = Nothing
+        helpParser = ParParser (return ()) f'
+          where f' ("--help":_) = Yes 1 ph
+                f' _ = No helpParser
+        ph = ParParser (printHelp (help t p)) (const (No ph))
 
 -- Use the program name as a tool name if possible.
 getEffectiveArgs :: ToolParser a -> IO [String]
 getEffectiveArgs (Annotated tools _) = do
   progName <- getProgName
   args <- getArgs
-  if progName `elem` map fst tools
+  if progName `elem` map toolProgName tools
     then return (progName:args)
     else return args
 
-parseCommandLine :: ToolParser a -> IO (Either String a)
-parseCommandLine p = do
-  args <- getEffectiveArgs p
-  case runPref (parser p) args of
-    Left err -> return (Left err)
-    Right x -> fmap Right x
+parseCommandLine :: Tool -> ToolParser a -> IO a
+parseCommandLine t p = do
+  let p' = p `mappend` toolsHelp t p
+  args <- getEffectiveArgs p'
+  case runPref (parser p') args of
+    Left err -> printHelp (argError t err)
+    Right x -> x
+
+----------------------------------------------------------------------
+-- Help screens.
+
+printHelp :: [String] -> IO a
+printHelp xs = do
+  mapM_ putStrLn xs
+  exitWith (ExitFailure 1)
+
+argError :: Tool -> String -> [String]
+argError t err = [
+  greeting t,
+  "Error in arguments:",
+  err,
+  "Try --help."
+  ]
+
+toolsHelp :: Tool -> ToolParser a -> ToolParser a
+toolsHelp t0 p = tool (Tool "--help" "--help" "0") p'
+  where help = concat [
+          [greeting t0],
+          usage t0 "<toolname> ",
+          ["<toolname> can be any of the following:"],
+          concat [ justify (toolProgName t) [toolHelp t] | t <- descr p ]
+          ]
+        help' = [
+          greeting t0,
+          "Error in arguments:",
+          "Didn't expect any arguments after --help.",
+          "Try " ++ toolProgName t0 ++ " <toolname> --help if you want help for a particular tool."
+          ]
+        p' = Annotated [] (ParParser (printHelp help) (const (Yes 1 notEmpty)))
+        notEmpty = ParParser (printHelp help') (const (Yes 1 notEmpty))
+
+help :: Tool -> OptionParser a -> [String]
+help t p = concat [
+  [greeting t],
+  usage t "",
+  ["<option> can be any of the following:"],
+  concat [ justify ("--" ++ flagName f ++ " " ++ flagArgs f) (flagHelp f) | f <- descr p ]
+  ]
+
+greeting :: Tool -> String
+greeting t = toolName t ++ ", version " ++ toolVersion t ++ ", 2011-10-04."
+
+usage :: Tool -> String -> [String]
+usage t opts = [
+  "Usage: " ++ toolProgName t ++ " " ++ opts ++ "<option>* <file>*",
+  "",
+  "<file> should be in TPTP format.",
+  ""
+  ]
+
+justify :: String -> [String] -> [String]
+justify name help = ["", "  " ++ name] ++ map ("    " ++) help
