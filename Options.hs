@@ -158,6 +158,19 @@ runPar p xs@(x:_) =
     No _ -> Left ("Didn't recognise option " ++ x)
     Error err -> Left err
 
+awaitP :: (String -> Bool) -> a -> (String -> [String] -> ParseResult a) -> ParParser a
+awaitP p def par = ParParser (return def) f
+  where f (x:xs) | p x =
+          case par x xs of
+            Yes n r -> Yes (n+1) r
+            No _ ->
+              error "Options.await: got No (internal error)"
+            Error err -> Error err
+        f _ = No (awaitP p def par)
+
+await :: String -> a -> ([String] -> ParseResult a) -> ParParser a
+await flag def f = awaitP (\x -> "--" ++ flag == x) def (const f)
+
 data Flag = Flag
   { flagName :: String,
     flagGroup :: String,
@@ -165,30 +178,25 @@ data Flag = Flag
     flagArgs :: String } deriving Show
 
 -- From a flag name and and argument parser, produce an OptionParser.
--- This is icky: would be nicer with some pretty combinators.
 flag :: String -> [String] -> a -> ArgParser a -> OptionParser a
 flag name help def (Annotated desc (SeqParser args f)) =
-  Annotated [desc'] (ParParser (return def) g)
+  Annotated [desc'] (await name def g)
   where desc' = Flag name "Common options" help desc
-        g (x:xs)
-          | x == "--" ++ name =
-            case f xs of
-              Left err -> Error ("Error in option --" ++ name ++ ": " ++ err)
-              Right y -> Yes (args+1) (pure y <* noFlag)
-        g _ = No (ParParser (return def) g)
+        g xs =
+          case f xs of
+            Left err -> Error ("Error in option --" ++ name ++ ": " ++ err)
+            Right y -> Yes args (pure y <* noFlag)
         -- Give an error if the flag is repeated.
-        noFlag = ParParser (return ()) f
-          where f (x:_) | x == "--" ++ name =
-                  Error ("Option --" ++ name ++ " occurred twice")
-                f _ = No noFlag
+        noFlag =
+          await name ()
+            (const (Error ("Option --" ++ name ++ " occurred twice")))
 
 -- Read filenames from the command line.
 filenames :: OptionParser [String]
 filenames = Annotated [] (from [])
-  where from xs = ParParser (return xs) (f xs)
-        f xs (y:ys)
-          | not ("--" `isPrefixOf` y) = Yes 1 (from (xs ++ [y]))
-        f xs _ = No (from xs)
+  where from xs = awaitP p xs (f xs)
+        p x = not ("--" `isPrefixOf` x)
+        f xs y ys = Yes 1 (from (xs ++ [y]))
 
 -- Take a value from the environment.
 io :: IO a -> OptionParser a
@@ -238,10 +246,9 @@ tool t p =
   Annotated [t] (PrefixParser f)
   where f x | x == toolProgName t = Just (parser p <* helpParser)
         f _ = Nothing
-        helpParser = ParParser (return ()) f'
-          where f' ("--help":_) = Yes 1 ph
-                f' _ = No helpParser
-        ph = ParParser (printHelp (help t p)) (const (No ph))
+        helpParser =
+          await "help" ()
+            (const (Yes 0 (parser (io (printHelp (help t p))))))
 
 -- Use the program name as a tool name if possible.
 getEffectiveArgs :: ToolParser a -> IO [String]
@@ -291,7 +298,7 @@ toolsHelp t0 p = tool (Tool "--help" "--help" "0") p'
           "Try " ++ toolProgName t0 ++ " <toolname> --help if you want help for a particular tool."
           ]
         p' = Annotated [] (ParParser (printHelp help) (const (Yes 1 notEmpty)))
-        notEmpty = ParParser (printHelp help') (const (Yes 1 notEmpty))
+        notEmpty = parser (io (printHelp help'))
 
 help :: Tool -> OptionParser a -> [String]
 help t p = concat [
