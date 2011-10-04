@@ -10,7 +10,7 @@ import Control.Monad
 import Control.Applicative
 import Clausify
 import TPTP.ParseProblem
-import Monotonox.Monotonicity
+import Monotonox.Monotonicity hiding (guards)
 import Monotonox.ToFOF
 import System.Exit
 import TPTP.FindFile
@@ -52,22 +52,30 @@ clausifyIO flags prob = do
   return cs
 
 toFofBox :: OptionParser (Problem Form -> IO (Problem Form))
-toFofBox = toFofIO <$> clausifyBox <*> tagsBox
+toFofBox = toFofIO <$> clausifyBox <*> schemeBox
 
 toFofIO :: (Problem Form -> IO (Problem Clause)) -> Scheme -> Problem Form -> IO (Problem Form)
 toFofIO clausify scheme f = do
   cs <- clausify f
+  putStrLn "Monotonicity analysis..."
   m <- monotone (map what (open cs))
-  let isMonotone O = True
-      isMonotone ty =
+  let isMonotone ty =
         case NameMap.lookup (name ty) m of
           Just (_ ::: Nothing) -> False
           Just (_ ::: Just _) -> True
-          Nothing  -> error "Toolbox.toFofIO: type not found (internal error)"
+          Nothing  -> True -- can happen if clausifier removed all clauses about a type
   return (translate scheme isMonotone f)
 
-tagsBox :: OptionParser Scheme
-tagsBox = tags <$> tagsFlags
+schemeBox :: OptionParser Scheme
+schemeBox =
+  choose <$> tagsFlags <*> 
+  flag "encoding"
+    ["Which type encoding to use.",
+     "Default: --encoding guards"]
+    "guards"
+    (argOption ["guards", "tags"])
+  where choose flags "guards" = guards
+        choose flags "tags" = tags flags
 
 monotonicityBox :: OptionParser (Problem Clause -> IO ())
 monotonicityBox = pure monotonicity

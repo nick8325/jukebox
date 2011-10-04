@@ -215,9 +215,7 @@ simple a                    = a
 -- perform some easy algebraic simplifications
 simplify t@Literal{} = t
 simplify (Connective c t u) = simplify (connective c t u)
-simplify (Not (Literal l)) = Literal (neg l)
-simplify (Not (Not t)) = simplify t
-simplify (Not t) = Not (simplify t)
+simplify (Not t) = simplify (positive (Not t))
 simplify (And ts) = S.fold (/\) id true (fmap simplify ts)
 simplify (Or ts) = S.fold (\/) id false (fmap simplify ts)
 simplify (Equiv t u) = equiv (simplify t) (simplify u)

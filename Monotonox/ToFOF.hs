@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 module Monotonox.ToFOF where
 
-import Clausify(split, removeEquivAndMiniscope, run)
+import Clausify(split, removeEquiv, run, withName)
 import Name
 import qualified NameMap
 import Form
@@ -12,13 +12,13 @@ import Control.Monad hiding (guard)
 data Scheme = Scheme {
   makeFunction :: Type -> NameM Function,
   selfAxioms :: Bool,
-  scheme1 :: (Type -> Function) -> Scheme1
+  scheme1 :: (Type -> Bool) -> (Type -> Function) -> Scheme1
   }
 
 data Scheme1 = Scheme1 {
   forAll :: Bind Form -> Form,
   equals :: Term -> Term -> Form,
-  axiom :: (Type -> Bool) -> Function -> NameM Form
+  axiom :: Function -> NameM Form
   }
 
 guard :: Scheme1 -> (Type -> Bool) -> Input Form -> Input Form
@@ -52,10 +52,10 @@ translate1 scheme mono f = close f $ \inps -> do
         case NameMap.lookup (name ty) typeMap of
           Just (_ ::: f) -> f
           Nothing -> error "ToFOF.translate: type not found (internal error)"
-      scheme1' = scheme1 scheme lookupType
+      scheme1' = scheme1 scheme mono lookupType
   axioms <-
     fmap (split . simplify . ForAll . bind . foldr (/\) true)
-      (mapM (axiom scheme1' mono) (funcs ++ concat [ typeFuncs | selfAxioms scheme ]))
+      (mapM (axiom scheme1') (funcs ++ concat [ typeFuncs | selfAxioms scheme ]))
   return $
     [ Input (BS.pack ("types" ++ show i)) Axiom axiom | (axiom, i) <- zip axioms [1..] ] ++
     map (guard scheme1' mono) inps
@@ -64,7 +64,7 @@ translate scheme mono f =
   let f' =
         close f $ \inps -> do
           forM inps $ \(Input tag kind f) -> do
-            let prepare f = fmap (foldr (/\) true) (run (removeEquivAndMiniscope tag f))
+            let prepare f = fmap (foldr (/\) true) (run (withName tag (removeEquiv (simplify f))))
             fmap (Input tag kind) $
               case kind of
                 Axiom -> prepare f
@@ -76,38 +76,86 @@ translate scheme mono f =
 tagsFlags :: OptionParser Bool
 tagsFlags =
   bool "more-axioms"
-    ["Add extra typing axioms for function arguments.",
+    ["Add extra typing axioms for function arguments,",
+     "when using typing guards.",
      "These are unnecessary for completeness but may help (or hinder!) the prover."]
 
 tags :: Bool -> Scheme
 tags moreAxioms = Scheme
   { makeFunction = \ty -> do
-      name <- newName (BS.append (BS.pack "tag_") (baseName ty))
+      name <- newName (BS.append (BS.pack "to_") (baseName ty))
       return (name ::: FunType [ty] ty),
     selfAxioms = moreAxioms,
     scheme1 = tags1 moreAxioms }
 
-tags1 :: Bool -> (Type -> Function) -> Scheme1
-tags1 moreAxioms fs = Scheme1
+tags1 :: Bool -> (Type -> Bool) -> (Type -> Function) -> Scheme1
+tags1 moreAxioms mono fs = Scheme1
   { forAll = ForAll,
     equals =
       \t u ->
         let protect t@Var{} = fs (typ t) :@: [t]
             protect t = t
         in Literal (Pos (protect t :=: protect u)),
-    axiom = tagsAxiom moreAxioms fs }
+    axiom = tagsAxiom moreAxioms mono fs }
 
-tagsAxiom :: Bool -> (Type -> Function) -> (Type -> Bool) -> Function -> NameM Form
-tagsAxiom moreAxioms fs mono f@(_ ::: FunType args res) = do
+tagsAxiom :: Bool -> (Type -> Bool) -> (Type -> Function) -> Function -> NameM Form
+tagsAxiom moreAxioms mono fs f@(_ ::: FunType args res) = do
   vs <- forM args $ \ty -> do
     n <- newName "X"
     return (Var (n ::: ty))
   let t = f :@: vs
       at n f xs = take n xs ++ [f (xs !! n)] ++ drop (n+1) xs
       tag t = fs (typ t) :@: [t]
-      equate t' | mono (typ t) = true
-                | otherwise = Literal (Pos (t :=: t'))
-      ts = tag t:[ f :@: at n tag vs
-                 | moreAxioms,
-                   n <- [0..length vs-1] ]
+      equate (ty, t') | mono ty = true
+                      | otherwise = t `eq` t'
+      t `eq` u | typ t == O = Literal (Pos (Tru t)) `Equiv` Literal (Pos (Tru u))
+               | otherwise = Literal (Pos (t :=: u))
+      ts = (typ t, tag t):
+           [ (typ (vs !! n), f :@: at n tag vs)
+           | moreAxioms,
+             n <- [0..length vs-1] ]
   return (foldr (/\) true (map equate ts))
+
+-- Typing predicates.
+
+guards :: Scheme
+guards = Scheme
+  { makeFunction = \ty -> do
+      name <- newName (BS.append (BS.pack "is_") (baseName ty))
+      return (name ::: FunType [ty] O),
+    selfAxioms = False,
+    scheme1 = guards1 }
+
+guards1 :: (Type -> Bool) -> (Type -> Function) -> Scheme1
+guards1 mono ps = Scheme1
+  { forAll = \(Bind vs f) ->
+       let bound = foldr (/\) true (map guard (NameMap.toList vs))
+           guard v | mono (typ v) = true
+                   | not (naked True v f) = true
+                   | otherwise = Literal (Pos (Tru (ps (typ v) :@: [Var v])))
+       in ForAll (Bind vs (simplify (Not bound) \/ f)),
+    equals = \t u -> Literal (Pos (t :=: u)),
+    axiom = guardsAxiom mono ps }
+
+naked :: Symbolic a => Bool -> Variable -> a -> Bool
+naked pos v f =
+  case (typeRep f, f, unpack f) of
+    (FormRep, Not f, _) -> naked (not pos) v f
+    (SignedRep, Pos f, _) -> naked pos v f
+    (SignedRep, Neg f, _) -> naked (not pos) v f
+    (AtomicRep, t :=: u, _) | pos -> t == Var v || u == Var v
+    (BindRep, Bind vs f, _) -> not (NameMap.member v vs) && naked pos v f
+    (_, _, Const _) -> False
+    (_, _, Unary _ x) -> naked pos v x
+    (_, _, Binary _ x y) -> naked pos v x || naked pos v y
+
+guardsAxiom :: (Type -> Bool) -> (Type -> Function) -> Function -> NameM Form
+guardsAxiom mono ps f@(_ ::: FunType args res) = do
+  vs <- forM args $ \ty -> do
+    n <- newName "X"
+    return (Var (n ::: ty))
+  if mono res
+    then return true
+    else return (ForAll (bind (Literal (Pos (Tru (ps res :@: [f :@: vs]))))))
+
+-- fixme add ?[X]: p(X).

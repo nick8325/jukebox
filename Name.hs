@@ -122,8 +122,8 @@ uniquify xs = f
       xs
     f x = combine (base x) b
       where
-        b = Map.findWithDefault (error "Name.uniquify: name not found") x
-            (Map.findWithDefault (error "Name.uniquify: name not found") (baseName x) baseMap)
+        b = Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") x
+            (Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") (baseName x) baseMap)
     combine s 0 = s
     combine s n = disambiguate (BS.append s (BS.pack (show n)))
     disambiguate s
