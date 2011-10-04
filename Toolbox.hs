@@ -13,13 +13,14 @@ import TPTP.ParseProblem
 import Monotonox.Monotonicity
 import System.Exit
 import TPTP.FindFile
+import Text.PrettyPrint.HughesPJ
 
 (=>>) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
 f =>> g = (>=>) <$> f <*> g
 infixl 1 =>> -- same as >=>
 
-allFilesTool :: Tool -> OptionParser ((FilePath -> IO ()) -> IO ())
-allFilesTool t = flip (allFiles t) <$> filenames
+allFilesBox :: Tool -> OptionParser ((FilePath -> IO ()) -> IO ())
+allFilesBox t = flip (allFiles t) <$> filenames
 
 allFiles :: Tool -> (FilePath -> IO ()) -> [FilePath] -> IO ()
 allFiles t _ [] = do
@@ -28,8 +29,8 @@ allFiles t _ [] = do
   exitWith (ExitFailure 1)
 allFiles _ f xs = mapM_ f xs
 
-parseProblemTool :: OptionParser (FilePath -> IO (Problem Form))
-parseProblemTool = parseProblemIO <$> findFileFlags
+parseProblemBox :: OptionParser (FilePath -> IO (Problem Form))
+parseProblemBox = parseProblemIO <$> findFileFlags
 
 parseProblemIO :: [FilePath] -> FilePath -> IO (Problem Form)
 parseProblemIO dirs f = do
@@ -40,8 +41,8 @@ parseProblemIO dirs f = do
       exitWith (ExitFailure 1)
     Right x -> return x
 
-clausifyTool :: OptionParser (Problem Form -> IO (Problem Clause))
-clausifyTool = clausifyIO <$> clausifyFlags
+clausifyBox :: OptionParser (Problem Form -> IO (Problem Clause))
+clausifyBox = clausifyIO <$> clausifyFlags
 
 clausifyIO :: ClausifyFlags -> Problem Form -> IO (Problem Clause)
 clausifyIO flags prob = do
@@ -49,8 +50,8 @@ clausifyIO flags prob = do
   let !cs = close (clausify flags prob) (\(cs, css) -> return [ Input (BS.pack "foo") Axiom c | c <- cs ++ concat (take 1 css) ])
   return cs
 
-monotonicityTool :: OptionParser (Problem Clause -> IO ())
-monotonicityTool = pure monotonicity
+monotonicityBox :: OptionParser (Problem Clause -> IO ())
+monotonicityBox = pure monotonicity
 
 monotonicity :: Problem Clause -> IO ()
 monotonicity cs = do
@@ -66,3 +67,9 @@ monotonicity cs = do
             CopyExtend -> return ()
             TrueExtend -> putStrLn ("  " ++ BS.unpack (baseName p) ++ " true-extended")
             FalseExtend -> putStrLn ("  " ++ BS.unpack (baseName p) ++ " false-extended")
+
+prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (Problem a -> IO ())
+prettyPrintBox = pure prettyPrintIO
+
+prettyPrintIO :: (Symbolic a, Pretty a) => Problem a -> IO ()
+prettyPrintIO prob = putStrLn (render (prettyProblem "tff" Normal prob))

@@ -244,7 +244,7 @@ runPref (PrefixParser f) (x:xs) =
 tool :: Tool -> OptionParser a -> ToolParser a
 tool t p =
   Annotated [t] (PrefixParser f)
-  where f x | x == toolProgName t = Just (parser p <* helpParser)
+  where f x | x == toolProgName t = Just (helpParser *> parser p)
         f _ = Nothing
         helpParser =
           await "help" ()
@@ -261,7 +261,7 @@ getEffectiveArgs (Annotated tools _) = do
 
 parseCommandLine :: Tool -> ToolParser a -> IO a
 parseCommandLine t p = do
-  let p' = p `mappend` toolsHelp t p
+  let p' = toolsHelp t p `mappend` p
   args <- getEffectiveArgs p'
   case runPref (parser p') args of
     Left err -> printHelp (argError t err)

@@ -1,6 +1,6 @@
 -- Pretty-printing of formulae. WARNING: icky code inside!
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances #-}
-module TPTP.Print(prettyShow, chattyShow, prettyProblem, Level(..))
+module TPTP.Print(prettyShow, chattyShow, prettyProblem, Level(..), Pretty)
        where
 
 import qualified Data.ByteString.Char8 as BS
