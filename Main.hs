@@ -6,16 +6,16 @@ import Control.Applicative
 import Data.Monoid
 import Toolbox
 
-tools = mconcat [monotonox, clausify]
+tools = mconcat [tofof, clausify]
 
-monotonox = tool info pipeline
+tofof = tool info pipeline
   where
-    info = Tool "Monotonox" "1" "Monotonicity analysis"
+    info = Tool "ToFOF" "1" "Translate from TFF to FOF"
     pipeline =
       allFilesBox info <*>
         (parseProblemBox =>>
-         clausifyBox =>>
-         monotonicityBox)
+         toFofBox =>>
+         prettyPrintBox "fof")
 
 clausify = tool info pipeline
   where
@@ -24,6 +24,6 @@ clausify = tool info pipeline
       allFilesBox info <*>
         (parseProblemBox =>>
          clausifyBox =>>
-         prettyPrintBox)
+         prettyPrintBox "cnf")
 
 main = join (parseCommandLine (Tool "Jukebox" "1" undefined) tools)

@@ -53,7 +53,6 @@ solve :: (Ord a, Hashable a) => [Signed a] -> Sat1 a Bool
 solve xs = do
   s <- Sat1 ask
   ls <- mapM lit xs
-  liftIO (putStrLn "solving")
   liftIO (MiniSat.solve s ls)
 
 model :: (Ord a, Hashable a) => Sat1 a (a -> Bool)

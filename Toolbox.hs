@@ -11,6 +11,7 @@ import Control.Applicative
 import Clausify
 import TPTP.ParseProblem
 import Monotonox.Monotonicity
+import Monotonox.ToFOF
 import System.Exit
 import TPTP.FindFile
 import Text.PrettyPrint.HughesPJ
@@ -50,6 +51,24 @@ clausifyIO flags prob = do
   let !cs = close (clausify flags prob) (\(cs, css) -> return [ Input (BS.pack "foo") Axiom c | c <- cs ++ concat (take 1 css) ])
   return cs
 
+toFofBox :: OptionParser (Problem Form -> IO (Problem Form))
+toFofBox = toFofIO <$> clausifyBox <*> tagsBox
+
+toFofIO :: (Problem Form -> IO (Problem Clause)) -> Scheme -> Problem Form -> IO (Problem Form)
+toFofIO clausify scheme f = do
+  cs <- clausify f
+  m <- monotone (map what (open cs))
+  let isMonotone O = True
+      isMonotone ty =
+        case NameMap.lookup (name ty) m of
+          Just (_ ::: Nothing) -> False
+          Just (_ ::: Just _) -> True
+          Nothing  -> error "Toolbox.toFofIO: type not found (internal error)"
+  return (translate scheme isMonotone f)
+
+tagsBox :: OptionParser Scheme
+tagsBox = tags <$> tagsFlags
+
 monotonicityBox :: OptionParser (Problem Clause -> IO ())
 monotonicityBox = pure monotonicity
 
@@ -68,15 +87,15 @@ monotonicity cs = do
             TrueExtend -> putStrLn ("  " ++ BS.unpack (baseName p) ++ " true-extended")
             FalseExtend -> putStrLn ("  " ++ BS.unpack (baseName p) ++ " false-extended")
 
-prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (Problem a -> IO ())
-prettyPrintBox = prettyPrintIO <$> prettyPrintFlags
+prettyPrintBox :: (Symbolic a, Pretty a) => String -> OptionParser (Problem a -> IO ())
+prettyPrintBox kind = prettyPrintIO kind <$> prettyPrintFlags
 
 prettyPrintFlags =
   flag "output"
-    ["Where to write the clausified problem.",
+    ["Where to write the output.",
      "Default: stdout"]
-    "/dev/stdout"
-    argFile
+    putStr
+    (fmap writeFile argFile)
 
-prettyPrintIO :: (Symbolic a, Pretty a) => FilePath -> Problem a -> IO ()
-prettyPrintIO file prob = writeFile file (render (prettyProblem "tff" Normal prob))
+prettyPrintIO :: (Symbolic a, Pretty a) => String -> (String -> IO ()) -> Problem a -> IO ()
+prettyPrintIO kind write prob = write (render (prettyProblem kind Normal prob) ++ "\n")

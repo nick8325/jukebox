@@ -106,11 +106,17 @@ split p =
 ----------------------------------------------------------------------
 -- core clausification algorithm
 
-clausForm :: BS.ByteString -> Form -> M [Clause]
-clausForm s p =
+removeEquivAndMiniscope :: BS.ByteString -> Form -> M [Form]
+removeEquivAndMiniscope s p =
   withName s $
     do miniscoped      <- miniscope . check . simplify                      . check $ p
        noEquivPs       <- removeEquiv                                       . check $ miniscoped
+       return noEquivPs
+
+clausForm :: BS.ByteString -> Form -> M [Clause]
+clausForm s p =
+  withName s $
+    do noEquivPs       <- removeEquivAndMiniscope s                         . check $ p
        noExistsPs      <- mapM removeExists                                 . check $ noEquivPs
        noExpensiveOrPs <- fmap concat . mapM removeExpensiveOr              . check $ noExistsPs
        noForAllPs      <- lift . lift . mapM uniqueNames                    . check $ noExpensiveOrPs

@@ -238,9 +238,7 @@ data Tool = Tool
     toolHelp :: String }
 
 toolProgName :: Tool -> String
-toolProgName = small . toolName
-  where small (c:cs) = toLower c:cs
-        small [] = []
+toolProgName = map toLower . toolName
 
 newtype PrefixParser a = PrefixParser (String -> Maybe (ParParser a))
 
