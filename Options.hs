@@ -126,7 +126,11 @@ data ParseResult a
     -- No x: didn't understand this flag, continue parsing with x
   | No (ParParser a)
     -- Error
-  | Error String
+  | Error Error
+
+data Error =
+    Mistake String
+  | Usage [String]
 
 instance Functor ParParser where
   fmap f x = pure f <*> x
@@ -150,12 +154,26 @@ instance Applicative ParseResult where
   No x <*> Yes n r = Yes n (x <*> r)
   No f <*> No x = No (f <*> x)
 
-runPar :: ParParser a -> [String] -> Either String (IO a)
+class MapError a where
+  mapError :: (Error -> Error) -> a -> a
+
+instance MapError (p a) => MapError (Annotated d p a) where
+  mapError f (Annotated d v) = Annotated d (mapError f v)
+
+instance MapError (ParParser a) where
+  mapError f (ParParser v g) = ParParser v (mapError f . g)
+
+instance MapError (ParseResult a) where
+  mapError f (Yes n r) = Yes n (mapError f r)
+  mapError f (No r) = No (mapError f r)
+  mapError f (Error e) = Error (f e)
+
+runPar :: ParParser a -> [String] -> Either Error (IO a)
 runPar p [] = Right (val p)
 runPar p xs@(x:_) =
   case peek p xs of
     Yes n p' -> runPar p' (drop n xs)
-    No _ -> Left ("Didn't recognise option " ++ x)
+    No _ -> Left (Mistake ("Didn't recognise option " ++ x))
     Error err -> Left err
 
 awaitP :: (String -> Bool) -> a -> (String -> [String] -> ParseResult a) -> ParParser a
@@ -184,19 +202,19 @@ flag name help def (Annotated desc (SeqParser args f)) =
   where desc' = Flag name "Common options" help desc
         g xs =
           case f xs of
-            Left err -> Error ("Error in option --" ++ name ++ ": " ++ err)
+            Left err -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
             Right y -> Yes args (pure y <* noFlag)
         -- Give an error if the flag is repeated.
         noFlag =
           await name ()
-            (const (Error ("Option --" ++ name ++ " occurred twice")))
+            (const (Error (Mistake ("Option --" ++ name ++ " occurred twice"))))
 
 -- Read filenames from the command line.
 filenames :: OptionParser [String]
 filenames = Annotated [] (from [])
   where from xs = awaitP p xs (f xs)
         p x = not ("--" `isPrefixOf` x)
-        f xs y ys = Yes 1 (from (xs ++ [y]))
+        f xs y ys = Yes 0 (from (xs ++ [y]))
 
 -- Take a value from the environment.
 io :: IO a -> OptionParser a
@@ -234,21 +252,21 @@ instance Monoid (PrefixParser a) where
   PrefixParser f `mappend` PrefixParser g =
     PrefixParser (\xs -> f xs `mplus` g xs)
 
-runPref :: PrefixParser a -> [String] -> Either String (IO a)
-runPref _ [] = Left "Expected a tool name"
+runPref :: PrefixParser a -> [String] -> Either Error (IO a)
+runPref _ [] = Left (Mistake "Expected a tool name")
 runPref (PrefixParser f) (x:xs) =
   case f x of
-    Nothing -> Left ("No such tool " ++ x)
+    Nothing -> Left (Mistake ("No such tool " ++ x))
     Just p -> runPar p xs
 
 tool :: Tool -> OptionParser a -> ToolParser a
 tool t p =
   Annotated [t] (PrefixParser f)
-  where f x | x == toolProgName t = Just (helpParser *> parser p)
+  where f x | x == toolProgName t = Just (mapError err (parser p <* helpParser))
         f _ = Nothing
-        helpParser =
-          await "help" ()
-            (const (Yes 0 (parser (io (printHelp (help t p))))))
+        err (Mistake x) = Usage (argError t x)
+        err (Usage x) = Usage x
+        helpParser = await "help" () (const (Error (Usage (help t p))))
 
 -- Use the program name as a tool name if possible.
 getEffectiveArgs :: ToolParser a -> IO [String]
@@ -264,7 +282,8 @@ parseCommandLine t p = do
   let p' = toolsHelp t p `mappend` p
   args <- getEffectiveArgs p'
   case runPref (parser p') args of
-    Left err -> printHelp (argError t err)
+    Left (Mistake err) -> printHelp (argError t err)
+    Left (Usage err) -> printHelp err
     Right x -> x
 
 ----------------------------------------------------------------------
@@ -297,8 +316,7 @@ toolsHelp t0 p = tool (Tool "--help" "--help" "0") p'
           "Didn't expect any arguments after --help.",
           "Try " ++ toolProgName t0 ++ " <toolname> --help if you want help for a particular tool."
           ]
-        p' = Annotated [] (ParParser (printHelp help) (const (Yes 1 notEmpty)))
-        notEmpty = parser (io (printHelp help'))
+        p' = Annotated [] (ParParser (printHelp help) (const (Error (Usage help'))))
 
 help :: Tool -> OptionParser a -> [String]
 help t p = concat [
