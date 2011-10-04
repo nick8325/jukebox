@@ -69,7 +69,14 @@ monotonicity cs = do
             FalseExtend -> putStrLn ("  " ++ BS.unpack (baseName p) ++ " false-extended")
 
 prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (Problem a -> IO ())
-prettyPrintBox = pure prettyPrintIO
+prettyPrintBox = prettyPrintIO <$> prettyPrintFlags
 
-prettyPrintIO :: (Symbolic a, Pretty a) => Problem a -> IO ()
-prettyPrintIO prob = putStrLn (render (prettyProblem "tff" Normal prob))
+prettyPrintFlags =
+  flag "output"
+    ["Where to write the clausified problem.",
+     "Default: stdout"]
+    "/dev/stdout"
+    argFile
+
+prettyPrintIO :: (Symbolic a, Pretty a) => FilePath -> Problem a -> IO ()
+prettyPrintIO file prob = writeFile file (render (prettyProblem "tff" Normal prob))
