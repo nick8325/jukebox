@@ -52,6 +52,7 @@ instance Show Type where
 instance Show L.Token where
   show L.Atom{L.name = x} = BS.unpack (escapeAtom x)
   show L.Defined{L.defined = x} = show x
+  show L.Var{L.name = x} = BS.unpack x
   show L.DistinctObject{L.name = x} = BS.unpack (quote '"' x)
   show L.Number{L.value = x} = show x
   show L.Punct{L.kind = x} = show x
