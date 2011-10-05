@@ -77,33 +77,35 @@ schemeBox =
   where choose flags "guards" = guards
         choose flags "tags" = tags flags
 
-monotonicityBox :: OptionParser (Problem Clause -> IO ())
+monotonicityBox :: OptionParser (Problem Clause -> IO String)
 monotonicityBox = pure monotonicity
 
-monotonicity :: Problem Clause -> IO ()
+monotonicity :: Problem Clause -> IO String
 monotonicity cs = do
   putStrLn "Monotonicity analysis..."
   m <- monotone (map what (open cs))
-  forM_ (NameMap.toList m) $ \(ty ::: x) ->
-    case x of
-      Nothing -> putStrLn (BS.unpack (baseName ty) ++ ": not monotone")
-      Just m -> do
-        putStrLn (prettyShow ty ++ ": monotone")
-        forM_ (NameMap.toList m) $ \(p ::: ext) ->
-          case ext of
-            CopyExtend -> return ()
-            TrueExtend -> putStrLn ("  " ++ BS.unpack (baseName p) ++ " true-extended")
-            FalseExtend -> putStrLn ("  " ++ BS.unpack (baseName p) ++ " false-extended")
+  let info (ty ::: Nothing) = [BS.unpack (baseName ty) ++ ": not monotone"]
+      info (ty ::: Just m) =
+        [prettyShow ty ++ ": monotone"] ++
+        concat
+        [ case ext of
+             CopyExtend -> []
+             TrueExtend -> ["  " ++ BS.unpack (baseName p) ++ " true-extended"]
+             FalseExtend -> ["  " ++ BS.unpack (baseName p) ++ " false-extended"]
+        | p ::: ext <- NameMap.toList m ]
+
+  return (unlines (concat (map info (NameMap.toList m))))
 
 prettyPrintBox :: (Symbolic a, Pretty a) => String -> OptionParser (Problem a -> IO ())
-prettyPrintBox kind = prettyPrintIO kind <$> prettyPrintFlags
+prettyPrintBox kind = prettyPrintIO kind <$> writeFileBox
 
-prettyPrintFlags =
+prettyPrintIO :: (Symbolic a, Pretty a) => String -> (String -> IO ()) -> Problem a -> IO ()
+prettyPrintIO kind write prob = write (render (prettyProblem kind Normal prob) ++ "\n")
+
+writeFileBox :: OptionParser (String -> IO ())
+writeFileBox =
   flag "output"
     ["Where to write the output.",
      "Default: stdout"]
     putStr
     (fmap writeFile argFile)
-
-prettyPrintIO :: (Symbolic a, Pretty a) => String -> (String -> IO ()) -> Problem a -> IO ()
-prettyPrintIO kind write prob = write (render (prettyProblem kind Normal prob) ++ "\n")

@@ -6,20 +6,30 @@ import Control.Applicative
 import Data.Monoid
 import Toolbox
 
-tools = mconcat [tofof, clausify]
+tools = mconcat [fof, cnf, monotonox]
 
-tofof = tool info pipeline
+fof = tool info pipeline
   where
-    info = Tool "ToFOF" "1" "Translate from TFF to FOF"
+    info = Tool "FOF" "1" "Translate from TFF to FOF"
     pipeline =
       allFilesBox info <*>
         (parseProblemBox =>>
          toFofBox =>>
          prettyPrintBox "fof")
 
-clausify = tool info pipeline
+monotonox = tool info pipeline
   where
-    info = Tool "Clausify" "1" "Clausify a problem"
+    info = Tool "Monotonox" "1" "Monotonicity analysis"
+    pipeline =
+      allFilesBox info <*>
+        (parseProblemBox =>>
+         clausifyBox =>>
+         monotonicityBox =>>
+         writeFileBox)
+
+cnf = tool info pipeline
+  where
+    info = Tool "CNF" "1" "Clausify a problem"
     pipeline =
       allFilesBox info <*>
         (parseProblemBox =>>
