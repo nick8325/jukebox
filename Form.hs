@@ -194,16 +194,20 @@ a     \/ b     = Or (S.Unit a `S.append` S.Unit b)
 
 -- remove Not from the root of a problem
 positive :: Form -> Form
-positive (Not (And as))             = Or (fmap nt as)
-positive (Not (Or as))              = And (fmap nt as)
-positive (Not (a `Equiv` b))        = nt a `Equiv` b
-positive (Not (Not a))              = positive a
-positive (Not (ForAll (Bind vs a))) = Exists (Bind vs (nt a))
-positive (Not (Exists (Bind vs a))) = ForAll (Bind vs (nt a))
-positive (Not (Literal l))          = Literal (neg l)
+positive (Not f) = notInwards f
 -- Some connectives are fairly not-ish
 positive (Connective c t u)         = positive (connective c t u)
-positive a                          = a
+positive f = f
+
+notInwards :: Form -> Form
+notInwards (And as)             = Or (fmap nt as)
+notInwards (Or as)              = And (fmap nt as)
+notInwards (a `Equiv` b)        = nt a `Equiv` b
+notInwards (Not a)              = positive a
+notInwards (ForAll (Bind vs a)) = Exists (Bind vs (nt a))
+notInwards (Exists (Bind vs a)) = ForAll (Bind vs (nt a))
+notInwards (Literal l)          = Literal (neg l)
+notInwards (Connective c t u)   = notInwards (connective c t u)
 
 -- remove Exists and Or from the top level of a formula
 simple :: Form -> Form
@@ -215,7 +219,7 @@ simple a                    = a
 -- perform some easy algebraic simplifications
 simplify t@Literal{} = t
 simplify (Connective c t u) = simplify (connective c t u)
-simplify (Not t) = simplify (positive (Not t))
+simplify (Not t) = simplify (notInwards t)
 simplify (And ts) = S.fold (/\) id true (fmap simplify ts)
 simplify (Or ts) = S.fold (\/) id false (fmap simplify ts)
 simplify (Equiv t u) = equiv (simplify t) (simplify u)
