@@ -16,19 +16,25 @@ import System.Exit
 import TPTP.FindFile
 import Text.PrettyPrint.HughesPJ
 
-(=>>) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
-f =>> g = (>=>) <$> f <*> g
-infixl 1 =>> -- same as >=>
+(=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
+f =>>= g = (>=>) <$> f <*> g
+infixl 1 =>>= -- same as >=>
 
-allFilesBox :: Tool -> OptionParser ((FilePath -> IO ()) -> IO ())
-allFilesBox t = flip (allFiles t) <$> filenames
+(=>>) :: (Monad m, Applicative f) => f (m a) -> f (m b) -> f (m b)
+x =>> y = (>>) <$> x <*> y
+infixl 1 =>> -- same as >>
 
-allFiles :: Tool -> (FilePath -> IO ()) -> [FilePath] -> IO ()
-allFiles t _ [] = do
-  putStrLn (greeting t)
+greetingBox :: Tool -> OptionParser (IO ())
+greetingBox t = pure (putStrLn (greeting t))
+
+allFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
+allFilesBox = flip allFiles <$> filenames
+
+allFiles :: (FilePath -> IO ()) -> [FilePath] -> IO ()
+allFiles _ [] = do
   putStrLn "No input files specified! Try --help."
   exitWith (ExitFailure 1)
-allFiles _ f xs = mapM_ f xs
+allFiles f xs = mapM_ f xs
 
 parseProblemBox :: OptionParser (FilePath -> IO (Problem Form))
 parseProblemBox = parseProblemIO <$> findFileFlags

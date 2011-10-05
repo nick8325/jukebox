@@ -90,7 +90,10 @@ prettyProblem family l prob = vcat (map typeDecl (S.unique (types prob')) ++
                                     map (prettyInput family l env) prob')
     where typeDecl ty | name ty `elem` open stdNames = empty
                       | otherwise = typeClause ty (text "$tType")
-          funcDecl (f ::: ty) = typeClause f (pPrint 0 l env ty)
+          funcDecl (f ::: ty) | fof ty = empty
+                              | otherwise = typeClause f (pPrint 0 l env ty)
+          fof (FunType args res) = and [ name (typ arg) == nameI | arg <- args ] &&
+                                   name res `elem` [nameI, nameO]
           typeClause name ty = prettyClause "tff" "type" "type"
                                       (pPrint 0 l env name <+> colon <+> ty)
           env = uniquify (S.unique (names prob'))
@@ -131,7 +134,11 @@ instance Show Atomic where
   show = chattyShow
 
 instance Pretty Clause where
-  pPrint p l env (Clause (Bind _ ts)) = prettyConnective l p env "$false" "|" (map Literal ts)
+  pPrint p l env c@(Clause (Bind vs ts))
+    | and [ name (typ v) == nameI | v <- NameMap.toList vs ] =
+       prettyConnective l p env "$false" "|" (map Literal ts)
+    | otherwise =
+       pPrint p l env (toForm c)
 
 instance Show Clause where
   show = chattyShow

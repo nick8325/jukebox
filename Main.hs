@@ -13,9 +13,10 @@ fof = tool info pipeline
     info = Tool "fof" "Jukebox TFF-to-FOF translator" "1"
                 "Translate from TFF to FOF"
     pipeline =
-      allFilesBox info <*>
-        (parseProblemBox =>>
-         toFofBox =>>
+      greetingBox info =>>
+      allFilesBox <*>
+        (parseProblemBox =>>=
+         toFofBox =>>=
          prettyPrintBox "fof")
 
 monotonox = tool info pipeline
@@ -23,10 +24,11 @@ monotonox = tool info pipeline
     info = Tool "monotonox" "Monotonox" "1"
                 "Monotonicity analysis"
     pipeline =
-      allFilesBox info <*>
-        (parseProblemBox =>>
-         clausifyBox =>>
-         monotonicityBox =>>
+      greetingBox info =>>
+      allFilesBox <*>
+        (parseProblemBox =>>=
+         clausifyBox =>>=
+         monotonicityBox =>>=
          writeFileBox)
 
 cnf = tool info pipeline
@@ -34,9 +36,10 @@ cnf = tool info pipeline
     info = Tool "cnf" "Jukebox clausifier" "1"
                 "Clausify a problem"
     pipeline =
-      allFilesBox info <*>
-        (parseProblemBox =>>
-         clausifyBox =>>
+      greetingBox info =>>
+      allFilesBox <*>
+        (parseProblemBox =>>=
+         clausifyBox =>>=
          prettyPrintBox "cnf")
 
 jukebox = Tool "jukebox" "Jukebox" "1"
