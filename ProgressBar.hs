@@ -43,7 +43,7 @@ withProgressBar f = do
       spinny 1 = "\\\08"
       spinny 2 = "|\08"
       spinny 3 = "/\08"
-      put s = putStr s >> hFlush stdout
+      put s = hPutStr stderr s >> hFlush stderr
       tick = do
         s <- readIORef state
         pos <-

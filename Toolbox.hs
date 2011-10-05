@@ -13,6 +13,7 @@ import TPTP.ParseProblem
 import Monotonox.Monotonicity hiding (guards)
 import Monotonox.ToFOF
 import System.Exit
+import System.IO
 import TPTP.FindFile
 import Text.PrettyPrint.HughesPJ
 
@@ -25,14 +26,14 @@ x =>> y = (>>) <$> x <*> y
 infixl 1 =>> -- same as >>
 
 greetingBox :: Tool -> OptionParser (IO ())
-greetingBox t = pure (putStrLn (greeting t))
+greetingBox t = pure (hPutStrLn stderr (greeting t))
 
 allFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
 allFilesBox = flip allFiles <$> filenames
 
 allFiles :: (FilePath -> IO ()) -> [FilePath] -> IO ()
 allFiles _ [] = do
-  putStrLn "No input files specified! Try --help."
+  hPutStrLn stderr "No input files specified! Try --help."
   exitWith (ExitFailure 1)
 allFiles f xs = mapM_ f xs
 
@@ -44,7 +45,7 @@ parseProblemIO dirs f = do
   r <- parseProblem dirs f
   case r of
     Left err -> do
-      putStrLn err
+      hPutStrLn stderr err
       exitWith (ExitFailure 1)
     Right x -> return x
 
@@ -53,7 +54,7 @@ clausifyBox = clausifyIO <$> clausifyFlags
 
 clausifyIO :: ClausifyFlags -> Problem Form -> IO CNF
 clausifyIO flags prob = do
-  putStrLn "Clausifying problem..."
+  hPutStrLn stderr "Clausifying problem..."
   return $! clausify flags prob
 
 toFofBox :: OptionParser (Problem Form -> IO (Problem Form))
@@ -67,13 +68,13 @@ oneConjecture cnf = closedIO (close cnf f)
   where f (cs, []) = return (return cs)
         f (cs, [cs']) = return (return (cs ++ cs'))
         f _ = return $ do
-          putStrLn "Error: more than one conjecture found in input problem"
+          hPutStrLn stderr "Error: more than one conjecture found in input problem"
           exitWith (ExitFailure 1)
 
 toFofIO :: (Problem Form -> IO CNF) -> Scheme -> Problem Form -> IO (Problem Form)
 toFofIO clausify scheme f = do
   cs <- clausify f >>= oneConjecture
-  putStrLn "Monotonicity analysis..."
+  hPutStrLn stderr "Monotonicity analysis..."
   m <- monotone (map what (open cs))
   let isMonotone ty =
         case NameMap.lookup (name ty) m of
@@ -99,7 +100,7 @@ monotonicityBox = pure monotonicity
 
 monotonicity :: Problem Clause -> IO String
 monotonicity cs = do
-  putStrLn "Monotonicity analysis..."
+  hPutStrLn stderr "Monotonicity analysis..."
   m <- monotone (map what (open cs))
   let info (ty ::: Nothing) = [BS.unpack (baseName ty) ++ ": not monotone"]
       info (ty ::: Just m) =

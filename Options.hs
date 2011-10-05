@@ -9,6 +9,7 @@ import Data.List
 import Data.Monoid
 import System.Environment
 import System.Exit
+import System.IO
 
 ----------------------------------------------------------------------
 -- A parser of some kind annotated with a help text of some kind
@@ -283,7 +284,7 @@ parseCommandLine t p = do
 
 printHelp :: ExitCode -> [String] -> IO a
 printHelp code xs = do
-  mapM_ putStrLn xs
+  mapM_ (hPutStrLn stderr ) xs
   exitWith code
 
 argError :: Tool -> String -> [String]
