@@ -3,8 +3,16 @@ Version: 0
 Cabal-version: >= 1.2
 Build-type: Simple
 
+Extra-Source-Files: install-minisat gcc-static-minisat
+
+Flag static
+  description: Try linking against minisat statically (a hack!)
+  default: True
+
 Executable jukebox
   Main-is: Main.hs
   Build-depends: bytestring, base >= 4, array, mtl, parsec >= 3.1, containers, directory, filepath, bytestring-progress, pretty, hashmap, hashable, derive, minisat, binary, ghc-prim, zlib
   Build-tools: alex
   Other-modules: TPTP.Lexer
+  if flag(static)
+    Ghc-options: -pgml ./gcc-static-minisat

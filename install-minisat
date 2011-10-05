@@ -1,12 +1,13 @@
 #!/bin/sh
+set -e
 
 if [ $# != 0 ]; then
     echo install-minisat doesn\'t take any arguments: use environment variables instead
     exit 1
 fi
 
-if [ ! $prefix ]; then prefix=/usr/local; fi
-if [ ! $mode ]; then mode=global; fi
+if [ ! $prefix ]; then prefix=$(pwd)/minisat; fi
+if [ ! $mode ]; then mode=user; fi
 if [ x$mode = xglobal ]; then
     if [ ! $sudo ] && [ $USER != root ]; then sudo=sudo; fi
 else
@@ -29,5 +30,5 @@ make -C $dir/c
 $sudo make -C $dir/c install
 
 cd $dir/haskell && $sudo cabal install --extra-include-dirs=$prefix/include --extra-lib-dirs=$prefix/lib --$mode -p
-
-rm -r $dir -f
+$sudo rm -rf $dir/*/.git
+$sudo rm -r $dir
