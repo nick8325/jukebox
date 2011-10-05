@@ -68,14 +68,15 @@ toFofIO clausify scheme f = do
 
 schemeBox :: OptionParser Scheme
 schemeBox =
-  choose <$> tagsFlags <*> 
+  choose <$>
   flag "encoding"
     ["Which type encoding to use.",
      "Default: --encoding guards"]
     "guards"
     (argOption ["guards", "tags"])
-  where choose flags "guards" = guards
-        choose flags "tags" = tags flags
+  <*> tagsFlags
+  where choose "guards" flags = guards
+        choose "tags" flags = tags flags
 
 monotonicityBox :: OptionParser (Problem Clause -> IO String)
 monotonicityBox = pure monotonicity
