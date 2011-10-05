@@ -46,13 +46,16 @@ translate, translate1 :: Scheme -> (Type -> Bool) -> Problem Form -> Problem For
 translate1 scheme mono f = close f $ \inps -> do
   let tys = types inps
       funcs = functions inps
+      -- Hardly any use adding guards if there's only one type.
+      mono' | length tys == 1 = const True
+            | otherwise = mono
   typeFuncs <- mapM (makeFunction scheme) tys
   let typeMap = NameMap.fromList (zipWith (:::) tys typeFuncs)
       lookupType ty =
         case NameMap.lookup (name ty) typeMap of
           Just (_ ::: f) -> f
           Nothing -> error "ToFOF.translate: type not found (internal error)"
-      scheme1' = scheme1 scheme mono lookupType
+      scheme1' = scheme1 scheme mono' lookupType
   funcAxioms <- mapM (funcAxiom scheme1') funcs
   typeAxioms <- mapM (typeAxiom scheme1') tys
   let axioms =
@@ -60,7 +63,7 @@ translate1 scheme mono f = close f $ \inps -> do
           funcAxioms ++ typeAxioms
   return $
     [ Input (BS.pack ("types" ++ show i)) Axiom axiom | (axiom, i) <- zip axioms [1..] ] ++
-    map (guard scheme1' mono) inps
+    map (guard scheme1' mono') inps
 
 translate scheme mono f =
   let f' =
@@ -71,7 +74,8 @@ translate scheme mono f =
               case kind of
                 Axiom -> prepare f
                 Conjecture -> fmap nt (prepare (nt f))
-  in translate1 scheme mono f'
+      typeI = Type nameI (Finite 0) Infinite 0
+  in close (translate1 scheme mono f') (return . mapType (const typeI))
 
 -- Typing functions.
 

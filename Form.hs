@@ -511,3 +511,28 @@ checkBinder :: NameMap Variable -> Subst -> Subst
 checkBinder vs s | not debugging = s
                  | Map.null (free [ t | _ ::: t <- NameMap.toList s ] `Map.intersection` vs) = s
                  | otherwise = error "Form.checkBinder: capturing substitution"
+
+-- Apply a function to each type, while preserving sharing.
+mapType :: Symbolic a => (Type -> Type) -> a -> a
+mapType f x = aux x
+  where typeMap :: NameMap (Type ::: Type)
+        typeMap = NameMap.fromList [ ty ::: f ty | ty <- types x ]
+        lookupType = typ . flip NameMap.lookup_ typeMap
+        varMap :: NameMap Variable
+        varMap = NameMap.fromList [ n ::: lookupType ty | n ::: ty <- vars x ]
+        funMap :: NameMap Function
+        funMap = NameMap.fromList [ n ::: FunType (map lookupType args)
+                                                  (lookupType res)
+                                  | n ::: FunType args res <- functions x ]
+
+        aux :: Symbolic a => a -> a
+        aux x =
+          case (typeRep x, x, unpack x) of
+            (BindRep, Bind vs t, _) ->
+              -- keys of binder don't change
+              Bind (fmap (flip NameMap.lookup_ varMap) vs) (aux t)
+            (TermRep, Var x, _) -> Var (NameMap.lookup_ x varMap)
+            (TermRep, f :@: ts, _) -> NameMap.lookup_ f funMap :@: map aux ts
+            (_, _, Const _) -> x
+            (_, _, Unary f x) -> f (aux x)
+            (_, _, Binary f x y) -> f (aux x) (aux y)

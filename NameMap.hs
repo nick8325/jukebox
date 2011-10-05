@@ -1,4 +1,4 @@
-module NameMap(NameMap, lookup, insert, member, delete, (!), fromList, toList, singleton) where
+module NameMap(NameMap, lookup, lookup_, insert, member, delete, (!), fromList, toList, singleton) where
 
 import Prelude hiding (lookup)
 import Name
@@ -11,6 +11,12 @@ type NameMap a = Map Int64 a
 
 lookup :: Name -> NameMap a -> Maybe a
 lookup x m = Map.lookup (uniqueId x) m
+
+lookup_ :: Named a => a -> NameMap b -> b
+lookup_ x m =
+  case lookup (name x) m of
+    Nothing -> error "NameMap.lookup_: key not found"
+    Just y -> y
 
 insert :: Named a => a -> NameMap a -> NameMap a
 insert x m = Map.insert (uniqueId (name x)) x m
