@@ -10,7 +10,8 @@ tools = mconcat [fof, cnf, monotonox]
 
 fof = tool info pipeline
   where
-    info = Tool "FOF" "1" "Translate from TFF to FOF"
+    info = Tool "fof" "Jukebox TFF-to-FOF translator" "1"
+                "Translate from TFF to FOF"
     pipeline =
       allFilesBox info <*>
         (parseProblemBox =>>
@@ -19,7 +20,8 @@ fof = tool info pipeline
 
 monotonox = tool info pipeline
   where
-    info = Tool "Monotonox" "1" "Monotonicity analysis"
+    info = Tool "monotonox" "Monotonox" "1"
+                "Monotonicity analysis"
     pipeline =
       allFilesBox info <*>
         (parseProblemBox =>>
@@ -29,11 +31,15 @@ monotonox = tool info pipeline
 
 cnf = tool info pipeline
   where
-    info = Tool "CNF" "1" "Clausify a problem"
+    info = Tool "cnf" "Jukebox clausifier" "1"
+                "Clausify a problem"
     pipeline =
       allFilesBox info <*>
         (parseProblemBox =>>
          clausifyBox =>>
          prettyPrintBox "cnf")
 
-main = join (parseCommandLine (Tool "Jukebox" "1" undefined) tools)
+jukebox = Tool "jukebox" "Jukebox" "1"
+               "A first-order logic toolbox"
+
+main = join (parseCommandLine jukebox tools)

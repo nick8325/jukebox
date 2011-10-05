@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Options where
 
+import Control.Arrow((***))
 import Control.Applicative
 import Control.Monad(mplus)
 import Data.Char
@@ -38,7 +39,7 @@ type ArgDesc = String -- description, e.g. "<number>"
 -- Called SeqParser because <*> is sequential composition.
 data SeqParser a = SeqParser
   { args :: Int, -- How many arguments will be consumed
-    consume :: [String] -> Either String a }
+    consume :: [String] -> Either Error a }
 
 instance Functor SeqParser where
   fmap f (SeqParser a c) = SeqParser a (fmap f . c)
@@ -50,11 +51,11 @@ instance Applicative SeqParser where
 
 arg :: ArgDesc -> String -> (String -> Maybe a) -> ArgParser a
 arg desc err f = Annotated desc (SeqParser 1 c)
-  where c [] = Left err
-        c (x:_) | "--" `isPrefixOf` x = Left err
+  where c [] = Left (Mistake err)
+        c (x:_) | "--" `isPrefixOf` x = Left (Mistake err)
         c (x:_) =
           case f x of
-            Nothing -> Left err
+            Nothing -> Left (Mistake err)
             Just ok -> Right ok
 
 argNum :: (Read a, Num a) => ArgParser a
@@ -107,6 +108,10 @@ argList as = arg ("<" ++ concat (intersperse " | " as) ++ ">*") "expected an arg
     
     elts _ = Nothing
 
+-- A parser that always fails but produces an error message (useful for --help etc.)
+argUsage :: ExitCode -> [String] -> ArgParser a
+argUsage code err = Annotated [] (SeqParser 0 (const (Left (Usage code err))))
+
 ----------------------------------------------------------------------
 -- Parsing of whole command lines.
 
@@ -130,7 +135,7 @@ data ParseResult a
 
 data Error =
     Mistake String
-  | Usage [String]
+  | Usage ExitCode [String]
 
 instance Functor ParParser where
   fmap f x = pure f <*> x
@@ -153,20 +158,6 @@ instance Applicative ParseResult where
   Yes n r <*> No x = Yes n (r <*> x)
   No x <*> Yes n r = Yes n (x <*> r)
   No f <*> No x = No (f <*> x)
-
-class MapError a where
-  mapError :: (Error -> Error) -> a -> a
-
-instance MapError (p a) => MapError (Annotated d p a) where
-  mapError f (Annotated d v) = Annotated d (mapError f v)
-
-instance MapError (ParParser a) where
-  mapError f (ParParser v g) = ParParser v (mapError f . g)
-
-instance MapError (ParseResult a) where
-  mapError f (Yes n r) = Yes n (mapError f r)
-  mapError f (No r) = No (mapError f r)
-  mapError f (Error e) = Error (f e)
 
 runPar :: ParParser a -> [String] -> Either Error (IO a)
 runPar p [] = Right (val p)
@@ -202,7 +193,8 @@ flag name help def (Annotated desc (SeqParser args f)) =
   where desc' = Flag name "Common options" help desc
         g xs =
           case f xs of
-            Left err -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
+            Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
+            Left (Usage code err) -> Error (Usage code err)
             Right y -> Yes args (pure y <* noFlag)
         -- Give an error if the flag is repeated.
         noFlag =
@@ -233,17 +225,15 @@ inGroup x (Annotated fls f) = Annotated [fl{ flagGroup = x } | fl <- fls] f
 
 type ToolParser = Annotated [Tool] PrefixParser
 data Tool = Tool
-  { toolName :: String,
+  { toolProgName :: String,
+    toolName :: String,
     toolVersion :: String,
     toolHelp :: String }
 
-toolProgName :: Tool -> String
-toolProgName = map toLower . toolName
-
-newtype PrefixParser a = PrefixParser (String -> Maybe (ParParser a))
+newtype PrefixParser a = PrefixParser (String -> Maybe (Tool, ParParser a))
 
 instance Functor PrefixParser where
-  fmap f (PrefixParser g) = PrefixParser (fmap (fmap f) . g)
+  fmap f (PrefixParser g) = PrefixParser (fmap (id *** fmap f) . g)
 
 instance Monoid (PrefixParser a) where
   mempty = PrefixParser (const Nothing)
@@ -255,16 +245,20 @@ runPref _ [] = Left (Mistake "Expected a tool name")
 runPref (PrefixParser f) (x:xs) =
   case f x of
     Nothing -> Left (Mistake ("No such tool " ++ x))
-    Just p -> runPar p xs
+    Just (t, p) ->
+      case runPar p xs of
+        Left (Mistake x) -> Left (Usage (ExitFailure 1) (argError t x))
+        Left (Usage code x) -> Left (Usage code x)
+        Right x -> Right x
 
 tool :: Tool -> OptionParser a -> ToolParser a
 tool t p =
   Annotated [t] (PrefixParser f)
-  where f x | x == toolProgName t = Just (mapError err (parser p <* helpParser))
+  where f x | x == toolProgName t = Just (t, parser p')
         f _ = Nothing
-        err (Mistake x) = Usage (argError t x)
-        err (Usage x) = Usage x
-        helpParser = await "help" () (const (Error (Usage (help t p))))
+        p' = p <* versionParser <* helpParser
+        helpParser = flag "help" ["Show this help text."] () (argUsage ExitSuccess (help t p'))
+        versionParser = flag "version" ["Print the version number."] () (argUsage ExitSuccess [greeting t])
 
 -- Use the program name as a tool name if possible.
 getEffectiveArgs :: ToolParser a -> IO [String]
@@ -277,44 +271,49 @@ getEffectiveArgs (Annotated tools _) = do
 
 parseCommandLine :: Tool -> ToolParser a -> IO a
 parseCommandLine t p = do
-  let p' = toolsHelp t p `mappend` p
+  let p' = versionTool t `mappend` helpTool t p `mappend` p
   args <- getEffectiveArgs p'
   case runPref (parser p') args of
-    Left (Mistake err) -> printHelp (argError t err)
-    Left (Usage err) -> printHelp err
+    Left (Mistake err) -> printHelp (ExitFailure 1) (argError t err)
+    Left (Usage code err) -> printHelp code err
     Right x -> x
 
 ----------------------------------------------------------------------
 -- Help screens.
 
-printHelp :: [String] -> IO a
-printHelp xs = do
+printHelp :: ExitCode -> [String] -> IO a
+printHelp code xs = do
   mapM_ putStrLn xs
-  exitWith (ExitFailure 1)
+  exitWith code
 
 argError :: Tool -> String -> [String]
 argError t err = [
   greeting t,
-  "Error in arguments:",
-  err,
-  "Try --help."
+  err ++ ". Try --help."
   ]
 
-toolsHelp :: Tool -> ToolParser a -> ToolParser a
-toolsHelp t0 p = tool (Tool "--help" "--help" "0") p'
+usageTool :: Tool -> String -> [String] -> String -> ToolParser a
+usageTool t0 flag msg bit = tool (Tool flag' flag' flag' "0") p
+  where p = Annotated [] (ParParser (printHelp ExitSuccess msg)
+                                    (const (Error (Usage (ExitFailure 1) msg'))))
+        flag' = "--" ++ flag
+        msg' = [
+          greeting t0,
+          "Didn't expect any arguments after " ++ flag' ++ ".",
+          "Try " ++ toolProgName t0 ++ " <toolname> " ++ flag' ++ " if you want " ++ bit ++ " a particular tool."
+          ]
+
+versionTool :: Tool -> ToolParser a
+versionTool t0 = usageTool t0 "version" [greeting t0] "the version of"
+
+helpTool :: Tool -> ToolParser a -> ToolParser a
+helpTool t0 p = usageTool t0 "help" help "help for"
   where help = concat [
           [greeting t0],
           usage t0 "<toolname> ",
           ["<toolname> can be any of the following:"],
           concat [ justify (toolProgName t) [toolHelp t] | t <- descr p ]
           ]
-        help' = [
-          greeting t0,
-          "Error in arguments:",
-          "Didn't expect any arguments after --help.",
-          "Try " ++ toolProgName t0 ++ " <toolname> --help if you want help for a particular tool."
-          ]
-        p' = Annotated [] (ParParser (printHelp help) (const (Error (Usage help'))))
 
 help :: Tool -> OptionParser a -> [String]
 help t p = concat [
@@ -330,6 +329,7 @@ greeting t = toolName t ++ ", version " ++ toolVersion t ++ ", 2011-10-04."
 usage :: Tool -> String -> [String]
 usage t opts = [
   "Usage: " ++ toolProgName t ++ " " ++ opts ++ "<option>* <file>*",
+  toolHelp t ++ ".",
   "",
   "<file> should be in TPTP format.",
   ""

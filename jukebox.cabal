@@ -22,7 +22,7 @@ Executable jukebox
     Data.Derive.BinaryUnshared
     Data.Derive.Hashable
     Form
-    InferTypes
+    -- InferTypes
     Monotonox.Monotonicity
     Monotonox.ToFOF
     Name
