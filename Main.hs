@@ -28,6 +28,7 @@ monotonox = tool info pipeline
       allFilesBox <*>
         (parseProblemBox =>>=
          clausifyBox =>>=
+         oneConjectureBox =>>=
          monotonicityBox =>>=
          writeFileBox)
 
@@ -40,6 +41,7 @@ cnf = tool info pipeline
       allFilesBox <*>
         (parseProblemBox =>>=
          clausifyBox =>>=
+         oneConjectureBox =>>=
          prettyPrintBox "cnf")
 
 jukebox = Tool "jukebox" "Jukebox" "1"

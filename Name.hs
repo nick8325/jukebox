@@ -4,7 +4,7 @@ module Name(
   unsafeMakeName,
   (:::)(..), lhs, rhs,
   Named(..),
-  Closed, close, close_, open, closed0, stdNames, nameO, nameI, NameM, newName,
+  Closed, close, close_, closedIO, open, closed0, stdNames, nameO, nameI, NameM, newName,
   unsafeClose, maxIndex,
   uniquify) where
 
@@ -107,6 +107,11 @@ close Closed{ maxIndex = maxIndex, open = open } f =
 
 close_ :: Closed a -> NameM b -> Closed b
 close_ x m = close x (const m)
+
+closedIO :: Closed (IO a) -> IO (Closed a)
+closedIO Closed { maxIndex = maxIndex, open = open } = do
+  open' <- open
+  return Closed { maxIndex = maxIndex, open = open' }
 
 uniquify :: [Name] -> (Name -> BS.ByteString)
 uniquify xs = f

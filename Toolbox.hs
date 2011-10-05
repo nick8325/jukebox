@@ -48,21 +48,31 @@ parseProblemIO dirs f = do
       exitWith (ExitFailure 1)
     Right x -> return x
 
-clausifyBox :: OptionParser (Problem Form -> IO (Problem Clause))
+clausifyBox :: OptionParser (Problem Form -> IO CNF)
 clausifyBox = clausifyIO <$> clausifyFlags
 
-clausifyIO :: ClausifyFlags -> Problem Form -> IO (Problem Clause)
+clausifyIO :: ClausifyFlags -> Problem Form -> IO CNF
 clausifyIO flags prob = do
   putStrLn "Clausifying problem..."
-  let !cs = close (clausify flags prob) (\(cs, css) -> return [ Input (BS.pack "foo") Axiom c | c <- cs ++ concat (take 1 css) ])
-  return cs
+  return $! clausify flags prob
 
 toFofBox :: OptionParser (Problem Form -> IO (Problem Form))
 toFofBox = toFofIO <$> clausifyBox <*> schemeBox
 
-toFofIO :: (Problem Form -> IO (Problem Clause)) -> Scheme -> Problem Form -> IO (Problem Form)
+oneConjectureBox :: OptionParser (CNF -> IO (Problem Clause))
+oneConjectureBox = pure oneConjecture
+
+oneConjecture :: CNF -> IO (Problem Clause)
+oneConjecture cnf = closedIO (close cnf f)
+  where f (cs, []) = return (return cs)
+        f (cs, [cs']) = return (return (cs ++ cs'))
+        f _ = return $ do
+          putStrLn "Error: more than one conjecture found in input problem"
+          exitWith (ExitFailure 1)
+
+toFofIO :: (Problem Form -> IO CNF) -> Scheme -> Problem Form -> IO (Problem Form)
 toFofIO clausify scheme f = do
-  cs <- clausify f
+  cs <- clausify f >>= oneConjecture
   putStrLn "Monotonicity analysis..."
   m <- monotone (map what (open cs))
   let isMonotone ty =

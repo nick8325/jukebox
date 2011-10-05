@@ -31,7 +31,7 @@ clausifyFlags =
 ----------------------------------------------------------------------
 -- clausify
 
-clausify :: ClausifyFlags -> Problem Form -> Closed ([Clause],[[Clause]])
+clausify :: ClausifyFlags -> Problem Form -> CNF
 clausify flags inps = close inps (run . clausifyInputs S.Nil S.Nil)
  where
   clausifyInputs theory obligs [] =
@@ -106,7 +106,7 @@ split p =
 ----------------------------------------------------------------------
 -- core clausification algorithm
 
-clausForm :: BS.ByteString -> Form -> M [Clause]
+clausForm :: BS.ByteString -> Form -> M [Input Clause]
 clausForm s p =
   withName s $
     do miniscoped      <- miniscope . check . simplify                      . check $ p
@@ -116,7 +116,11 @@ clausForm s p =
        noForAllPs      <- lift . lift . mapM uniqueNames                    . check $ noExpensiveOrPs
        let !cnf_        = S.concatMap cnf                                   . check $ noForAllPs
            !simp        = simplifyCNF . fmap S.toList                       . check $ cnf_
-       return $! force . check . S.toList . fmap clause                             $ simp
+           cs           = S.toList . fmap clause                                    $ simp
+           inps         = [ Input (BS.append s (BS.pack i)) Axiom c
+                          | (c, i) <- zip cs ("":
+                                        [ '_':show i | i <- [1..] ]) ]
+       return $! force . check                                                      $ inps
 
 ----------------------------------------------------------------------
 -- miniscoping

@@ -254,6 +254,7 @@ v |=> x = NameMap.singleton (name v ::: x)
 ----------------------------------------------------------------------
 -- Clauses
 
+type CNF = Closed ([Input Clause], [[Input Clause]])
 newtype Clause = Clause (Bind [Literal])
 
 clause :: S.List f => f (Signed Atomic) -> Clause
