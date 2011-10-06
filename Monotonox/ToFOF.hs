@@ -16,6 +16,7 @@ data Scheme = Scheme {
 
 data Scheme1 = Scheme1 {
   forAll :: Bind Form -> Form,
+  exists :: Bind Form -> Form,
   equals :: Term -> Term -> Form,
   funcAxiom :: Function -> NameM Form,
   typeAxiom :: Type -> NameM Form
@@ -25,19 +26,19 @@ guard :: Scheme1 -> (Type -> Bool) -> Input Form -> Input Form
 guard scheme mono (Input t k f) = Input t k (aux (pos k) f)
   where aux pos (ForAll (Bind vs f))
           | pos = forAll scheme (Bind vs (aux pos f))
+          | otherwise = Not (exists scheme (Bind vs (Not (aux pos f))))
         aux pos (Exists (Bind vs f))
-          | not pos = Not (forAll scheme (Bind vs (Not (aux pos f))))
+          | pos = exists scheme (Bind vs (aux pos f))
+          | otherwise = Not (forAll scheme (Bind vs (Not (aux pos f))))
         aux pos (Literal (Pos (t :=: u)))
-          | pos && not (mono (typ t)) = equals scheme t u
+          | not (mono (typ t)) = equals scheme t u
         aux pos (Literal (Neg (t :=: u)))
-          | not pos && not (mono (typ t)) = Not (equals scheme t u)
+          | not (mono (typ t)) = Not (equals scheme t u)
         aux pos l@Literal{} = l
         aux pos (Not f) = Not (aux (not pos) f)
         aux pos (And fs) = And (fmap (aux pos) fs)
         aux pos (Or fs) = Or (fmap (aux pos) fs)
         aux pos (Equiv _ _) = error "ToFOF.guard: equiv should have been eliminated (internal error)"
-        aux pos (ForAll (Bind vs f)) = ForAll (Bind vs (aux pos f))
-        aux pos (Exists (Bind vs f)) = Exists (Bind vs (aux pos f))
         aux pos (Connective _ _ _) = error "ToFOF.guard: connective should have been eliminated (internal error)"
         pos Axiom = True
         pos Conjecture = False
@@ -96,6 +97,11 @@ tags moreAxioms = Scheme
 tags1 :: Bool -> (Type -> Bool) -> (Type -> Function) -> Scheme1
 tags1 moreAxioms mono fs = Scheme1
   { forAll = ForAll,
+    exists = \(Bind vs f) ->
+       let bound = foldr (/\) true (map guard (NameMap.toList vs))
+           guard v | mono (typ v) = true
+                   | otherwise = Literal (Pos (fs (typ v) :@: [Var v] :=: Var v))
+       in Exists (Bind vs (simplify bound /\ f)),
     equals =
       \t u ->
         let protect t@Var{} = fs (typ t) :@: [t]
@@ -139,6 +145,12 @@ guards1 mono ps = Scheme1
                    | not (naked True v f) = true
                    | otherwise = Literal (Pos (Tru (ps (typ v) :@: [Var v])))
        in ForAll (Bind vs (simplify (Not bound) \/ f)),
+    exists = \(Bind vs f) ->
+       let bound = foldr (/\) true (map guard (NameMap.toList vs))
+           guard v | mono (typ v) = true
+                   | not (naked True v f) = true
+                   | otherwise = Literal (Pos (Tru (ps (typ v) :@: [Var v])))
+       in Exists (Bind vs (simplify bound /\ f)),
     equals = \t u -> Literal (Pos (t :=: u)),
     funcAxiom = guardsAxiom mono ps,
     typeAxiom = guardsTypeAxiom mono ps }
