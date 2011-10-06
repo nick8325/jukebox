@@ -83,7 +83,7 @@ tagsFlags :: OptionParser Bool
 tagsFlags =
   bool "more-axioms"
     ["Add extra typing axioms for function arguments,",
-     "when using typing guards.",
+     "when using typing tags.",
      "These are unnecessary for completeness but may help (or hinder!) the prover."]
 
 tags :: Bool -> Scheme

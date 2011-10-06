@@ -118,7 +118,9 @@ prettyPrintBox :: (Symbolic a, Pretty a) => String -> OptionParser (Problem a ->
 prettyPrintBox kind = prettyPrintIO kind <$> writeFileBox
 
 prettyPrintIO :: (Symbolic a, Pretty a) => String -> (String -> IO ()) -> Problem a -> IO ()
-prettyPrintIO kind write prob = write (render (prettyProblem kind Normal prob) ++ "\n")
+prettyPrintIO kind write prob = do
+  hPutStrLn stderr "Writing output..."
+  write (render (prettyProblem kind Normal prob) ++ "\n")
 
 writeFileBox :: OptionParser (String -> IO ())
 writeFileBox =
