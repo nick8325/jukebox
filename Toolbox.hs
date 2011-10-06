@@ -114,11 +114,18 @@ monotonicity cs = do
 
   return (unlines (concat (map info (NameMap.toList m))))
 
-prettyPrintBox :: (Symbolic a, Pretty a) => String -> OptionParser (Problem a -> IO ())
-prettyPrintBox kind = prettyPrintIO kind <$> writeFileBox
+prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (String -> Problem a -> IO ())
+prettyPrintBox = flip prettyPrintIO <$> writeFileBox
+
+prettyClauseBox :: OptionParser (Problem Clause -> IO ())
+prettyClauseBox = f <$> writeFileBox
+  where f write cs | isFof (open cs) = prettyPrintIO "cnf" write cs
+                   | otherwise = prettyPrintIO "tff" write (fmap (map (fmap toForm)) cs)
 
 prettyPrintIO :: (Symbolic a, Pretty a) => String -> (String -> IO ()) -> Problem a -> IO ()
-prettyPrintIO kind write prob = write (render (prettyProblem kind Normal prob) ++ "\n")
+prettyPrintIO kind write prob = do
+  hPutStrLn stderr "Writing output..."
+  write (render (prettyProblem kind Normal prob) ++ "\n")
 
 writeFileBox :: OptionParser (String -> IO ())
 writeFileBox =

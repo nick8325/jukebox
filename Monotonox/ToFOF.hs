@@ -59,7 +59,7 @@ translate1 scheme mono f = close f $ \inps -> do
   funcAxioms <- mapM (funcAxiom scheme1') funcs
   typeAxioms <- mapM (typeAxiom scheme1') tys
   let axioms =
-        split . simplify . ForAll . bind . foldr (/\) true $
+        map (simplify . ForAll . bind) . split . simplify . foldr (/\) true $
           funcAxioms ++ typeAxioms
   return $
     [ Input (BS.pack ("types" ++ show i)) Axiom axiom | (axiom, i) <- zip axioms [1..] ] ++
@@ -83,7 +83,7 @@ tagsFlags :: OptionParser Bool
 tagsFlags =
   bool "more-axioms"
     ["Add extra typing axioms for function arguments,",
-     "when using typing guards.",
+     "when using typing tags.",
      "These are unnecessary for completeness but may help (or hinder!) the prover."]
 
 tags :: Bool -> Scheme
@@ -162,7 +162,7 @@ guardsAxiom mono ps f@(_ ::: FunType args res)
     vs <- forM args $ \ty -> do
       n <- newName "X"
       return (Var (n ::: ty))
-    return (ForAll (bind (Literal (Pos (Tru (ps res :@: [f :@: vs]))))))
+    return (Literal (Pos (Tru (ps res :@: [f :@: vs]))))
 
 guardsTypeAxiom :: (Type -> Bool) -> (Type -> Function) -> Type -> NameM Form
 guardsTypeAxiom mono ps ty

@@ -91,10 +91,8 @@ prettyProblem family l prob = vcat (map typeDecl (S.unique (types prob')) ++
                                     map (prettyInput family l env) prob')
     where typeDecl ty | name ty `elem` open stdNames = empty
                       | otherwise = typeClause ty (text "$tType")
-          funcDecl (f ::: ty) | fof ty = empty
-                              | otherwise = typeClause f (pPrint 0 l env ty)
-          fof (FunType args res) = and [ name (typ arg) == nameI | arg <- args ] &&
-                                   name res `elem` [nameI, nameO]
+          funcDecl x@(f ::: ty) | isFof (x :@: []) = empty
+                                | otherwise = typeClause f (pPrint 0 l env ty)
           typeClause name ty = prettyClause "tff" "type" "type"
                                       (pPrint 0 l env name <+> colon <+> ty)
           env = uniquify (S.unique (names prob'))
@@ -118,8 +116,8 @@ instance Pretty a => Show (Input a) where
 
 instance Pretty Term where
   pPrint _ l env (Var v) = pPrintUse 0 l env v
-  pPrint _ l env (f :@: []) = pPrintUse 0 l env f
-  pPrint _ l env (f :@: ts) = pPrintUse 0 l env f <> pPrint 0 l env ts
+  pPrint _ l env (f :@: []) = pPrintUse 0 l (escapeAtom . env) f
+  pPrint _ l env (f :@: ts) = pPrintUse 0 l (escapeAtom . env) f <> pPrint 0 l env ts
   
 instance Pretty [Term] where
   pPrint _ l env ts = parens (sep (punctuate comma (map (pPrint 0 l env) ts)))
