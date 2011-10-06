@@ -59,7 +59,7 @@ translate1 scheme mono f = close f $ \inps -> do
   funcAxioms <- mapM (funcAxiom scheme1') funcs
   typeAxioms <- mapM (typeAxiom scheme1') tys
   let axioms =
-        map (ForAll . bind) . split . simplify . foldr (/\) true $
+        map (simplify . ForAll . bind) . split . simplify . foldr (/\) true $
           funcAxioms ++ typeAxioms
   return $
     [ Input (BS.pack ("types" ++ show i)) Axiom axiom | (axiom, i) <- zip axioms [1..] ] ++

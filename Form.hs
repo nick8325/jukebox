@@ -453,6 +453,12 @@ functions = nub . collect f
         f TermRep (f :@: _) = S.Unit f
         f _ _ = S.Nil
 
+isFof :: Symbolic a => a -> Bool
+isFof f = all fof (functions f) && all (`elem` open stdNames) (map name (types f))
+  where fof (_ ::: FunType args res) =
+          and [ name (typ arg) == nameI | arg <- args ] &&
+            name res `elem` [nameI, nameO]
+
 uniqueNames :: Symbolic a => a -> NameM a
 uniqueNames x = evalStateT (aux Map.empty x) (free x)
   where aux :: Symbolic a => Subst -> a -> StateT (NameMap Variable) NameM a
