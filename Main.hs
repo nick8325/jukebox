@@ -5,8 +5,11 @@ import Options
 import Control.Applicative
 import Data.Monoid
 import Toolbox
+import ParadoxParser.Convert(form)
+import TPTP.FindFile
+import ParadoxParser.Test
 
-tools = mconcat [fof, cnf, monotonox]
+tools = mconcat [fof, cnf, monotonox, testparser]
 
 fof = tool info pipeline
   where
@@ -43,6 +46,14 @@ cnf = tool info pipeline
          clausifyBox =>>=
          oneConjectureBox =>>=
          prettyPrintBox "cnf")
+
+testparser = tool info pipeline
+  where
+    info = Tool "testparser" "Parser test" "1"
+                "Compare Jukebox and Paradox parding"
+    pipeline =
+      greetingBox info =>>
+      allFilesBox <*> (testParserIO <$> findFileFlags)
 
 jukebox = Tool "jukebox" "Jukebox" "1"
                "A first-order logic toolbox"
