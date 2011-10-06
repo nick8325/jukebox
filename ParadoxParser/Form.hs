@@ -193,7 +193,7 @@ data Form
   | Foll Form Form
   | Nor Form Form
   | Nand Form Form
- deriving ( Eq, Ord )
+ deriving ( Eq, Ord, Show )
 
 ----------------------------------------------------------------------
 -- input clauses

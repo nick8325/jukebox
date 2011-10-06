@@ -189,7 +189,12 @@ pname p =
        string "\'"
        s <- munch (/= '\'')
        string "\'"
-       return ("\'" ++ s ++ "\'")
+       return (unquote s)
+
+unquote :: String -> String
+unquote ('\'':c:s) = c:unquote s
+unquote (c:s) = c:unquote s
+unquote [] = []
 
 fname :: P Name
 fname =

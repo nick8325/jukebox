@@ -53,7 +53,10 @@ testparser = tool info pipeline
                 "Compare Jukebox and Paradox parding"
     pipeline =
       greetingBox info =>>
-      allFilesBox <*> (testParserIO <$> findFileFlags)
+      allFilesBox <*> (testParserIO <$> findFileFlags <*> printBoth)
+
+    printBoth =
+      bool "print-both" ["Print problems when there is a difference between them"]
 
 jukebox = Tool "jukebox" "Jukebox" "1"
                "A first-order logic toolbox"
