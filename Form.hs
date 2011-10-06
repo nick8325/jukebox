@@ -200,12 +200,12 @@ positive (Connective c t u)         = positive (connective c t u)
 positive f = f
 
 notInwards :: Form -> Form
-notInwards (And as)             = Or (fmap nt as)
-notInwards (Or as)              = And (fmap nt as)
-notInwards (a `Equiv` b)        = nt a `Equiv` b
+notInwards (And as)             = Or (fmap notInwards as)
+notInwards (Or as)              = And (fmap notInwards as)
+notInwards (a `Equiv` b)        = notInwards a `Equiv` b
 notInwards (Not a)              = positive a
-notInwards (ForAll (Bind vs a)) = Exists (Bind vs (nt a))
-notInwards (Exists (Bind vs a)) = ForAll (Bind vs (nt a))
+notInwards (ForAll (Bind vs a)) = Exists (Bind vs (notInwards a))
+notInwards (Exists (Bind vs a)) = ForAll (Bind vs (notInwards a))
 notInwards (Literal l)          = Literal (neg l)
 notInwards (Connective c t u)   = notInwards (connective c t u)
 
