@@ -118,8 +118,8 @@ instance Pretty a => Show (Input a) where
 
 instance Pretty Term where
   pPrint _ l env (Var v) = pPrintUse 0 l env v
-  pPrint _ l env (f :@: []) = pPrintUse 0 l env f
-  pPrint _ l env (f :@: ts) = pPrintUse 0 l env f <> pPrint 0 l env ts
+  pPrint _ l env (f :@: []) = pPrintUse 0 l (escapeAtom . env) f
+  pPrint _ l env (f :@: ts) = pPrintUse 0 l (escapeAtom . env) f <> pPrint 0 l env ts
   
 instance Pretty [Term] where
   pPrint _ l env ts = parens (sep (punctuate comma (map (pPrint 0 l env) ts)))
