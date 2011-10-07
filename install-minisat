@@ -16,9 +16,15 @@ fi
 export prefix
 
 dir=$(mktemp -d)
-git clone git://github.com/niklasso/minisat.git $dir/minisat
-git clone git://github.com/niklasso/minisat-c-bindings.git $dir/c
-git clone git://github.com/niklasso/minisat-haskell-bindings.git $dir/haskell
+if [ -d minisat/src ]; then
+    cp -r minisat/src/minisat $dir/minisat
+    cp -r minisat/src/c $dir/c
+    cp -r minisat/src/haskell $dir/haskell
+else
+    git clone git://github.com/niklasso/minisat.git $dir/minisat
+    git clone git://github.com/niklasso/minisat-c-bindings.git $dir/c
+    git clone git://github.com/niklasso/minisat-haskell-bindings.git $dir/haskell
+fi
 
 make -C $dir/minisat
 $sudo make -C $dir/minisat install
