@@ -15,7 +15,7 @@ else
 fi
 export prefix
 
-dir=$(mktemp -d)
+dir=$(mktemp -d -t minisatXXX)
 if [ -d minisat/src ]; then
     cp -r minisat/src/minisat $dir/minisat
     cp -r minisat/src/c $dir/c
