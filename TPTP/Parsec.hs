@@ -133,7 +133,6 @@ expected unexpected expected =
 -- Token streams
 
 class Stream a b | a -> b where
-  {-# INLINE primToken #-}
   primToken :: a -> (a -> b -> c) -> c -> (String -> c) -> c
 
 {-# INLINE satisfy #-}
