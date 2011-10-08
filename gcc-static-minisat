@@ -1,2 +1,2 @@
 #!/bin/sh
-g++ $(echo $*|sed 's/-lminisat\([^ ]*\) /-l:libminisat\1.a /g')
+g++ $(echo $*|sed 's/-lminisat\([^ ]*\) /-lminisat-static\1 /g')

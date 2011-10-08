@@ -20,6 +20,7 @@ if [ -d minisat/src ]; then
     cp -r minisat/src/minisat $dir/minisat
     cp -r minisat/src/c $dir/c
     cp -r minisat/src/haskell $dir/haskell
+    rm -rf $dir/haskell/dist
 else
     git clone git://github.com/niklasso/minisat.git $dir/minisat
     git clone git://github.com/niklasso/minisat-c-bindings.git $dir/c
@@ -34,6 +35,8 @@ export MINISAT_LIB="-L$prefix/lib -lminisat"
 
 make -C $dir/c
 $sudo make -C $dir/c install
+$sudo ln -sf $prefix/lib/libminisat.a $prefix/lib/libminisat-static.a
+$sudo ln -sf $prefix/lib/libminisat-c.a $prefix/lib/libminisat-static-c.a
 
 cd $dir/haskell && $sudo cabal install --extra-include-dirs=$prefix/include --extra-lib-dirs=$prefix/lib --$mode -p
 $sudo rm -rf $dir/*/.git
