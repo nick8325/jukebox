@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators, BangPatterns #-}
 module Clausify where
 
 import Form

@@ -297,16 +297,15 @@ instance Show Thing where
 -- which you can use 'term'.
 class TermLike a where
   -- Convert from a Thing.
-  {-# INLINE fromThing #-}
   fromThing :: Thing -> Parser a
   -- Parse a variable occurrence as a term on its own, if that's allowed.
-  {-# INLINE var #-}
   var :: (?ctx :: Maybe (Map BS.ByteString Variable)) => Parser a
   -- A parser for this type.
   parser :: (?binder :: Parser Variable,
              ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser a
 
 instance TermLike Form where
+  {-# INLINE fromThing #-}
   fromThing t@(Apply x xs) = fmap (Literal . Pos . Tru) (applyFunction x xs O)
   fromThing (Term _) = mzero
   fromThing (Formula f) = return f
@@ -315,6 +314,7 @@ instance TermLike Form where
   parser = formula
 
 instance TermLike Term where
+  {-# INLINE fromThing #-}
   fromThing t@(Apply x xs) = individual >>= applyFunction x xs
   fromThing (Term t) = return t
   fromThing (Formula _) = mzero
@@ -344,7 +344,6 @@ instance TermLike Thing where
 -- Types that can represent formulae. These are the types on which
 -- you can use 'formula'.
 class TermLike a => FormulaLike a where
-  {-# INLINE fromFormula #-}
   fromFormula :: Form -> a
 instance FormulaLike Form where fromFormula = id
 instance FormulaLike Thing where fromFormula = Formula
