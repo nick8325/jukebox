@@ -27,14 +27,14 @@ else
     git clone git://github.com/niklasso/minisat-haskell-bindings.git $dir/haskell
 fi
 
-make -C $dir/minisat
-$sudo make -C $dir/minisat install
+make -C $dir/minisat prefix=$prefix
+$sudo make -C $dir/minisat install prefix=$prefix
 
 export MINISAT_INCLUDE=-I$prefix/include
 export MINISAT_LIB="-L$prefix/lib -lminisat"
 
-make -C $dir/c
-$sudo make -C $dir/c install
+make -C $dir/c prefix=$prefix
+$sudo make -C $dir/c install prefix=$prefix
 $sudo ln -sf $prefix/lib/libminisat.a $prefix/lib/libminisat-static.a
 $sudo ln -sf $prefix/lib/libminisat-c.a $prefix/lib/libminisat-static-c.a
 
