@@ -11,7 +11,7 @@ Flag static
 
 Executable jukebox
   Main-is: Main.hs
-  Build-depends: bytestring, base >= 4 && < 5, array, mtl, directory, filepath, bytestring-progress, pretty, hashmap, hashable, derive, minisat, binary, zlib
+  Build-depends: bytestring, base >= 4 && < 5, array, mtl, directory, filepath, bytestring-progress, pretty, hashmap >= 1.2.0.0, hashable, derive, minisat, binary, zlib
   Build-tools: alex
   if flag(static)
     Ghc-options: -pgml ./gcc-static-minisat
