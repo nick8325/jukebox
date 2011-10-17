@@ -1,0 +1,45 @@
+#!/bin/sh
+set -e
+
+if [ $# != 0 ]; then
+    echo install-minisat doesn\'t take any arguments: use environment variables instead
+    exit 1
+fi
+
+if [ ! $mode ]; then mode=user; fi
+if [ $package_db ]; then
+    ghcpkg_opts="-f $package_db"
+    cabal_opts="--package-db=$package_db"
+fi
+
+dir=$(mktemp -d -t minisatXXX)
+prefix=$dir/installed
+if [ -d dependencies/minisat ]; then
+    cp -r dependencies/minisat/c++ $dir/c++
+    cp -r dependencies/minisat/c $dir/c
+    cp -r dependencies/minisat/haskell $dir/haskell
+    rm -rf dependencies/haskell/dist
+else
+    git clone git://github.com/niklasso/minisat.git $dir/c++
+    git clone git://github.com/niklasso/minisat-c-bindings.git $dir/c
+    git clone git://github.com/niklasso/minisat-haskell-bindings.git $dir/haskell
+fi
+
+make -C $dir/c++ prefix=$prefix
+make -C $dir/c++ install prefix=$prefix
+
+export MINISAT_INCLUDE=-I$prefix/include
+export MINISAT_LIB="-L$prefix/lib -lminisat"
+
+make -C $dir/c prefix=$prefix
+make -C $dir/c install prefix=$prefix
+ln -sf libminisat.a $prefix/lib/libminisat-static.a
+ln -sf libminisat-c.a $prefix/lib/libminisat-static-c.a
+
+cd $dir/haskell
+runhaskell Setup.lhs configure --extra-include-dirs=$prefix/include --extra-lib-dirs=$prefix/lib --$mode $cabal_opts -p
+runhaskell Setup.lhs build
+runhaskell Setup.lhs install
+cp $prefix/lib/* $(ghc-pkg $ghcpkg_opts describe minisat|grep '^library-dirs: '|awk '{print $2;}')
+rm -rf $dir/*/.git
+rm -r $dir

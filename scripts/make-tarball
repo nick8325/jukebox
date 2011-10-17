@@ -1,0 +1,26 @@
+#!/bin/sh
+set -e
+mkdir scratch
+cd scratch
+git clone .. jukebox
+rm -rf jukebox/.git jukebox/Makefile
+mv jukebox/scripts/build jukebox/build
+
+cwd=$(pwd)
+mkdir jukebox/dependencies
+cd jukebox/dependencies
+git clone git://github.com/niklasso/minisat.git minisat/c++
+git clone git://github.com/niklasso/minisat-c-bindings.git minisat/c
+git clone git://github.com/niklasso/minisat-haskell-bindings.git minisat/haskell
+cabal unpack $(cwd/jukebox/build get-dependencies)
+rm -rf minisat/*/.git
+cd $cwd
+
+tar czvf jukebox.tar.gz jukebox
+cd ..
+mv scratch/jukebox.tar.gz .
+rm -r scratch
+if [ x$1 = xupload ]; then
+    scp jukebox.tar.gz nicsma@remote12.chalmers.se:www/www.cse.chalmers.se
+    ssh nicsma@remote12.chalmers.se chmod a+r www/www.cse.chalmers.se/jukebox.tar.gz
+fi
