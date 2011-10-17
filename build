@@ -20,19 +20,25 @@ if [ $no_install ]; then
 fi
 
 dir=$(mktemp -d -t jukeboxXXX)
-export package_db=$dir/pkgs
-ghc-pkg init $package_db
-cabal_opts=--prefix=$package_db scripts/install-minisat
+
+if [ ! $mode ]; then
+   export package_db=$dir/pkgs
+   ghc-pkg init $package_db
+   export cabal_opts="--user --prefix=$package_db --package-db=$package_db"
+else
+   export cabal_opts=--$mode
+fi
+scripts/install-minisat
 
 for pkg in $pkgs; do
     cd dependencies/$pkg*
-    runhaskell Setup.* configure --user --package-db=$package_db --prefix=$package_db
+    runhaskell Setup.* configure $cabal_opts
     runhaskell Setup.* build
     runhaskell Setup.* install
     cd ../..
 done
 
-runhaskell Setup.* configure --user --package-db=$package_db --prefix=$package_db --bindir=.
+runhaskell Setup.* configure $cabal_opts --bindir=.
 runhaskell Setup.* build
 runhaskell Setup.* install
 rm -r $dir
