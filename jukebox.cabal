@@ -3,7 +3,7 @@ Version: 0
 Cabal-version: >= 1.2
 Build-type: Simple
 
-Extra-Source-Files: install-minisat gcc-static-minisat
+Extra-Source-Files: build scripts/fetch-minisat scripts/install-minisat scripts/gcc-static-minisat
 
 Flag static
   description: Try linking against minisat statically (a hack!)
@@ -14,7 +14,7 @@ Executable jukebox
   Build-depends: bytestring, base >= 4 && < 5, array, mtl, directory, filepath, bytestring-progress, pretty, hashmap >= 1.2.0.0, hashable, derive, minisat, binary, zlib
   Build-tools: alex
   if flag(static)
-    Ghc-options: -pgml ./gcc-static-minisat
+    Ghc-options: -pgml scripts/gcc-static-minisat
   Other-modules:
     BinaryShared
     Clausify

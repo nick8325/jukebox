@@ -1,0 +1,38 @@
+#!/bin/sh
+set -e
+cd $(dirname $0)
+
+pkgs="bytestring-progress hashable hashmap binary haskell-src-exts unordered-containers uniplate derive"
+
+mkdir -p dependencies
+
+cd dependencies
+for pkg in $pkgs; do
+   if [ ! -d $pkg* ]; then
+       cabal unpack $pkg
+   fi
+done
+cd ..
+
+if [ $no_install ]; then
+    scripts/fetch-minisat dependencies/minisat
+    exit 0
+fi
+
+dir=$(mktemp -d -t jukeboxXXX)
+export package_db=$dir/pkgs
+ghc-pkg init $package_db
+cabal_opts=--prefix=$package_db scripts/install-minisat
+
+for pkg in $pkgs; do
+    cd dependencies/$pkg*
+    runhaskell Setup.* configure --user --package-db=$package_db --prefix=$package_db
+    runhaskell Setup.* build
+    runhaskell Setup.* install
+    cd ../..
+done
+
+runhaskell Setup.* configure --user --package-db=$package_db --prefix=$package_db --bindir=.
+runhaskell Setup.* build
+runhaskell Setup.* install
+rm -r $dir

@@ -8,21 +8,21 @@ fi
 
 if [ ! $mode ]; then mode=user; fi
 if [ $package_db ]; then
-    ghcpkg_opts="-f $package_db"
-    cabal_opts="--package-db=$package_db"
+    ghcpkg_opts="$ghcpkg_opts -f $package_db"
+    cabal_opts="$cabal_opts --package-db=$package_db"
+fi
+
+if [ $auto ] && ghc-pkg $ghcpkg_opts dump|grep -q '^name: minisat$'; then
+    exit 0
 fi
 
 dir=$(mktemp -d -t minisatXXX)
 prefix=$dir/installed
 if [ -d dependencies/minisat ]; then
-    cp -r dependencies/minisat/c++ $dir/c++
-    cp -r dependencies/minisat/c $dir/c
-    cp -r dependencies/minisat/haskell $dir/haskell
-    rm -rf dependencies/haskell/dist
+    cp -r dependencies/minisat/* $dir
+    rm -rf $dir/minisat/haskell/dist
 else
-    git clone git://github.com/niklasso/minisat.git $dir/c++
-    git clone git://github.com/niklasso/minisat-c-bindings.git $dir/c
-    git clone git://github.com/niklasso/minisat-haskell-bindings.git $dir/haskell
+    $(dirname $0)/fetch-minisat $dir
 fi
 
 make -C $dir/c++ prefix=$prefix
