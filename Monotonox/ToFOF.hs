@@ -108,7 +108,7 @@ tags1 moreAxioms mono fs = Scheme1
             protect t = t
         in Literal (Pos (protect t :=: protect u)),
     funcAxiom = tagsAxiom moreAxioms mono fs,
-    typeAxiom = \ty -> if moreAxioms then tagsAxiom False mono fs (fs ty) else return true }
+    typeAxiom = \ty -> if moreAxioms then tagsAxiom False mono fs (fs ty) else tagsExists mono ty (fs ty) }
 
 tagsAxiom :: Bool -> (Type -> Bool) -> (Type -> Function) -> Function -> NameM Form
 tagsAxiom moreAxioms mono fs f@(_ ::: FunType args res) = do
@@ -127,6 +127,14 @@ tagsAxiom moreAxioms mono fs f@(_ ::: FunType args res) = do
            | moreAxioms,
              n <- [0..length vs-1] ]
   return (foldr (/\) true (map equate ts))
+
+tagsExists :: (Type -> Bool) -> Type -> Function -> NameM Form
+tagsExists mono ty f
+  | mono ty = return true
+  | otherwise = do
+      n <- newName "X"
+      let v = Var (n ::: ty)
+      return (Exists (bind (Literal (Pos (f :@: [v] :=: v)))))
 
 -- Typing predicates.
 
