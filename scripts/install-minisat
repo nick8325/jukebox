@@ -40,6 +40,6 @@ cd $dir/haskell
 runhaskell Setup.lhs configure --extra-include-dirs=$prefix/include --extra-lib-dirs=$prefix/lib --$mode $cabal_opts -p
 runhaskell Setup.lhs build
 runhaskell Setup.lhs install
-cp $prefix/lib/* $(ghc-pkg $ghcpkg_opts describe minisat|grep '^library-dirs: '|awk '{print $2;}')
+cp $prefix/lib/* $(ghc-pkg $ghcpkg_opts describe minisat|grep '^library-dirs: '|awk '{print $2;}'|head -n 1)
 rm -rf $dir/*/.git
 rm -r $dir

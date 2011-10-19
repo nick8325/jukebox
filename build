@@ -2,7 +2,7 @@
 set -e
 cd $(dirname $0)
 
-pkgs="bytestring-progress hashable hashmap binary haskell-src-exts unordered-containers uniplate derive"
+pkgs="random QuickCheck alex cpphs deepseq transformers mtl text bytestring-progress hashable hashmap binary haskell-src-exts unordered-containers syb uniplate derive"
 
 mkdir -p dependencies
 
@@ -25,6 +25,8 @@ if [ ! $mode ]; then
    export package_db=$dir/pkgs
    ghc-pkg init $package_db
    export cabal_opts="--user --prefix=$package_db --package-db=$package_db"
+   export ghcpkg_opts="-f $package_db"
+   export PATH=$package_db/bin:$PATH
 else
    export cabal_opts=--$mode
 fi
@@ -38,6 +40,9 @@ for pkg in $pkgs; do
     cd ../..
 done
 
+p=$(ghc-pkg $ghcpkg_opts describe minisat|grep '^library-dirs: '|awk '{print $2;}')
+export LD_LIBRARY_PATH=$p
+export DYLD_LIBRARY_PATH=$p
 runhaskell Setup.* configure $cabal_opts --bindir=.
 runhaskell Setup.* build
 runhaskell Setup.* install
