@@ -179,6 +179,7 @@ prettyConnective l p env ident op (x:xs) =
 prettyParen False = id
 prettyParen True = parens
 
+prettyQuant l env q vs f | Map.null vs = pPrint 1 l env f
 prettyQuant l env q vs f =
   sep [text q <> brackets (sep (punctuate comma (map (pPrintBinding 0 l env) (Map.elems vs)))) <> colon,
        nest 2 (pPrint 1 l env f)]

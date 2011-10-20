@@ -261,7 +261,7 @@ clause :: S.List f => f (Signed Atomic) -> Clause
 clause xs = Clause (bind (S.toList xs))
 
 toForm :: Clause -> Form
-toForm (Clause (Bind vs ls)) = ForAll (Bind vs (And (S.fromList (map Literal ls))))
+toForm (Clause (Bind vs ls)) = ForAll (Bind vs (Or (S.fromList (map Literal ls))))
 
 toLiterals :: Clause -> [Literal]
 toLiterals (Clause (Bind _ ls)) = ls
