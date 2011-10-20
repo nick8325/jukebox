@@ -2,7 +2,7 @@
 set -e
 cd $(dirname $0)
 
-pkgs="random QuickCheck alex cpphs deepseq transformers mtl text bytestring-progress hashable hashmap binary haskell-src-exts unordered-containers syb uniplate derive"
+pkgs="random QuickCheck alex cpphs deepseq transformers mtl happy text bytestring-progress hashable hashmap binary haskell-src-exts unordered-containers syb uniplate derive"
 
 mkdir -p dependencies
 
