@@ -9,7 +9,7 @@ import ParadoxParser.Convert(form)
 import TPTP.FindFile
 import ParadoxParser.Test
 
-tools = mconcat [fof, cnf, monotonox, testparser]
+tools = mconcat [fof, cnf, monotonox, testparser, justparser]
 
 fof = tool info pipeline
   where
@@ -57,6 +57,16 @@ testparser = tool info pipeline
 
     printBoth =
       bool "print-both" ["Print problems when there is a difference between them"]
+
+justparser = tool info pipeline
+  where
+    info = Tool "parser" "Parser" "1"
+                "Just parse the problem"
+    pipeline =
+      greetingBox info =>>
+      allFilesBox <*>
+        (parseProblemBox =>>=
+         pure (const (return ())))
 
 jukebox = Tool "jukebox" "Jukebox" "1"
                "A first-order logic toolbox"
