@@ -10,7 +10,7 @@ module Name(
 
 import qualified Data.ByteString.Char8 as BS
 import Data.Hashable
-import qualified Data.HashMap as Map
+import qualified Map
 import Utils
 import Data.List
 import Data.Ord
@@ -121,7 +121,7 @@ uniquify xs = f
   where
     baseMap =
       -- Assign numbers to each baseName
-      Map.map (\xs -> Map.fromList (zip (usort xs) [0 :: Int ..])) .
+      fmap (\xs -> Map.fromList (zip (usort xs) [0 :: Int ..])) .
       -- Partition by baseName
       foldl' (\m x -> Map.insertWith (++) (base x) [x] m) Map.empty $
       xs

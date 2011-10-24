@@ -2,8 +2,8 @@ module NameMap(NameMap, lookup, lookup_, insert, member, delete, (!), fromList, 
 
 import Prelude hiding (lookup)
 import Name
-import Data.HashMap(Map)
-import qualified Data.HashMap as Map
+import Map(Map)
+import qualified Map
 import Data.Int
 import qualified Seq as S
 

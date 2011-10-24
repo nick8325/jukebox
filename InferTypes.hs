@@ -5,8 +5,8 @@ import UnionFind hiding (S)
 import Control.Monad.State.Strict
 import Formula hiding (funs, preds, types)
 import qualified Formula
-import qualified Data.HashMap as Map
-import Data.HashMap(Map)
+import qualified Map
+import Map(Map)
 import qualified Data.Set as Set
 import Text.PrettyPrint.HughesPJClass
 import TPTP.Print

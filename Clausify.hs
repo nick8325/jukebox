@@ -12,7 +12,7 @@ import qualified Seq as S
 import Seq(Seq)
 import qualified NameMap
 import NameMap(NameMap)
-import qualified Data.HashMap as Map
+import qualified Map
 import qualified Data.HashSet as Set
 import qualified Data.ByteString.Char8 as BS
 import Utils

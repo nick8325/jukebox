@@ -8,7 +8,7 @@ module Form where
 import qualified Seq as S
 import Seq(Seq)
 import Data.Hashable
-import qualified Data.HashMap as Map
+import qualified Map
 import NameMap(NameMap)
 import qualified NameMap
 import Data.Ord

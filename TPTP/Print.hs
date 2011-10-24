@@ -9,7 +9,7 @@ import Text.PrettyPrint.HughesPJ
 import qualified TPTP.Lexer as L
 import Form
 import Data.List
-import qualified Data.HashMap as Map
+import qualified Map
 import qualified Seq as S
 import qualified NameMap
 import NameMap(NameMap)

@@ -11,7 +11,7 @@ import Data.DeriveTH
 import Data.Derive.Hashable
 import Data.Derive.BinaryShared
 import Data.Hashable
-import qualified Data.HashMap as Map
+import qualified Map
 import qualified Data.ByteString.Lazy as BSL
 import qualified Data.ByteString as BS
 import Data.Int

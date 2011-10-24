@@ -6,8 +6,8 @@ import qualified MiniSat
 import qualified Seq as Seq
 import Seq(Seq, List)
 import Form(Signed(..))
-import qualified Data.HashMap as Map
-import Data.HashMap(Map)
+import qualified Map
+import Map(Map)
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Trans

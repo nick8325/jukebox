@@ -8,8 +8,8 @@ import Control.Applicative
 import Control.Monad
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.HashMap as Map
-import Data.HashMap(Map)
+import qualified Map
+import Map(Map)
 import qualified Seq as S
 import Seq(Seq)
 import Data.List
