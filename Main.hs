@@ -50,7 +50,7 @@ cnf = tool info pipeline
 testparser = tool info pipeline
   where
     info = Tool "testparser" "Parser test" "1"
-                "Compare Jukebox and Paradox parding"
+                "Compare Jukebox and Paradox parsing"
     pipeline =
       greetingBox info =>>
       allFilesBox <*> (testParserIO <$> findFileFlags <*> printBoth)

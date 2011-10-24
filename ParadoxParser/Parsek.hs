@@ -101,17 +101,17 @@ module ParadoxParser.Parsek
   )
  where
   
-import Monad
+import Control.Monad
   ( MonadPlus(..)
   , guard
   )
 
-import List
+import Data.List
   ( union
   , intersperse
   )
 
-import Char
+import Data.Char
 
 infix  0 <?>
 infixr 1 <|>, <<|>

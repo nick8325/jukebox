@@ -43,13 +43,13 @@ import GHC.Environment
 
 import System
 
-import List
+import Data.List
   ( groupBy
   , intersperse
   , (\\)
   )
 
-import Char
+import Data.Char
 
 import CPUTime
 

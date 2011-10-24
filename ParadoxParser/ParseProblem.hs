@@ -23,13 +23,16 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 -}
 
-import System
+import System.Exit
   ( exitWith
   , ExitCode(..)
-  , getEnv
   )
 
-import Char
+import System.Environment
+  ( getEnv
+  )
+
+import Data.Char
   ( isSpace
   , isAlpha
   , isAlphaNum
@@ -38,7 +41,7 @@ import Char
   , isLower
   )
 
-import List
+import Data.List
   ( intersperse
   , (\\)
   , tails
@@ -46,10 +49,9 @@ import List
   , sort
   )
 
-import IO
+import System.IO
   ( hFlush
   , stdout
-  , try
   )
 
 import System.IO.Error
@@ -57,7 +59,7 @@ import System.IO.Error
   , userError
   )
 
-import Monad
+import Control.Monad
   ( guard
   )
 
@@ -70,11 +72,14 @@ import ParadoxParser.Parsek as P
 -------------------------------------------------------------------------
 -- reading
 
+mytry :: IO a -> IO (Either IOError a)
+mytry x = catch (fmap Right x) (return . Left)
+
 readProblemWithRoots :: [FilePath] -> FilePath -> IO Problem
 readProblemWithRoots roots name =
   do putStr ("Reading '" ++ name ++ "' ... ")
      hFlush stdout
-     mtptp <- IO.try (getEnv "TPTP")
+     mtptp <- mytry (getEnv "TPTP")
      mes <- findFile [ rt ++ nm
                      | rt <- roots
                           ++ [ case reverse tptp of
@@ -117,7 +122,7 @@ readProblemWithRoots roots name =
   findFile (name:names) =
     do -- on Cygwin, the variable TPTP expects Windows paths!
        -- putStrLn ("(trying '" ++ name ++ "'...)")
-       ees <- IO.try (readFile name)
+       ees <- mytry (readFile name)
        case ees of
          Left _  -> findFile names
          Right s -> return (Just (name,s))
