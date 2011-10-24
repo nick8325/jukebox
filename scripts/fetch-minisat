@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+if [ $1 ]; then
+    dir=$1
+else
+    dir=dependencies/minisat
+fi
+
+if [ ! -d $dir ]; then
+    git clone git://github.com/niklasso/minisat.git $dir/c++
+    git clone git://github.com/niklasso/minisat-c-bindings.git $dir/c
+    git clone git://github.com/niklasso/minisat-haskell-bindings.git $dir/haskell
+fi

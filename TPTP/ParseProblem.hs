@@ -13,7 +13,6 @@ import Form hiding (Pos)
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Control.Monad.Identity
-import qualified Data.Map as Map
 import Control.Exception
 import Prelude hiding (catch)
 import Data.List

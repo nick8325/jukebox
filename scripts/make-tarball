@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+cd $(dirname $0)/..
+
+mkdir scratch
+cd scratch
+
+git clone .. jukebox
+rm -rf jukebox/.git
+
+cwd=$(pwd)
+cd jukebox
+no_install=1 ./build
+rm -rf dependencies/minisat/*/.git
+cd $cwd
+
+tar czvf jukebox.tar.gz jukebox
+cd ..
+mv scratch/jukebox.tar.gz .
+rm -r scratch
+
+if [ x$1 = xupload ]; then
+    scp jukebox.tar.gz nicsma@remote12.chalmers.se:www/www.cse.chalmers.se
+    ssh nicsma@remote12.chalmers.se chmod a+r www/www.cse.chalmers.se/jukebox.tar.gz
+fi

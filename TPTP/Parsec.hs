@@ -133,7 +133,6 @@ expected unexpected expected =
 -- Token streams
 
 class Stream a b | a -> b where
-  {-# INLINE primToken #-}
   primToken :: a -> (a -> b -> c) -> c -> (String -> c) -> c
 
 {-# INLINE satisfy #-}
@@ -156,6 +155,7 @@ eof = Parsec (\inp exp ok yum err ->
 data UserState state stream = UserState { userState :: !state, userStream :: !stream }
 
 instance Stream a b => Stream (UserState state a) b where
+  {-# INLINE primToken #-}
   primToken (UserState state stream) ok err =
     primToken stream (ok . UserState state) err
 
