@@ -1,31 +1,29 @@
-{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances #-}
+{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances, TypeFamilies #-}
 module TPTP.Parsec where
 
 import Control.Applicative
 import Control.Monad
 import Data.List
-import Data.Maybe
 
 -- Parser type and monad instances
 
 newtype Parsec a b = Parsec
   { runParsec :: forall c.
-                 a                                  -- Current input
-              -> [String]                           -- Expected tokens
-              -> (a -> [String] -> b -> Result a c) -- ok: success, nothing consumed
-              -> (a -> [String] -> b -> Result a c) -- yum: success, something consumed
-              -> (a -> [String] -> Result a c)      -- err: failure, nothing consumed
-              -> Result a c }
-  
+                 (b -> Reply a c -> a -> Reply a c) -- ok: success
+              -> Reply a c -- err: backtracking failure
+              -> a -> Reply a c }
+
+type Reply a b = [String] -> Result (Position a) b
+
 data Result a b = Ok !a !b | Error !a String | Expected !a [String]
 
 {-# INLINE parseError #-}
 parseError :: [String] -> Parsec a b
-parseError e = Parsec (\inp exp _ _ err -> err inp (e ++ exp))
+parseError e = Parsec (\ok err inp exp -> err (e ++ exp))
 
 {-# INLINE fatalError #-}
-fatalError :: String -> Parsec a b
-fatalError e = Parsec (\inp _ _ _ _ -> Error inp e)
+fatalError :: Stream a c => String -> Parsec a b
+fatalError e = Parsec (\ok err inp _ -> Error (position inp) e)
 
 instance Functor (Parsec a) where
   {-# INLINE fmap #-}
@@ -33,23 +31,18 @@ instance Functor (Parsec a) where
 
 instance Monad (Parsec a) where
   {-# INLINE return #-}
-  return x = Parsec (\inp exp ok _ _ -> ok inp exp x)
+  return x = Parsec (\ok err -> ok x err)
   {-# INLINE (>>=) #-}
-  x >>= f = Parsec (\inp exp ok yum err ->
-                     let ok' inp' exp' y = runParsec (f y) inp' exp' ok yum err
-                         yum' inp exp' y = runParsec (f y) inp exp' yum yum Expected
-                     in runParsec x inp exp ok' yum' err)
+  x >>= f = Parsec (\ok err -> runParsec x (\y -> runParsec (f y) ok) err)
   {-# INLINE fail #-}
   fail _ = parseError []
 
 instance MonadPlus (Parsec a) where
   {-# INLINE mzero #-}
-  mzero = Parsec (\inp exp ok yum err -> err inp exp)
+  mzero = Parsec (\ok err inp -> err)
   {-# INLINE mplus #-}
-  m1 `mplus` m2 = Parsec (\inp exp ok yum err ->
-    let {-# INLINE err' #-}
-        err' _ exp' = runParsec m2 inp exp' ok yum err in
-    runParsec m1 inp exp ok yum err')
+  m1 `mplus` m2 = Parsec (\ok err inp ->
+    runParsec m1 ok (runParsec m2 ok err inp) inp)
 
 instance Applicative (Parsec a) where
   {-# INLINE pure #-}
@@ -81,7 +74,7 @@ instance Alternative (Parsec a) where
 
 {-# INLINE nonempty #-}
 nonempty :: Parsec a b -> Parsec a b
-nonempty p = Parsec (\inp exp ok yum err -> runParsec p inp exp (\inp _ _ -> Error inp "nonempty: empty parser") yum err)
+nonempty p = p
 
 {-# INLINE skipSome #-}
 skipSome :: Parsec a b -> Parsec a ()
@@ -94,10 +87,8 @@ skipMany p = p' where p' = (nonempty p >> p') `mplus` return ()
 {-# INLINE (<?>) #-}
 infix 0 <?>
 (<?>) :: Parsec a b -> String -> Parsec a b
-p <?> text = Parsec (\inp exp ok yum err ->
-  let {-# INLINE add #-}
-      add c inp exp' = c inp (text:exp) in
-  runParsec p inp exp (add ok) yum (add err))
+p <?> text = Parsec (\ok err inp exp ->
+  runParsec p ok err inp (text:exp))
 
 {-# INLINE between #-}
 between :: Parsec a b -> Parsec a c -> Parsec a d -> Parsec a d
@@ -109,12 +100,12 @@ sepBy1 it sep = liftM2 (:) it (many (sep >> it))
 
 -- Running the parser
 
-run_ :: Parsec a b -> a -> Result a b
-run_ p x = runParsec p x [] ok ok err
-  where ok inp _ = Ok inp
-        err inp exp = Expected inp (reverse exp)
+run_ :: Stream a c => Parsec a b -> a -> Result (Position a) b
+run_ p x = runParsec p ok err x []
+  where ok x _ inp _ = Ok (position inp) x
+        err exp = Expected (position x) (reverse exp)
 
-run :: (a -> [String]) -> Parsec a b -> a -> (a, Either [String] b)
+run :: Stream a c => (Position a -> [String]) -> Parsec a b -> a -> (Position a, Either [String] b)
 run report p ts =
   case run_ p ts of
     Ok ts' x -> (ts', Right x)
@@ -134,21 +125,30 @@ expected unexpected expected =
 
 class Stream a b | a -> b where
   primToken :: a -> (a -> b -> c) -> c -> (String -> c) -> c
+  type Position a
+  position :: a -> Position a
+
+{-# INLINE next #-}
+next :: Stream a b => Parsec a b
+next = Parsec (\ok err inp exp ->
+  primToken inp (\inp' x -> ok x err inp' exp) (err exp) (Error (position inp)))
+
+{-# INLINE cut #-}
+cut :: Stream a b => Parsec a ()
+cut = Parsec (\ok err inp exp -> ok () (Expected (position inp)) inp [])
 
 {-# INLINE satisfy #-}
 satisfy :: Stream a b => (b -> Bool) -> Parsec a b
-satisfy p = Parsec (\inp exp ok yum err ->
-  let {-# INLINE ok' #-}
-      ok' inp' t | p t = yum inp' [] t
-                 | otherwise = err inp exp
-  in primToken inp ok' (err inp exp) (Error inp))
+satisfy p = do
+  t <- next
+  guard (p t)
+  cut
+  return t
 
 {-# INLINE eof #-}
 eof :: Stream a b => Parsec a ()
-eof = Parsec (\inp exp ok yum err ->
-  let {-# INLINE ok' #-}
-      ok' _ _ = err inp ("end of file":exp)
-  in primToken inp ok' (ok inp exp ()) (Error inp))
+eof = Parsec (\ok err inp exp ->
+  primToken inp (\_ _ -> err ("end of file":exp)) (ok () err inp exp) (Error (position inp)))
 
 -- User state
 
@@ -158,11 +158,13 @@ instance Stream a b => Stream (UserState state a) b where
   {-# INLINE primToken #-}
   primToken (UserState state stream) ok err =
     primToken stream (ok . UserState state) err
+  type Position (UserState state a) = UserState state a
+  position = id
 
 {-# INLINE getState #-}
 getState :: Parsec (UserState state a) state
-getState = Parsec (\inp@UserState{userState = state} exp ok yum err -> ok inp exp state)
+getState = Parsec (\ok err inp@UserState{userState = state} -> ok state err inp)
 
 {-# INLINE putState #-}
 putState :: state -> Parsec (UserState state a) ()
-putState state = Parsec (\inp@UserState{userStream = stream} exp ok yum err -> ok (UserState state stream) exp ())
+putState state = Parsec (\ok err inp@UserState{userStream = stream} -> ok () err (UserState state stream))
