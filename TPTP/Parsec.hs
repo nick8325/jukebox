@@ -15,7 +15,7 @@ newtype Parsec a b = Parsec
 
 type Reply a b = [String] -> Result (Position a) b
 
-data Result a b = Ok !a !b | Error !a String | Expected !a [String]
+data Result a b = Ok a b | Error a String | Expected a [String]
 
 {-# INLINE parseError #-}
 parseError :: [String] -> Parsec a b
@@ -31,18 +31,18 @@ instance Functor (Parsec a) where
 
 instance Monad (Parsec a) where
   {-# INLINE return #-}
-  return x = Parsec (\ok err -> ok x err)
+  return x = Parsec (\ok err inp exp -> ok x err inp exp)
   {-# INLINE (>>=) #-}
-  x >>= f = Parsec (\ok err -> runParsec x (\y -> runParsec (f y) ok) err)
+  x >>= f = Parsec (\ok err inp exp  -> runParsec x (\y err inp exp -> runParsec (f y) ok err inp exp) err inp exp)
   {-# INLINE fail #-}
   fail _ = parseError []
 
 instance MonadPlus (Parsec a) where
   {-# INLINE mzero #-}
-  mzero = Parsec (\ok err inp -> err)
+  mzero = Parsec (\ok err inp exp -> err exp)
   {-# INLINE mplus #-}
-  m1 `mplus` m2 = Parsec (\ok err inp ->
-    runParsec m1 ok (runParsec m2 ok err inp) inp)
+  m1 `mplus` m2 = Parsec (\ok err inp exp ->
+    runParsec m1 ok (\exp -> runParsec m2 ok err inp exp) inp exp)
 
 instance Applicative (Parsec a) where
   {-# INLINE pure #-}
@@ -137,6 +137,10 @@ next = Parsec (\ok err inp exp ->
 cut :: Stream a b => Parsec a ()
 cut = Parsec (\ok err inp exp -> ok () (Expected (position inp)) inp [])
 
+{-# INLINE cut' #-}
+cut' :: Stream a b => Parsec a c -> Parsec a c
+cut' p = Parsec (\ok err inp exp -> runParsec p (\x _ inp' _ -> ok x err inp' []) err inp exp)
+
 {-# INLINE satisfy #-}
 satisfy :: Stream a b => (b -> Bool) -> Parsec a b
 satisfy p = do
@@ -163,8 +167,8 @@ instance Stream a b => Stream (UserState state a) b where
 
 {-# INLINE getState #-}
 getState :: Parsec (UserState state a) state
-getState = Parsec (\ok err inp@UserState{userState = state} -> ok state err inp)
+getState = Parsec (\ok err inp@UserState{userState = state} exp -> ok state err inp exp)
 
 {-# INLINE putState #-}
 putState :: state -> Parsec (UserState state a) ()
-putState state = Parsec (\ok err inp@UserState{userStream = stream} -> ok () err (UserState state stream))
+putState state = Parsec (\ok err inp@UserState{userStream = stream} exp -> ok () err (UserState state stream) exp)
