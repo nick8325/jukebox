@@ -99,6 +99,8 @@ data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString }
            | DistinctObject { name :: !BS.ByteString }
            | Number { value :: !Integer }
            | Punct { kind :: !Punct }
+           | Eof
+           | Error
 
 data Keyword = Normal
              | Thf | Tff | Fof | Cnf
@@ -179,13 +181,13 @@ readNumber x | BS.null r = n
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
 data TokenStream = At {-# UNPACK #-} !Pos !Contents
-data Contents = Nil | Cons !Token TokenStream | Error
+data Contents = Cons !Token TokenStream
 
 scan xs = go (Input (Pos 1 1) '\n' BS.empty xs)
   where go inp@(Input pos _ x xs) =
           case alexScan inp 0 of
-                AlexEOF -> At pos Nil
-                AlexError _ -> At pos Error
+                AlexEOF -> let t = At pos (Cons Eof t) in t
+                AlexError _ -> let t = At pos (Cons Error t) in t
                 AlexSkip  inp' len -> go inp'
                 AlexToken inp' len act ->
                   let token | len <= BS.length x = BS.take len x

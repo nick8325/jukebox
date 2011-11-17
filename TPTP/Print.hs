@@ -56,6 +56,8 @@ instance Show L.Token where
   show L.DistinctObject{L.name = x} = BS.unpack (quote '"' x)
   show L.Number{L.value = x} = show x
   show L.Punct{L.kind = x} = show x
+  show L.Eof = "end of file"
+  show L.Error = "lexical error"
 
 escapeAtom :: BS.ByteString -> BS.ByteString
 escapeAtom s | not (BS.null s') && isLower (BS.head s') && BS.all isNormal s' = s

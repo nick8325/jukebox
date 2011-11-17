@@ -48,8 +48,8 @@ initialState = MkState [] (Map.insert (BS.pack "$i") typeI Map.empty) Map.empty 
   where typeI = Type nameI Infinite Infinite 0
 
 instance Stream TokenStream Token where
-  primToken (At _ Nil) ok err fatal = err
-  primToken (At _ L.Error) ok err fatal = fatal "Lexical error"
+  primToken (At _ (Cons Eof _)) ok err fatal = err
+  primToken (At _ (Cons L.Error _)) ok err fatal = fatal "Lexical error"
   primToken (At _ (Cons t ts)) ok err fatal = ok ts t
   type Position TokenStream = TokenStream
   position = id
