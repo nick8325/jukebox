@@ -225,7 +225,7 @@ typeError f@(x ::: ty) args' = do
                  else
                    " has arity " ++ show (length args') ++
                    " but was applied to " ++ show (length (args ty)) ++
-                   plural (length (args ty)) "argument" "arguments"
+                   plural (length (args ty)) " argument" " arguments"
 
 {-# INLINE lookupFunction #-}
 lookupFunction :: FunType -> BS.ByteString -> Parser (Name ::: FunType)
