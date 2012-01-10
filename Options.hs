@@ -313,7 +313,8 @@ helpTool t0 p = usageTool t0 "help" help "help for"
           [greeting t0],
           usage t0 "<toolname> ",
           ["<toolname> can be any of the following:"],
-          concat [ justify (toolProgName t) [toolHelp t] | t <- descr p ]
+          concat [ justify (toolProgName t) [toolHelp t] | t <- descr p ],
+          ["", "Use " ++ toolProgName t0 ++ " <toolname> --help for help on a particular tool."]
           ]
 
 help :: Tool -> OptionParser a -> [String]
