@@ -17,7 +17,7 @@ fof = tool info pipeline
       allFilesBox <*>
         (parseProblemBox =>>=
          toFofBox =>>=
-         prettyPrintBox <*> pure "fof")
+         prettyPrintBox)
 
 monotonox = tool info pipeline
   where
@@ -52,7 +52,7 @@ justparser = tool info pipeline
       greetingBox info =>>
       allFilesBox <*>
         (parseProblemBox =>>=
-         pure (const (return ())))
+         prettyPrintBox)
 
 guessmodel = tool info pipeline
   where
@@ -62,10 +62,8 @@ guessmodel = tool info pipeline
       greetingBox info =>>
       allFilesBox <*>
         (parseProblemBox =>>=
-         clausifyBox =>>=
-         oneConjectureBox =>>=
          programModelBox =>>=
-         prettyClauseBox)
+         prettyPrintBox)
 
 jukebox = Tool "jukebox" "Jukebox" "1"
                "A first-order logic toolbox"

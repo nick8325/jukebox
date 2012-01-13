@@ -115,8 +115,13 @@ monotonicity cs = do
 
   return (unlines (concat (map info (NameMap.toList m))))
 
-prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (String -> Problem a -> IO ())
-prettyPrintBox = flip prettyPrintIO <$> writeFileBox
+prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (Problem a -> IO ())
+prettyPrintBox = prettyFormIO <$> writeFileBox
+
+prettyFormIO :: (Symbolic a, Pretty a) => (String -> IO ()) -> Problem a -> IO ()
+prettyFormIO write prob
+  | isFof (open prob) = prettyPrintIO "fof" write prob
+  | otherwise = prettyPrintIO "tff" write prob
 
 prettyClauseBox :: OptionParser (Problem Clause -> IO ())
 prettyClauseBox = f <$> writeFileBox
@@ -134,7 +139,9 @@ writeFileBox =
     ["Where to write the output.",
      "Default: stdout"]
     putStr
-    (fmap writeFile argFile)
+    (fmap myWriteFile argFile)
+  where myWriteFile "/dev/null" _ = return ()
+        myWriteFile file contents = writeFile file contents
 
-programModelBox :: OptionParser (Problem Clause -> IO (Problem Clause))
-programModelBox = pure (return . programModel)
+programModelBox :: OptionParser (Problem Form -> IO (Problem Form))
+programModelBox = pure (return . annotate)
