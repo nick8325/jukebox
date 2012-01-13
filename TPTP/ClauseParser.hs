@@ -33,8 +33,7 @@ data ParseState =
           !(Map BS.ByteString Type)               -- types
           !(Map BS.ByteString (Name ::: FunType)) -- functions
           !(Map BS.ByteString (Name ::: Type))    -- free variables in CNF clause
-          !Type                                   -- the $i type
-          !Int                                    -- the next type equivalence class
+          Type                                    -- the $i type
           !(Closed ())                            -- name generation
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
@@ -44,8 +43,8 @@ data IncludeStatement = Include BS.ByteString (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = MkState [] (Map.insert (BS.pack "$i") typeI Map.empty) Map.empty Map.empty typeI 1 closed0
-  where typeI = Type nameI Infinite Infinite 0
+initialState = MkState [] (Map.insert (BS.pack "$i") typeI Map.empty) Map.empty Map.empty typeI closed0
+  where typeI = Type nameI Infinite Infinite
 
 instance Stream TokenStream Token where
   primToken (At _ (Cons Eof _)) ok err fatal = err
@@ -60,7 +59,7 @@ testParser p s = snd (run (const []) p (UserState initialState (scan (BSL.pack s
 
 getProblem :: Parser [Input Form]
 getProblem = do
-  MkState p _ _ _ _ _ _ <- getState
+  MkState p _ _ _ _ _ <- getState
   return (reverse p)
 
 -- Primitive parsers.
@@ -176,8 +175,8 @@ include = do
 
 newFormula :: Input Form -> Parser ()
 newFormula input = do
-  MkState p t f v i c n <- getState
-  putState (MkState (input:p) t f Map.empty i c n)
+  MkState p t f v i n <- getState
+  putState (MkState (input:p) t f Map.empty i n)
   
 newNameFrom :: Named a => Closed () -> a -> (Closed (), Name)
 newNameFrom n name = (close_ n' (return ()), open n')
@@ -186,12 +185,12 @@ newNameFrom n name = (close_ n' (return ()), open n')
 {-# INLINE findType #-}
 findType :: BS.ByteString -> Parser Type
 findType name = do
-  MkState p t f v i c n <- getState
+  MkState p t f v i n <- getState
   case Map.lookup name t of
     Nothing -> do
       let (n', name') = newNameFrom n name
-          ty = Type { tname = name', tmonotone = Infinite, tsize = Infinite, tclass = c }
-      putState (MkState p (Map.insert name ty t) f v i (c+1) n')
+          ty = Type { tname = name', tmonotone = Infinite, tsize = Infinite }
+      putState (MkState p (Map.insert name ty t) f v i n')
       return ty
     Just x -> return x
 
@@ -230,12 +229,12 @@ typeError f@(x ::: ty) args' = do
 {-# INLINE lookupFunction #-}
 lookupFunction :: FunType -> BS.ByteString -> Parser (Name ::: FunType)
 lookupFunction def name = do
-  MkState p t f v i c n <- getState
+  MkState p t f v i n <- getState
   case Map.lookup name f of
     Nothing -> do
       let (n', name') = newNameFrom n name
           decl = name' ::: def
-      putState (MkState p t (Map.insert name decl f) v i c n')
+      putState (MkState p t (Map.insert name decl f) v i n')
       return decl
     Just f -> return f
 
@@ -243,7 +242,7 @@ lookupFunction def name = do
 {-# INLINE individual #-}
 individual :: Parser Type
 individual = do
-  MkState _ _ _ _ i _ _ <- getState
+  MkState _ _ _ _ i _ <- getState
   return i
 
 -- Parsing formulae.
@@ -325,13 +324,13 @@ instance TermLike Term where
     x <- variable
     case ?ctx of
       Nothing -> do
-        MkState p t f vs i c n <- getState
+        MkState p t f vs i n <- getState
         case Map.lookup x vs of
           Just v -> return (Var v)
           Nothing -> do
             let (n', name) = newNameFrom n x
                 v = name ::: i
-            putState (MkState p t f (Map.insert x v vs) i c n')
+            putState (MkState p t f (Map.insert x v vs) i n')
             return (Var v)
       Just ctx ->
         case Map.lookup x ctx of
@@ -434,9 +433,9 @@ varDecl typed = do
              when (not typed) $
                fatalError "Used a typed quantification in an untyped formula";
              type_ } <|> individual
-  MkState p t f v i c n <- getState
+  MkState p t f v i n <- getState
   let (n', name) = newNameFrom n x
-  putState (MkState p t f v i c n')
+  putState (MkState p t f v i n')
   return (name ::: ty)
 
 -- Parse a type

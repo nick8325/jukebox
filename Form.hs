@@ -37,9 +37,7 @@ data Type =
       -- type is monotone when domain size is >= tmonotone
       tmonotone :: DomainSize,
       -- if there is a model of size >= tsize then there is a model of size tsize
-      tsize :: DomainSize,
-      -- two types in the same class have to have the same size
-      tclass :: Int } deriving Typeable
+      tsize :: DomainSize } deriving Typeable
 
 data FunType = FunType { args :: [Type], res :: !Type } deriving (Eq, Typeable)
 

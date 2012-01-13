@@ -75,7 +75,7 @@ translate scheme mono f =
               case kind of
                 Axiom -> prepare f
                 Conjecture -> fmap notInwards (prepare (nt f))
-      typeI = Type nameI (Finite 0) Infinite 0
+      typeI = Type nameI (Finite 0) Infinite
   in close (translate1 scheme mono f') (return . mapType (const typeI))
 
 -- Typing functions.
