@@ -6,6 +6,7 @@ import qualified Data.HashMap.Lazy as H
 type Map a b = H.HashMap a b
 
 fromList = H.fromList
+toList = H.toList
 insertWith = H.insertWith
 empty = H.empty
 findWithDefault = H.lookupDefault

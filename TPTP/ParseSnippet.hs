@@ -11,6 +11,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.ByteString.Char8 as BS
 import Control.Applicative
 import qualified Map
+import Data.List
 
 tff, cnf :: [(String, Type)] -> [(String, Function)] -> String -> NameM Form
 tff = form TPTP.ClauseParser.tff
@@ -21,6 +22,7 @@ form parser types funs str = supply (form' parser types funs str)
 form' parser types funs str cl =
   let state0 = MkState [] (pack types) (pack funs) Map.empty iType cl
       pack xs = Map.fromList [(BS.pack x, y) | (x, y) <- xs]
+      unpack m = [(BS.unpack x, y) | (x, y) <- Map.toList m]
       iType =
         case lookup "$i" types of
           Just x -> x
@@ -31,9 +33,11 @@ form' parser types funs str cl =
       case state of
         MkState _ types' funs' vars _ _
           | pack types /= types' ->
-            error $ "ParseSnippet: type implicitly defined: " ++ show types'
+            error $ "ParseSnippet: type implicitly defined: " ++
+                    show (map snd (unpack types' \\ types))
           | pack funs /= funs' ->
-            error $ "ParseSnippet: function implicitly defined: " ++ show funs'
+            error $ "ParseSnippet: function implicitly defined: " ++
+                    show (map snd (unpack funs' \\ funs))
         MkState _ _ _ _ _ cl' ->
           fmap (const res) cl'
     Ok{} -> error "ParseSnippet: lexical error"
