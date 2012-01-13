@@ -1,6 +1,6 @@
 -- Pretty-printing of formulae. WARNING: icky code inside!
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances #-}
-module TPTP.Print(prettyShow, chattyShow, prettyProblem, Level(..), Pretty)
+module TPTP.Print(prettyShow, chattyShow, prettyFormula, prettyProblem, Level(..), Pretty)
        where
 
 import qualified Data.ByteString.Char8 as BS
@@ -194,3 +194,7 @@ instance Show Kind where
 prettyShow, chattyShow :: Pretty a => a -> String
 prettyShow = render . pPrint 0 Normal base
 chattyShow = render . pPrint 0 Chatty (BS.pack . show)
+
+prettyFormula :: (Pretty a, Symbolic a) => a -> String
+prettyFormula prob = render . pPrint 0 Normal env $ prob
+  where env = uniquify (S.unique (names prob))

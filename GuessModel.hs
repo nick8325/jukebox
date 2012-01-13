@@ -73,7 +73,7 @@ function constructors f = fmap concat $ do
   forM argss $ \args -> do
     let theRhss = rhss constructors args f
     alts <- forM theRhss $ \rhs -> do
-      pred <- newFunction (prettyShow rhs) [] O
+      pred <- newFunction (prettyFormula rhs) [] O
       return (Literal (Pos (Tru (pred :@: []))))
     return $
       disj alts:
