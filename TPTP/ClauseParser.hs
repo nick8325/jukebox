@@ -23,7 +23,7 @@ import TPTP.Lexer hiding
    keyword, defined, kind)
 import qualified TPTP.Lexer as L
 import qualified Form
-import Form hiding (tag, kind, Axiom, Conjecture, Question)
+import Form hiding (tag, kind, Axiom, Conjecture, Question, newFunction)
 import qualified Name
 
 -- The parser monad

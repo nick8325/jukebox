@@ -16,7 +16,7 @@ import System.Exit
 import System.IO
 import TPTP.FindFile
 import Text.PrettyPrint.HughesPJ
-import ProgramModel
+import GuessModel
 
 (=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
 f =>>= g = (>=>) <$> f <*> g

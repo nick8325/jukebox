@@ -5,7 +5,7 @@ module Name(
   (:::)(..), lhs, rhs,
   Named(..),
   Closed, close, close_, closedIO, open, closed0, stdNames, nameO, nameI, NameM, newName,
-  unsafeClose, maxIndex,
+  unsafeClose, maxIndex, supply,
   uniquify) where
 
 import qualified Data.ByteString.Char8 as BS
@@ -112,6 +112,13 @@ closedIO :: Closed (IO a) -> IO (Closed a)
 closedIO Closed { maxIndex = maxIndex, open = open } = do
   open' <- open
   return Closed { maxIndex = maxIndex, open = open' }
+
+supply :: (Closed () -> Closed a) -> NameM a
+supply f = NameM $ do
+  idx <- get
+  let res = f (Closed idx ())
+  put (maxIndex res)
+  return (open res)
 
 uniquify :: [Name] -> (Name -> BS.ByteString)
 uniquify xs = f

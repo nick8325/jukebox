@@ -88,6 +88,18 @@ instance Typed Term where
   typ (Var x) = typ x
   typ (f :@: _) = typ f
 
+newSymbol :: Named a => a -> b -> NameM (Name ::: b)
+newSymbol x ty = fmap (::: ty) (newName x)
+
+newFunction :: Named a => a -> [Type] -> Type -> NameM Function
+newFunction x args res = newSymbol x (FunType args res)
+
+funArgs :: Function -> [Type]
+funArgs (_ ::: ty) = args ty
+
+arity :: Function -> Int
+arity = length . funArgs
+
 ----------------------------------------------------------------------
 -- Literals
 
@@ -128,6 +140,10 @@ the (Neg x) = x
 pos :: Signed a -> Bool
 pos (Pos _) = True
 pos (Neg _) = False
+
+signForm :: Signed a -> Form -> Form
+signForm (Pos _) f = f
+signForm (Neg _) f = Not f
 
 ----------------------------------------------------------------------
 -- Formulae
@@ -175,8 +191,12 @@ nt :: Form -> Form
 nt (Not a) = a
 nt a       = Not a
 
-(.=>) :: Form -> Form -> Form
-(.=>) = connective Implies
+(.=>.) :: Form -> Form -> Form
+(.=>.) = connective Implies
+
+(.=.) :: Term -> Term -> Form
+t .=. u | typ t == O = Literal (Pos (Tru t)) `Equiv` Literal (Pos (Tru u))
+        | otherwise = Literal (Pos (t :=: u))
 
 (/\), (\/) :: Form -> Form -> Form
 And as /\ And bs = And (as `S.append` bs)
@@ -190,6 +210,15 @@ a     \/ b | isTrue a || isTrue b = true
 Or as \/ b     = Or (b `S.cons` as)
 a     \/ Or bs = Or (a `S.cons` bs)
 a     \/ b     = Or (S.Unit a `S.append` S.Unit b)
+
+closeForm :: Form -> Form
+closeForm f | Map.null vars = f
+            | otherwise = ForAll (Bind vars f)
+  where vars = free f
+
+conj, disj :: S.List f => f Form -> Form
+conj = And . S.fromList
+disj = Or . S.fromList
 
 -- remove Not from the root of a problem
 positive :: Form -> Form
