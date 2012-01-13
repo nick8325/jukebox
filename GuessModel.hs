@@ -10,16 +10,13 @@ import TPTP.Print
 import TPTP.ParseSnippet
 import Utils
 
-ind :: Symbolic a => a -> Type
-ind x =
-  case filter (/= O) (types x) of
-    [ty] -> ty
-    [] -> Type nameI Infinite Infinite
-    _ -> error "GuessModel: can't deal with many-typed problems"
+data Universe = Peano | Trees
 
-annotate :: Problem Form -> Problem Form
-annotate prob = close prob $ \forms -> do
-  let i = ind forms
+universe :: Universe -> Type -> NameM ([Function], [Form])
+universe Peano = peano
+universe Trees = trees
+
+peano i = do
   zero <- newFunction "zero" [] i
   succ <- newFunction "succ" [i] i
   pred <- newFunction "pred" [i] i
@@ -27,18 +24,48 @@ annotate prob = close prob $ \forms -> do
       funs = [("zero", zero),
               ("succ", succ),
               ("pred", pred)]
-      constructors = [zero, succ]
   
   prelude <- mapM (cnf types funs) [
     "zero != succ(X)",
     "X = zero | X = succ(pred(X))",
     "succ(X) != succ(Y) | X = Y"
     ]
+  return ([zero, succ], prelude)
 
+trees i = do
+  nil <- newFunction "nil" [] i
+  bin <- newFunction "bin" [i, i] i
+  left <- newFunction "left" [i] i
+  right <- newFunction "right" [i] i
+  let types = [("$i", i)]
+      funs = [("nil", nil),
+              ("bin", bin),
+              ("left", left),
+              ("right", right)]
+  
+  prelude <- mapM (cnf types funs) [
+    "nil != bin(X,Y)",
+    "X = nil | X = bin(left(X), right(X))",
+    "bin(X,Z) != bin(Y,Z) | X = Y",
+    "bin(X,Y) != bin(X,Z) | Y = Z"
+    ]
+  return ([nil, bin], prelude)
+
+guessModel :: Universe -> Problem Form -> Problem Form
+guessModel univ prob = close prob $ \forms -> do
+  let i = ind forms
+  (constructors, prelude) <- universe univ i
   program <- fmap concat (mapM (function constructors) (functions forms))
   return (map (Input (BS.pack "adt") Axiom) prelude ++
           map (Input (BS.pack "program") Axiom) program ++
           forms)
+
+ind :: Symbolic a => a -> Type
+ind x =
+  case filter (/= O) (types x) of
+    [ty] -> ty
+    [] -> Type nameI Infinite Infinite
+    _ -> error "GuessModel: can't deal with many-typed problems"
 
 function :: [Function] -> Function -> NameM [Form]
 function constructors f = fmap concat $ do

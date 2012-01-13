@@ -143,5 +143,16 @@ writeFileBox =
   where myWriteFile "/dev/null" _ = return ()
         myWriteFile file contents = writeFile file contents
 
-programModelBox :: OptionParser (Problem Form -> IO (Problem Form))
-programModelBox = pure (return . annotate)
+guessModelBox :: OptionParser (Problem Form -> IO (Problem Form))
+guessModelBox = guessModelIO <$> universe
+  where universe = choose <$>
+                   flag "universe"
+                   ["Which universe to find the model in.",
+                    "Default: peano"]
+                   "peano"
+                   (argOption ["peano", "trees"])
+        choose "peano" = Peano
+        choose "trees" = Trees
+
+guessModelIO :: Universe -> Problem Form -> IO (Problem Form)
+guessModelIO univ prob = return (guessModel univ prob)

@@ -62,7 +62,7 @@ guessmodel = tool info pipeline
       greetingBox info =>>
       allFilesBox <*>
         (parseProblemBox =>>=
-         programModelBox =>>=
+         guessModelBox =>>=
          prettyPrintBox)
 
 jukebox = Tool "jukebox" "Jukebox" "1"
