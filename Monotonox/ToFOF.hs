@@ -38,8 +38,8 @@ guard scheme mono (Input t k f) = Input t k (aux (pos k) f)
         aux pos (Not f) = Not (aux (not pos) f)
         aux pos (And fs) = And (fmap (aux pos) fs)
         aux pos (Or fs) = Or (fmap (aux pos) fs)
-        aux pos (Equiv _ _) = error "ToFOF.guard: equiv should have been eliminated (internal error)"
-        aux pos (Connective _ _ _) = error "ToFOF.guard: connective should have been eliminated (internal error)"
+        aux pos (Equiv _ _) = error "ToFOF.guard: equiv should have been eliminated"
+        aux pos (Connective _ _ _) = error "ToFOF.guard: connective should have been eliminated"
         pos Axiom = True
         pos Conjecture = False
 
@@ -55,7 +55,7 @@ translate1 scheme mono f = close f $ \inps -> do
       lookupType ty =
         case NameMap.lookup (name ty) typeMap of
           Just (_ ::: f) -> f
-          Nothing -> error "ToFOF.translate: type not found (internal error)"
+          Nothing -> error "ToFOF.translate: type not found"
       scheme1' = scheme1 scheme mono' lookupType
   funcAxioms <- mapM (funcAxiom scheme1') funcs
   typeAxioms <- mapM (typeAxiom scheme1') tys

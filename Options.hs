@@ -153,7 +153,7 @@ instance Applicative ParseResult where
   pure = No . pure
   Yes n r <*> Yes n' r'
     | n == n' = Yes n (r <*> r')
-    | otherwise = error "Options.ParseResult: inconsistent number of arguments (internal error)"
+    | otherwise = error "Options.ParseResult: inconsistent number of arguments"
   Error s <*> _ = Error s
   _ <*> Error s = Error s
   Yes n r <*> No x = Yes n (r <*> x)
@@ -174,7 +174,7 @@ awaitP p def par = ParParser (return def) f
           case par x xs of
             Yes n r -> Yes (n+1) r
             No _ ->
-              error "Options.await: got No (internal error)"
+              error "Options.await: got No"
             Error err -> Error err
         f _ = No (awaitP p def par)
 
