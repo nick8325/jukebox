@@ -15,7 +15,7 @@ ind x =
   case filter (/= O) (types x) of
     [ty] -> ty
     [] -> Type nameI Infinite Infinite
-    _ -> error "ProgramModel: can't deal with many-typed problems"
+    _ -> error "GuessModel: can't deal with many-typed problems"
 
 annotate :: Problem Form -> Problem Form
 annotate prob = close prob $ \forms -> do
