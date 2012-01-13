@@ -93,6 +93,7 @@ instance Typed Term where
 ----------------------------------------------------------------------
 -- Literals
 
+infix 8 :=:
 data Atomic = !Term :=: !Term | Tru !Term
 
 -- Helper for (Eq Atomic, Ord Atomic, Hashable Atomic) instances
@@ -436,6 +437,13 @@ types = nub . collect f
         f :: TypeRep a -> a -> Seq Type
         f TermRep t = S.Unit (typ t)
         f BindRep (Bind vs _) = S.fromList (map typ (NameMap.toList vs))
+        f _ _ = S.Nil
+
+terms :: Symbolic a => a -> [Term]
+terms = nub . collect f
+  where {-# INLINE f #-}
+        f :: TypeRep a -> a -> Seq Term
+        f TermRep t = S.Unit t
         f _ _ = S.Nil
 
 vars :: Symbolic a => a -> [Variable]

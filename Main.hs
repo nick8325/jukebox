@@ -6,7 +6,7 @@ import Control.Applicative
 import Data.Monoid
 import Toolbox
 
-tools = mconcat [fof, cnf, monotonox, justparser]
+tools = mconcat [fof, cnf, monotonox, justparser, guessmodel]
 
 fof = tool info pipeline
   where
@@ -53,6 +53,19 @@ justparser = tool info pipeline
       allFilesBox <*>
         (parseProblemBox =>>=
          pure (const (return ())))
+
+guessmodel = tool info pipeline
+  where
+    info = Tool "guessmodel" "Infinite model guesser" "1"
+                "Guess an infinite model"
+    pipeline =
+      greetingBox info =>>
+      allFilesBox <*>
+        (parseProblemBox =>>=
+         clausifyBox =>>=
+         oneConjectureBox =>>=
+         programModelBox =>>=
+         prettyClauseBox)
 
 jukebox = Tool "jukebox" "Jukebox" "1"
                "A first-order logic toolbox"

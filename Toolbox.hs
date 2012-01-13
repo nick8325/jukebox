@@ -16,6 +16,7 @@ import System.Exit
 import System.IO
 import TPTP.FindFile
 import Text.PrettyPrint.HughesPJ
+import ProgramModel
 
 (=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
 f =>>= g = (>=>) <$> f <*> g
@@ -134,3 +135,6 @@ writeFileBox =
      "Default: stdout"]
     putStr
     (fmap writeFile argFile)
+
+programModelBox :: OptionParser (Problem Clause -> IO (Problem Clause))
+programModelBox = pure (return . programModel)
