@@ -1,0 +1,7 @@
+#!/bin/sh
+
+while true; do
+      clear
+      grep "^'.*\$true$" model | sort
+      sleep 1
+done

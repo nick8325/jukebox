@@ -202,6 +202,17 @@ flag name help def (Annotated desc (SeqParser args f)) =
           await name ()
             (const (Error (Mistake ("Option --" ++ name ++ " occurred twice"))))
 
+manyFlags :: String -> [String] -> ArgParser a -> OptionParser [a]
+manyFlags name help (Annotated desc (SeqParser args f)) =
+  fmap reverse (Annotated [desc'] (go []))
+  where desc' = Flag name "Common options" help desc
+        go xs = await name xs (g xs)
+        g xs ys =
+          case f ys of
+            Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
+            Left (Usage code err) -> Error (Usage code err)
+            Right x -> Yes args (go (x:xs))
+
 -- Read filenames from the command line.
 filenames :: OptionParser [String]
 filenames = Annotated [] (from [])

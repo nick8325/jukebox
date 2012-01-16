@@ -144,7 +144,7 @@ writeFileBox =
         myWriteFile file contents = writeFile file contents
 
 guessModelBox :: OptionParser (Problem Form -> IO (Problem Form))
-guessModelBox = guessModelIO <$> universe
+guessModelBox = guessModelIO <$> expansive <*> universe
   where universe = choose <$>
                    flag "universe"
                    ["Which universe to find the model in.",
@@ -153,6 +153,9 @@ guessModelBox = guessModelIO <$> universe
                    (argOption ["peano", "trees"])
         choose "peano" = Peano
         choose "trees" = Trees
+        expansive = manyFlags "expansive"
+                    ["Allow a function to construct 'new' terms in its base base."]
+                    (arg "<function>" "expected a function name" Just)
 
-guessModelIO :: Universe -> Problem Form -> IO (Problem Form)
-guessModelIO univ prob = return (guessModel univ prob)
+guessModelIO :: [String] -> Universe -> Problem Form -> IO (Problem Form)
+guessModelIO expansive univ prob = return (guessModel expansive univ prob)

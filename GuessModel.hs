@@ -51,11 +51,13 @@ trees i = do
     ]
   return ([nil, bin], prelude)
 
-guessModel :: Universe -> Problem Form -> Problem Form
-guessModel univ prob = close prob $ \forms -> do
+guessModel :: [String] -> Universe -> Problem Form -> Problem Form
+guessModel expansive univ prob = close prob $ \forms -> do
   let i = ind forms
+  answer <- newFunction "$answer" [i] O
+  let withExpansive f func = f func (BS.unpack (base (name func)) `elem` expansive) answer
   (constructors, prelude) <- universe univ i
-  program <- fmap concat (mapM (function constructors) (functions forms))
+  program <- fmap concat (mapM (withExpansive (function constructors)) (functions forms))
   return (map (Input (BS.pack "adt") Axiom) prelude ++
           map (Input (BS.pack "program") Axiom) program ++
           forms)
@@ -67,11 +69,14 @@ ind x =
     [] -> Type nameI Infinite Infinite
     _ -> error "GuessModel: can't deal with many-typed problems"
 
-function :: [Function] -> Function -> NameM [Form]
-function constructors f = fmap concat $ do
+function :: [Function] -> Function -> Bool -> Function -> NameM [Form]
+function constructors f expansive answerP = fmap concat $ do
   argss <- cases constructors (funArgs f)
   forM argss $ \args -> do
-    let theRhss = rhss constructors args f
+    fname <- newFunction ("exhausted_" ++ BS.unpack (base (name f)) ++ "_case")
+               [] (head (funArgs answerP))
+    let answer = Literal (Pos (Tru (answerP :@: [fname :@: []])))
+    let theRhss = rhss constructors args f expansive answer
     alts <- forM theRhss $ \rhs -> do
       pred <- newFunction (prettyFormula rhs) [] O
       return (Literal (Pos (Tru (pred :@: []))))
@@ -80,26 +85,26 @@ function constructors f = fmap concat $ do
       [ closeForm (Connective Implies alt rhs)
       | (alt, rhs) <- zip alts theRhss ]
 
-rhss :: [Function] -> [Term] -> Function -> [Form]
-rhss constructors args f =
+rhss :: [Function] -> [Term] -> Function -> Bool -> Form -> [Form]
+rhss constructors args f expansive answer =
   case typ f of
     O ->
       Literal (Pos (Tru (f :@: args))):
       Literal (Neg (Tru (f :@: args))):
-      map (f :@: args .=.) (map (f :@:) (recursive args))
-    _ ->
-      map (f :@: args .=.) . usort $
-        map (f :@:) (recursive args) ++ constructor ++ subterm
+      map its (map (f :@:) (recursive args))
+    _ | expansive -> map its (usort (unconditional ++ constructor))
+      | otherwise -> map its (usort unconditional) ++ [answer]
+      where unconditional = map (f :@:) (recursive args) ++ subterm
   where recursive [] = []
         recursive (a:as) = reduce a ++ map (a:) (recursive as)
           where reduce (f :@: xs) = [ x:as' | x <- xs, as' <- as:recursive as ]
                 reduce _ = []
-        
         constructor = [ c :@: xs
                       | c <- constructors,
                         xs <- sequence (replicate (arity c) subterm) ]
         
         subterm = terms args
+        its t = f :@: args .=. t
 
 cases :: [Function] -> [Type] -> NameM [[Term]]
 cases constructors [] = return [[]]

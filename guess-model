@@ -1,0 +1,30 @@
+#!/bin/sh
+
+jukebox=dist/build/jukebox/jukebox
+equinox=~/dev/equinox/Haskell/equinox
+model=model
+problem=problem
+
+if [ $# = 0 ]; then
+    echo Need an input file.
+    exit 1
+fi
+
+args=$*
+
+while true; do
+    $jukebox guessmodel $file $args > $problem
+    result=`$equinox --modelfile $model $problem | tee /dev/stderr`
+    if `echo $result | grep -q 'ANSWER: '`; then
+        function=`echo $result |
+          grep 'ANSWER: ' |
+          sed 's/.*ANSWER: (exhausted_\([^)]*\)_case).*/\1/')`
+        echo
+        echo "*** Expanding function $function"
+        args="$args --expansive $function"
+    else
+        echo
+        echo "*** Ran jukebox as: $jukebox guessmodel $args"
+        break
+    fi
+done

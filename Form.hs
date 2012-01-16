@@ -100,6 +100,10 @@ funArgs (_ ::: ty) = args ty
 arity :: Function -> Int
 arity = length . funArgs
 
+size :: Term -> Int
+size Var{} = 1
+size (f :@: xs) = 1 + sum (map size xs)
+
 ----------------------------------------------------------------------
 -- Literals
 
