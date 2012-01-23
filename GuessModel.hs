@@ -77,13 +77,15 @@ function constructors f expansive answerP = fmap concat $ do
                [] (head (funArgs answerP))
     let answer = Literal (Pos (Tru (answerP :@: [fname :@: []])))
     let theRhss = rhss constructors args f expansive answer
-    alts <- forM theRhss $ \rhs -> do
-      pred <- newFunction (prettyFormula rhs) [] O
-      return (Literal (Pos (Tru (pred :@: []))))
+    alts <- forM theRhss $ \rhs ->
+      if ground rhs then return rhs else do
+        pred <- newFunction (concat (lines (prettyFormula rhs))) [] O
+        return (Literal (Pos (Tru (pred :@: []))))
     return $
       disj alts:
       [ closeForm (Connective Implies alt rhs)
-      | (alt, rhs) <- zip alts theRhss ]
+      | (alt, rhs) <- zip alts theRhss,
+        not (ground rhs) ]
 
 rhss :: [Function] -> [Term] -> Function -> Bool -> Form -> [Form]
 rhss constructors args f expansive answer =
@@ -94,17 +96,17 @@ rhss constructors args f expansive answer =
       map its (map (f :@:) (recursive args))
     _ | expansive -> map its (usort (unconditional ++ constructor))
       | otherwise -> map its (usort unconditional) ++ [answer]
-      where unconditional = map (f :@:) (recursive args) ++ subterm
   where recursive [] = []
         recursive (a:as) = reduce a ++ map (a:) (recursive as)
           where reduce (f :@: xs) = [ x:as' | x <- xs, as' <- as:recursive as ]
                 reduce _ = []
         constructor = [ c :@: xs
                       | c <- constructors,
-                        xs <- sequence (replicate (arity c) subterm) ]
+                        xs <- sequence (replicate (arity c) unconditional) ]
         
         subterm = terms args
         its t = f :@: args .=. t
+        unconditional = map (f :@:) (recursive args) ++ subterm
 
 cases :: [Function] -> [Type] -> NameM [[Term]]
 cases constructors [] = return [[]]

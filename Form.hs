@@ -451,6 +451,9 @@ free x = aux (typeRep x) x (unpack x)
         aux _ _ (Unary _ x) = free x
         aux _ _ (Binary _ x y) = free x `Map.union` free y
 
+ground :: Symbolic a => a -> Bool
+ground = Map.null . free
+
 bind :: Symbolic a => a -> Bind a
 bind x = Bind (free x) x
 

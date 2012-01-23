@@ -18,7 +18,7 @@ while true; do
     if `echo $result | grep -q 'ANSWER: '`; then
         function=`echo $result |
           grep 'ANSWER: ' |
-          sed 's/.*ANSWER: (exhausted_\([^)]*\)_case).*/\1/')`
+          sed 's/.*ANSWER: (exhausted_\([^)]*\)_case).*/\1/'`
         echo
         echo "*** Expanding function $function"
         args="$args --expansive $function"
