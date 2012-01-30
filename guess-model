@@ -13,12 +13,12 @@ fi
 args=$*
 
 while true; do
-    $jukebox guessmodel $file $args > $problem
-    result=`$equinox --modelfile $model $problem | tee /dev/stderr`
+    $jukebox guessmodel $args | $jukebox fof /dev/stdin > $problem
+    result=`$equinox --modelfile model $problem | tee /dev/stderr`
     if `echo $result | grep -q 'ANSWER: '`; then
         function=`echo $result |
           grep 'ANSWER: ' |
-          sed 's/.*ANSWER: (exhausted_\([^)]*\)_case).*/\1/'`
+          sed 's/.*ANSWER: (exhausted_\([^)]*\)_case[0-9]*).*/\1/'`
         echo
         echo "*** Expanding function $function"
         args="$args --expansive $function"

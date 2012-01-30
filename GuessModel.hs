@@ -54,7 +54,8 @@ trees i = do
 guessModel :: [String] -> Universe -> Problem Form -> Problem Form
 guessModel expansive univ prob = close prob $ \forms -> do
   let i = ind forms
-  answer <- newFunction "$answer" [i] O
+  answerType <- newType "answer"
+  answer <- newFunction "$answer" [answerType] O
   let withExpansive f func = f func (BS.unpack (base (name func)) `elem` expansive) answer
   (constructors, prelude) <- universe univ i
   program <- fmap concat (mapM (withExpansive (function constructors)) (functions forms))

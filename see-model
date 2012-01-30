@@ -2,6 +2,6 @@
 
 while true; do
       clear
-      grep "^'.*\$true$" model | sort
+      grep "^'.*\$true$" model | grep -v 'is_' | sort
       sleep 1
 done

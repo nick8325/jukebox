@@ -94,6 +94,11 @@ newSymbol x ty = fmap (::: ty) (newName x)
 newFunction :: Named a => a -> [Type] -> Type -> NameM Function
 newFunction x args res = newSymbol x (FunType args res)
 
+newType :: Named a => a -> NameM Type
+newType x = do
+  n <- newName x
+  return (Type n Infinite Infinite)
+
 funArgs :: Function -> [Type]
 funArgs (_ ::: ty) = args ty
 
