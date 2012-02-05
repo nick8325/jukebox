@@ -27,7 +27,6 @@ peano i = do
   
   prelude <- mapM (cnf types funs) [
     "zero != succ(X)",
-    "X = zero | X = succ(pred(X))",
     "pred(succ(X)) = X"
     ]
   return ([zero, succ], prelude)
@@ -45,7 +44,6 @@ trees i = do
   
   prelude <- mapM (cnf types funs) [
     "nil != bin(X,Y)",
-    "X = nil | X = bin(left(X), right(X))",
     "left(bin(X,Y)) = X",
     "right(bin(X,Y)) = Y"
     ]
