@@ -1,0 +1,35 @@
+Mostly to do with name generation:
+* Allow generating names more flexibly, e.g., attach a prefix to a
+  name, put the disambiguating number in a particular place.
+  This will make GuessModel nicer and allow us to remove the
+  clausifier monad.
+* Make the disambiguator understand scope a bit better.
+* Make the clausifier return a Problem [Clause] instead of
+  ([Clause], [[Clause]])?
+  (Don't generate clause names, instead associate each input formula
+  with a list of output clauses.)
+
+* Guess-model: skolemise problem first
+* Type inference
+* Support for non-formula inputs, e.g. domain size restrictions
+  (produced by type inference) or interpreted domains?
+
+* Clean up generic stuff.
+
+* Make output TPTP-compliant and catch exceptions+print with "internal
+  error" message.
+
+* Work out how to do $distinct, $answer (wrt types). Possibilities:
+    * polymorphism
+    * give each instance a different name, don't use suffix in
+      uniquifier for them
+    * give each instance a different name, mark somehow as special
+      (give Function type a semantics field?)
+    * give each instance a different name, maintain a list of
+      "special" names
+  Maybe rule out polymorphism for now---in full generality,
+  things like a -> b make our life hard. (type variable on right
+  that's not on left.) Add "semantics" field?? Bit icky...
+
+* Form.isFof: don't look for $i, check for unitypedness.
+  Maybe remove $i from stdNames altogether?
