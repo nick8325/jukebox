@@ -89,9 +89,8 @@ tagsFlags =
 
 tags :: Bool -> Scheme
 tags moreAxioms = Scheme
-  { makeFunction = \ty -> do
-      name <- newName (BS.append (BS.pack "to_") (baseName ty))
-      return (name ::: FunType [ty] ty),
+  { makeFunction = \ty ->
+      newFunction (BS.append (BS.pack "to_") (baseName ty)) [ty] ty,
     scheme1 = tags1 moreAxioms }
 
 tags1 :: Bool -> (Type -> Bool) -> (Type -> Function) -> Scheme1
@@ -112,9 +111,8 @@ tags1 moreAxioms mono fs = Scheme1
 
 tagsAxiom :: Bool -> (Type -> Bool) -> (Type -> Function) -> Function -> NameM Form
 tagsAxiom moreAxioms mono fs f@(_ ::: FunType args res) = do
-  vs <- forM args $ \ty -> do
-    n <- newName "X"
-    return (Var (n ::: ty))
+  vs <- forM args $ \ty ->
+    fmap Var (newSymbol "X" ty)
   let t = f :@: vs
       at n f xs = take n xs ++ [f (xs !! n)] ++ drop (n+1) xs
       tag t = fs (typ t) :@: [t]
@@ -132,17 +130,15 @@ tagsExists :: (Type -> Bool) -> Type -> Function -> NameM Form
 tagsExists mono ty f
   | mono ty = return true
   | otherwise = do
-      n <- newName "X"
-      let v = Var (n ::: ty)
+      v <- fmap Var (newSymbol "X" ty)
       return (Exists (bind (Literal (Pos (f :@: [v] :=: v)))))
 
 -- Typing predicates.
 
 guards :: Scheme
 guards = Scheme
-  { makeFunction = \ty -> do
-      name <- newName (BS.append (BS.pack "is_") (baseName ty))
-      return (name ::: FunType [ty] O),
+  { makeFunction = \ty ->
+      newFunction (BS.append (BS.pack "is_") (baseName ty)) [ty] O,
     scheme1 = guards1 }
 
 guards1 :: (Type -> Bool) -> (Type -> Function) -> Scheme1
@@ -179,14 +175,13 @@ guardsAxiom :: (Type -> Bool) -> (Type -> Function) -> Function -> NameM Form
 guardsAxiom mono ps f@(_ ::: FunType args res)
   | mono res = return true
   | otherwise = do
-    vs <- forM args $ \ty -> do
-      n <- newName "X"
-      return (Var (n ::: ty))
+    vs <- forM args $ \ty ->
+      fmap Var (newSymbol "X" ty)
     return (Literal (Pos (Tru (ps res :@: [f :@: vs]))))
 
 guardsTypeAxiom :: (Type -> Bool) -> (Type -> Function) -> Type -> NameM Form
 guardsTypeAxiom mono ps ty
   | mono ty = return true
   | otherwise = do
-    n <- newName "X"
-    return (Exists (bind (Literal (Pos (Tru (ps ty :@: [Var (n ::: ty)]))))))
+    v <- fmap Var (newSymbol "X" ty)
+    return (Exists (bind (Literal (Pos (Tru (ps ty :@: [v]))))))

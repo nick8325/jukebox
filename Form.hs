@@ -518,7 +518,7 @@ uniqueNames x = evalStateT (aux Map.empty x) (free x)
         aux' s BindRep (Bind vs x) = do
           used <- get
           let (stale, fresh) = partition (`NameMap.member` used) (NameMap.toList vs)
-          stale' <- sequence [ fmap (::: t) (lift (newName x)) | x ::: t <- stale ]
+          stale' <- sequence [ lift (newSymbol x t) | x ::: t <- stale ]
           put (used `Map.union` NameMap.fromList fresh `Map.union` NameMap.fromList stale')
           case stale of
             [] -> fmap (Bind vs) (aux s x)

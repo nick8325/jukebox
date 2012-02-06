@@ -427,11 +427,6 @@ withName s m = lift (runReaderT m s)
 getName :: M Tag
 getName = ask
 
-fresh :: Name ::: b -> M (Name ::: b)
-fresh (v ::: t) = do
-  v' <- lift (lift (newName v))
-  return (v' ::: t)
-
 skolem :: Variable -> NameMap Variable -> M Term
 skolem (v ::: t) vs =
   do n <- skolemName "sK" v
