@@ -37,3 +37,7 @@ Mostly to do with name generation:
 * Split Name class into Named and Described classes
   so that 1) String/ByteString can be member of Described but not Named,
   2) we can implement addPrefix and addSuffix (Described a => String -> a -> a)
+
+* Support TFF1 (polymorphism)? Something like
+  Function = (Name ::: FunType) ::: [Type]
+  so that we retain f :@: ts for application.
