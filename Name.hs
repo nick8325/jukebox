@@ -1,6 +1,7 @@
 {-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances, DeriveDataTypeable #-}
 module Name(
   Name, uniqueId, base,
+  stringBaseName,
   unsafeMakeName,
   (:::)(..), lhs, rhs,
   Named(..),
@@ -42,6 +43,9 @@ class Named a where
   name :: a -> Name
   baseName :: a -> BS.ByteString
   baseName = base . name
+
+stringBaseName :: Named a => a -> String
+stringBaseName = BS.unpack . baseName
 
 instance Named BS.ByteString where
   name = error "Name.name: used a ByteString as a name"
