@@ -4,7 +4,7 @@ import System.IO
 import Data.IORef
 import Data.Word
 import qualified Data.ByteString.Lazy as BSL
-import Data.ByteString.Lazy.Progress
+--import Data.ByteString.Lazy.Progress
 import Control.Exception
 import Control.Monad
 import Prelude hiding (last)
@@ -34,7 +34,8 @@ tickOnRead p s = do
         when (next <= index) $ do
           tick p
           writeIORef nextRef (next + chunkSize)
-  trackProgress f s
+  -- trackProgress f s
+  return s
 
 withProgressBar :: (ProgressBar -> IO a) -> IO a
 withProgressBar f = do
