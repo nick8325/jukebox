@@ -9,6 +9,7 @@ import qualified Data.ByteString.Char8 as BS
 import System.IO
 import System.Exit
 import Control.Applicative
+import Control.Concurrent
 
 usort :: Ord a => [a] -> [a]
 usort = map head . group . sort
@@ -27,16 +28,8 @@ nub = Set.toList . Set.fromList . Seq.toList
 
 popen :: FilePath -> [String] -> BS.ByteString -> IO (Either Int BS.ByteString)
 popen prog args inp = do
-  (Just stdin, Just stdout, Nothing, pid) <-
-    createProcess CreateProcess {
-      cmdspec = RawCommand prog args,
-      cwd = Nothing,
-      env = Nothing,
-      std_in = CreatePipe,
-      std_out = CreatePipe,
-      std_err = Inherit,
-      close_fds = False
-      }
+  (stdin, stdout, stderr_, pid) <- runInteractiveProcess prog args Nothing Nothing
+  forkIO $ hGetContents stderr_ >>= hPutStr stderr
   BS.hPutStr stdin inp
   hFlush stdin
   hClose stdin
