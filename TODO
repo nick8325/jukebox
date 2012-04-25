@@ -50,3 +50,7 @@ Mostly to do with name generation:
 * Allow parsing of CNF directly?
 
 * Put GuessModel refinement loop in Haskell code
+
+* Make main loop prettier.
+
+* Clean up toolbox mess.
