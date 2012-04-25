@@ -41,3 +41,12 @@ Mostly to do with name generation:
 * Support TFF1 (polymorphism)? Something like
   Function = (Name ::: FunType) ::: [Type]
   so that we retain f :@: ts for application.
+
+* Make GuessModel work with conjecture and existentials.
+
+* Make E interface preserve names and print out satisfiability status.
+* Add Equinox interface (including model finding)
+
+* Allow parsing of CNF directly?
+
+* Put GuessModel refinement loop in Haskell code
