@@ -66,8 +66,7 @@ oneConjectureBox = pure oneConjecture
 
 oneConjecture :: CNF -> IO (Problem Clause)
 oneConjecture cnf = closedIO (close cnf f)
-  where f (cs, []) = return (return cs)
-        f (cs, [cs']) = return (return (cs ++ cs'))
+  where f (Obligs cs [cs'] _ _) = return (return (cs ++ cs'))
         f _ = return $ do
           hPutStrLn stderr "Error: more than one conjecture found in input problem"
           exitWith (ExitFailure 1)

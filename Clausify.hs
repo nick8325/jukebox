@@ -35,7 +35,7 @@ clausify :: ClausifyFlags -> Problem Form -> CNF
 clausify flags inps = close inps (run . clausifyInputs S.Nil S.Nil)
  where
   clausifyInputs theory obligs [] =
-    do return ( S.toList theory , map S.toList (S.toList obligs) )
+    do return (toObligs (S.toList theory) (S.toList obligs))
   
   clausifyInputs theory obligs (inp:inps) | kind inp == Axiom =
     do cs <- clausForm (tag inp) (what inp)
@@ -52,8 +52,7 @@ clausify flags inps = close inps (run . clausifyInputs S.Nil S.Nil)
        clausifyObligs theory (obligs `S.append` S.Unit cs) s as inps
 
   split' a | splitting flags = if null split_a then [true] else split_a
-   where
-    split_a = split a
+    where split_a = split a
   split' a                   = [a]
 
 split :: Form -> [Form]

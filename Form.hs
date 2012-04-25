@@ -291,7 +291,19 @@ v |=> x = NameMap.singleton (name v ::: x)
 ----------------------------------------------------------------------
 -- Clauses
 
-type CNF = Closed ([Input Clause], [[Input Clause]])
+type CNF = Closed Obligs
+
+data Obligs = Obligs {
+  axioms :: [Input Clause],
+  obligs :: [[Input Clause]],
+  satisfiable :: String,
+  unsatisfiable :: String
+  }
+
+toObligs :: [Input Clause] -> [[Input Clause]] -> Obligs
+toObligs axioms [] = Obligs axioms [[]] "Satisfiable" "Unsatisfiable"
+toObligs axioms obligs = Obligs axioms obligs "CounterSatisfiable" "Theorem"
+
 newtype Clause = Clause (Bind [Literal])
 
 clause :: S.List f => f (Signed Atomic) -> Clause
@@ -309,6 +321,11 @@ toLiterals (Clause (Bind _ ls)) = ls
 type Tag = BS.ByteString
 
 data Kind = Axiom | Conjecture | Question deriving (Eq, Ord)
+
+data Answer = Satisfiable | Unsatisfiable | NoAnswer NoAnswerReason
+  deriving (Eq, Ord)
+
+data NoAnswerReason = GaveUp | TimeOut deriving (Eq, Ord, Show)
 
 data Input a = Input
   { tag ::  !Tag,
