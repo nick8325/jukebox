@@ -40,9 +40,8 @@ for pkg in $pkgs; do
     cd ../..
 done
 
-p=$(ghc-pkg $ghcpkg_opts describe minisat|grep '^library-dirs: '|awk '{print $2;}')
-export LD_LIBRARY_PATH=$p
-export DYLD_LIBRARY_PATH=$p
+export LD_LIBRARY_PATH=$(scripts/find-minisat)
+export DYLD_LIBRARY_PATH=$(scripts/find-minisat)
 runhaskell Setup.* configure $cabal_opts --bindir=.
 runhaskell Setup.* build
 runhaskell Setup.* install
