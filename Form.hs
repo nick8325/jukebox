@@ -295,14 +295,15 @@ type CNF = Closed Obligs
 
 data Obligs = Obligs {
   axioms :: [Input Clause],
-  obligs :: [[Input Clause]],
+  conjectures :: [[Input Clause]],
   satisfiable :: String,
   unsatisfiable :: String
   }
 
 toObligs :: [Input Clause] -> [[Input Clause]] -> Obligs
 toObligs axioms [] = Obligs axioms [[]] "Satisfiable" "Unsatisfiable"
-toObligs axioms obligs = Obligs axioms obligs "CounterSatisfiable" "Theorem"
+toObligs axioms [conjecture] = Obligs axioms [conjecture] "CounterSatisfiable" "Theorem"
+toObligs axioms conjectures = Obligs axioms conjectures "GaveUp" "Theorem"
 
 newtype Clause = Clause (Bind [Literal])
 
@@ -324,6 +325,11 @@ data Kind = Axiom | Conjecture | Question deriving (Eq, Ord)
 
 data Answer = Satisfiable | Unsatisfiable | NoAnswer NoAnswerReason
   deriving (Eq, Ord)
+
+instance Show Answer where
+  show Satisfiable = "Satisfiable"
+  show Unsatisfiable = "Unsatisfiable"
+  show (NoAnswer x) = show x
 
 data NoAnswerReason = GaveUp | TimeOut deriving (Eq, Ord, Show)
 

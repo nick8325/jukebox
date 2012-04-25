@@ -158,3 +158,27 @@ guessModelBox = guessModelIO <$> expansive <*> universe
 
 guessModelIO :: [String] -> Universe -> Problem Form -> IO (Problem Form)
 guessModelIO expansive univ prob = return (guessModel expansive univ prob)
+
+allObligsBox :: OptionParser ((Problem Clause -> IO Answer) -> Closed Obligs -> IO ())
+allObligsBox = pure allObligsIO
+
+allObligsIO solve obligs = loop 1 conjectures
+  where Obligs { axioms = axioms, conjectures = conjectures,
+                 satisfiable = satisfiable, unsatisfiable = unsatisfiable } =
+          open obligs
+
+        loop _ [] = result unsatisfiable
+        loop i (c:cs) = do
+          when multi $ putStrLn $ "Part " ++ part i
+          answer <- solve (close_ obligs (return (axioms ++ c)))
+          when multi $ putStrLn $ "+++ PARTIAL (" ++ part i ++ "): " ++ show answer
+          case answer of
+            Satisfiable -> result satisfiable
+            Unsatisfiable -> loop (i+1) cs
+            NoAnswer x -> result (show x)
+        multi = length conjectures > 1
+        part i = show i ++ "/" ++ show (length conjectures)
+        result x = putStrLn ("+++ RESULT: " ++ x)
+
+equinoxBox :: OptionParser (Problem Clause -> IO Answer)
+equinoxBox = pure (\f -> return (NoAnswer GaveUp)) -- A highly sophisticated proof method. We are sure to win CASC! :)
