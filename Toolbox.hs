@@ -17,6 +17,7 @@ import System.IO
 import TPTP.FindFile
 import Text.PrettyPrint.HughesPJ
 import GuessModel
+import InferTypes
 
 (=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
 f =>>= g = (>=>) <$> f <*> g
@@ -182,3 +183,8 @@ allObligsIO solve obligs = loop 1 conjectures
 
 equinoxBox :: OptionParser (Problem Clause -> IO Answer)
 equinoxBox = pure (\f -> return (NoAnswer GaveUp)) -- A highly sophisticated proof method. We are sure to win CASC! :)
+
+inferBox :: OptionParser (Problem Clause -> IO (Problem Clause))
+inferBox = pure $ \prob -> return $ close prob $ \inps -> do
+  (inps', _) <- inferTypes inps
+  return inps'

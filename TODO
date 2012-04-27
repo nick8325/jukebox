@@ -58,3 +58,20 @@ Mostly to do with name generation:
 * Remove as many exclamation marks as possible
 
 * Sort out genericity stuff
+
+* Add helper functions for running NameM stuff.
+
+* Allow some names to have fixed string interpretations (like $answer, $i).
+
+* Allow some terms to have fixed types?? (like distinct objects etc.)
+  These should be preserved by type inference.
+  Maybe a fancier type structure would help here.
+
+* Similarly, we have certain clauses that shouldn't be printed out.
+  e.g. $distinct for distinct objects,
+  declaring the type $i,
+  declaring functions at type $i.
+  Is there a uniform way to deal with this?
+
+* Make = a predicate? Would need to have some way of
+  pattern-matching on it.
