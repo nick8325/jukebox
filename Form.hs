@@ -346,6 +346,7 @@ data TypeOf a where
   List :: (Symbolic a, Symbolic [a]) => TypeOf [a]
   Seq :: (Symbolic a, Symbolic (Seq a)) => TypeOf (Seq a)
   Input_ :: (Symbolic a, Symbolic (Input a)) => TypeOf (Input a)
+  Obligs_ :: TypeOf Obligs
 
 class Symbolic a where
   typeOf :: a -> TypeOf a
@@ -359,6 +360,7 @@ instance Symbolic a => Symbolic (Bind a) where typeOf _ = Bind_
 instance Symbolic a => Symbolic [a] where typeOf _ = List
 instance Symbolic a => Symbolic (Seq a) where typeOf _ = Seq
 instance Symbolic a => Symbolic (Input a) where typeOf _ = Input_
+instance Symbolic Obligs where typeOf _ = Obligs_
 
 -- Generic representations of values.
 data Rep a where
@@ -381,6 +383,7 @@ rep x =
     List -> rep' x
     Seq -> rep' x
     Input_ -> rep' x
+    Obligs_ -> rep' x
 
 -- Implementation of rep for all types
 class Unpack a where
@@ -425,6 +428,10 @@ instance Symbolic a => Unpack (Seq a) where
 
 instance Symbolic a => Unpack (Input a) where
   rep' (Input tag kind what) = Unary (Input tag kind) what
+
+instance Unpack Obligs where
+  rep' (Obligs ax conj s1 s2) =
+    Binary (\ax' conj' -> Obligs ax' conj' s1 s2) ax conj
 
 -- Little generic strategies
 
@@ -476,7 +483,7 @@ subst s t =
     term (Var x)
       | Just u <- NameMap.lookup (name x) s = rhs u
     term t = generic t
-    
+
     bind :: Symbolic a => Bind a -> Bind a
     bind (Bind vs t) =
       Bind vs (subst (checkBinder vs (s Map.\\ vs)) t)
@@ -489,14 +496,14 @@ subst s t =
 
 free :: Symbolic a => a -> NameMap Variable
 free t
-  | Term <- typeOf t,  
+  | Term <- typeOf t,
     Var x <- t        = var x
   | Bind_ <- typeOf t = bind t
   | otherwise         = collect free t
   where
     var :: Variable -> NameMap Variable
     var x = NameMap.singleton x
-    
+
     bind :: Symbolic a => Bind a -> NameMap Variable
     bind (Bind vs t) = free t Map.\\ vs
 
@@ -524,14 +531,14 @@ termsAndBinders term bind = aux where
 names :: Symbolic a => a -> [Name]
 names = nub . termsAndBinders term bind where
   term t = return (name t) `mappend` return (name (typ t))
-  
+
   bind :: Symbolic a => Bind a -> Seq Name
   bind (Bind vs _) = S.fromList (map name (NameMap.toList vs))
 
 types :: Symbolic a => a -> [Type]
 types = nub . termsAndBinders term bind where
   term t = return (typ t)
-  
+
   bind :: Symbolic a => Bind a -> Seq Type
   bind (Bind vs _) = S.fromList (map typ (NameMap.toList vs))
 
@@ -546,7 +553,7 @@ vars :: Symbolic a => a -> [Variable]
 vars = nub . termsAndBinders term bind where
   term (Var x) = return x
   term _ = mempty
-  
+
   bind :: Symbolic a => Bind a -> Seq Variable
   bind (Bind vs _) = S.fromList (NameMap.toList vs)
 
@@ -566,14 +573,14 @@ uniqueNames t = evalStateT (aux Map.empty t) (free t)
             Term -> term s t
             Bind_ -> bind s t
             _ -> generic s t
-        
+
         term :: Subst -> Term -> StateT (NameMap Variable) NameM Term
         term s t@(Var x) = do
           case NameMap.lookup (name x) s of
             Nothing -> return t
             Just (_ ::: u) -> return u
         term s t = generic s t
-        
+
         bind :: Symbolic a => Subst -> Bind a -> StateT (NameMap Variable) NameM (Bind a)
         bind s (Bind vs x) = do
           used <- get
