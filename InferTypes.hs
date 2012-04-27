@@ -31,14 +31,14 @@ solve :: NameMap Function' -> NameMap Variable' ->
 solve funMap varMap prob = (prob', typeRep_)
   where prob' = share (aux prob)
         aux :: Symbolic a => a -> a
-        aux x =
-          case (typeRep x, x, unpack x) of
-            (BindRep, Bind vs t, _) ->
-              Bind (fmap var vs) (aux t)
-            (TermRep, _, _) -> term x
-            (_, _, Const x) -> x
-            (_, _, Unary f x) -> f (aux x)
-            (_, _, Binary f x y) -> f (aux x) (aux y)
+        aux t =
+          case typeOf t of
+            Bind_ -> bind t
+            Term -> term t
+            _ -> recursively aux t
+
+        bind :: Symbolic a => Bind a -> Bind a
+        bind (Bind vs t) = Bind (fmap var vs) (aux t)
 
         term (f :@: ts) = fun f :@: map term ts
         term (Var x) = Var (var x)

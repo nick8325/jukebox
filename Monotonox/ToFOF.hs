@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, PatternGuards #-}
 module Monotonox.ToFOF where
 
 import Clausify(split, removeEquiv, run, withName)
@@ -8,6 +8,7 @@ import Form
 import Options
 import qualified Data.ByteString.Char8 as BS
 import Control.Monad hiding (guard)
+import Data.Monoid
 
 data Scheme = Scheme {
   makeFunction :: Type -> NameM Function,
@@ -160,16 +161,19 @@ guards1 mono ps = Scheme1
     typeAxiom = guardsTypeAxiom mono ps }
 
 naked :: Symbolic a => Bool -> Variable -> a -> Bool
-naked pos v f =
-  case (typeRep f, f, unpack f) of
-    (FormRep, Not f, _) -> naked (not pos) v f
-    (SignedRep, Pos f, _) -> naked pos v f
-    (SignedRep, Neg f, _) -> naked (not pos) v f
-    (AtomicRep, t :=: u, _) | pos -> t == Var v || u == Var v
-    (BindRep, Bind vs f, _) -> not (NameMap.member v vs) && naked pos v f
-    (_, _, Const _) -> False
-    (_, _, Unary _ x) -> naked pos v x
-    (_, _, Binary _ x y) -> naked pos v x || naked pos v y
+naked pos v f
+  | Form <- typeOf f,
+    Not f' <- f = naked (not pos) v f'
+  | Signed <- typeOf f,
+    Pos f' <- f = naked pos v f'
+  | Signed <- typeOf f,
+    Neg f' <- f = naked (not pos) v f'
+  | Atomic <- typeOf f,
+    t :=: u <- f,
+    pos = t == Var v || u == Var v
+  | Bind_ <- typeOf f,
+    Bind vs f' <- f = not (NameMap.member v vs) && naked pos v f'
+  | otherwise = getAny (collect (Any . naked pos v) f)
 
 guardsAxiom :: (Type -> Bool) -> (Type -> Function) -> Function -> NameM Form
 guardsAxiom mono ps f@(_ ::: FunType args res)

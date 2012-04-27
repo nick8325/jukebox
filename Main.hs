@@ -56,6 +56,7 @@ justparser = tool info pipeline
          oneConjectureBox =>>=
          inferBox =>>=
          printInferredBox =>>=
+         annotateMonotonicityBox =>>=
          prettyPrintBox)
 
 guessmodel = tool info pipeline

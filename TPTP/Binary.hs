@@ -38,6 +38,7 @@ instance Binary Type where
 instance Binary Name where
   get = getShared
   put = putShared
+
 instance BinaryUnshared Name where
   getUnshared = liftM2 unsafeMakeName get get
   putUnshared name = do { put (uniqueId name); put (base name) }
