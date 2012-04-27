@@ -43,7 +43,7 @@ monotone cs = runSat watch tys $ do
           addForm (disj [Lit (Neg (FalseExtended f)),
                          Lit (Neg (TrueExtended f))])
         watch _ = return ()
-        tys = filter (/= O) (types cs)
+        tys = types' cs
 
 fromModel :: [Function] -> Type -> (Var -> Bool) -> NameMap (Function ::: Extension)
 fromModel fs ty m = NameMap.fromList [ f ::: extension f m | f <- fs, typ f == O, ty `elem` args (rhs f) ]

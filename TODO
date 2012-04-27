@@ -82,3 +82,5 @@ Mostly to do with name generation:
 * Remove the OptionParser wrapper around optionless boxes, use pure instead.
 
 * Add memo-combinators instead of silly share thing.
+
+* Look at Stratego for inspiration with generic stuff.
