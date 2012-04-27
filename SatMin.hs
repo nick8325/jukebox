@@ -1,8 +1,8 @@
 module SatMin where
 
-import MiniSat
+import Sat
 
-solveLocalMin :: Solver -> [Lit] -> [Lit] -> IO Bool
+solveLocalMin :: SatSolver s => s -> [Lit] -> [Lit] -> IO Bool
 solveLocalMin s as ms =
   do b <- solve s as
      if b then do l <- newLit s -- used as a local assumption for this minimization
@@ -11,7 +11,7 @@ solveLocalMin s as ms =
                   return True
           else do return False
 
-localMin :: Solver -> [Lit] -> Lit -> [Lit] -> IO ()
+localMin :: SatSolver s => s -> [Lit] -> Lit -> [Lit] -> IO ()
 localMin s as l ms =
   do -- find out the current values of the m's
      bs <- sequence [ modelValue s m | m <- ms ]
