@@ -21,7 +21,7 @@ build2 xys = build (xys ++ [ (y,x) | (x,y) <- xys ])
 nodes :: Ord a => Graph a -> Set a
 nodes g = S.fromList [ z | (x,ys) <- M.toList g, z <- x:ys ]
 
-classes :: Ord a => Graph a -> [[a]]
+classes :: Ord a => Graph a -> [Set a]
 classes g = gather S.empty xs
  where
   xs = S.toList (nodes g)
@@ -29,7 +29,7 @@ classes g = gather S.empty xs
   gather seen []        = []
   gather seen (x:xs)
     | x `S.member` seen = gather seen xs
-    | otherwise         = S.toList rs : gather (seen `S.union` rs) xs
+    | otherwise         = rs : gather (seen `S.union` rs) xs
    where
     rs = explore S.empty [x]
     
