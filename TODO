@@ -54,3 +54,7 @@ Mostly to do with name generation:
 * Make main loop prettier.
 
 * Clean up toolbox mess.
+
+* Remove as many exclamation marks as possible
+
+* Sort out genericity stuff
