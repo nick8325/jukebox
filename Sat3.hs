@@ -6,6 +6,11 @@ import Sat
 
 data Lit3 = Lit3{ isFalse :: Lit, isTrue :: Lit }
 
+false3, true3, bottom3 :: Lit3
+false3  = Lit3 true false
+true3   = neg3 false3
+bottom3 = Lit3 false false
+
 neg3 :: Lit3 -> Lit3
 neg3 (Lit3 f t) = Lit3 t f
 
