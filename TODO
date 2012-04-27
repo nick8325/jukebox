@@ -57,8 +57,6 @@ Mostly to do with name generation:
 
 * Remove as many exclamation marks as possible
 
-* Sort out genericity stuff
-
 * Add helper functions for running NameM stuff.
 
 * Allow some names to have fixed string interpretations (like $answer, $i).
@@ -75,3 +73,8 @@ Mostly to do with name generation:
 
 * Make = a predicate? Would need to have some way of
   pattern-matching on it.
+
+* The generic stuff is a bit complicated. What we have, really, is:
+  there are terms, which use variables, binders, that bind variables,
+  and a lot of connective stuff in the middle. Can we make a simpler
+  API that just deals with the connectives?
