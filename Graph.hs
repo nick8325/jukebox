@@ -76,14 +76,24 @@ instance Arbitrary GraphA where
 prop_Complete (Graph g) =
   let cs = classes g
       ns = nodes g   in
-    ns == S.fromList (concat cs)
+    ns == S.unions cs
 
 prop_BigEnough (Graph g) =
   let cs = classes g in
-    all isJust [ path g x y | c <- cs, x <- c, y <- c ]
+    all isJust [ path g x y | c <- cs, x <- S.toList c, y <- S.toList c ]
 
 prop_SmallEnough (Graph g) =
   let cs = classes g in
-    all isNothing [ path g x y | c1 <- cs, c2 <- cs, c1 < c2, x <- c1, y <- c2 ]
+    all isNothing [ path g x y | c1 <- cs, c2 <- cs, c1 < c2, x <- S.toList c1, y <- S.toList c2 ]
+
+prop_PathIsPath (Graph g) =
+  let cs = classes g in
+    and [ isPath x y p | c <- cs, x <- S.toList c, y <- S.toList c, Just p <- [path g x y] ]
+ where
+  isPath x y xs = head xs == x && last xs == y && all isEdge (xs `zip` tail xs)
+  
+  isEdge (x,y) = case M.lookup x g of
+                   Nothing -> False
+                   Just ys -> y `elem` ys
 
 testAll = $(quickCheckAll)
