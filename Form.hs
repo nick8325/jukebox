@@ -5,6 +5,7 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns #-}
 module Form where
 
+import Prelude hiding (sequence, mapM)
 import qualified Seq as S
 import Seq(Seq)
 import Data.Hashable
@@ -14,12 +15,13 @@ import qualified NameMap
 import Data.Ord
 import qualified Data.ByteString.Char8 as BS
 import Name
-import Control.Monad.State.Strict
+import Control.Monad.State.Strict hiding (sequence, mapM)
 import Data.List hiding (nub)
 import Utils
 import Data.DeriveTH
 import Data.Derive.Hashable
 import Data.Typeable(Typeable)
+import Data.Traversable
 
 -- Set to True to switch on some sanity checks
 debugging :: Bool
@@ -39,7 +41,7 @@ data Type =
       -- if there is a model of size >= tsize then there is a model of size tsize
       tsize :: DomainSize } deriving Typeable
 
-data FunType = FunType { args :: [Type], res :: !Type } deriving (Eq, Typeable)
+data FunType = FunType { args :: [Type], res :: Type } deriving (Eq, Typeable)
 
 -- Helper function for defining (Eq, Ord, Hashable) instances
 typeMaybeName :: Type -> Maybe Name
@@ -77,7 +79,7 @@ instance Typed b => Typed (a ::: b) where
 
 type Variable = Name ::: Type
 type Function = Name ::: FunType
-data Term = Var !Variable | !Function :@: [Term] deriving (Eq, Ord)
+data Term = Var Variable | Function :@: [Term] deriving (Eq, Ord)
 $(derive makeHashable ''Term)
 
 instance Named Term where
@@ -113,7 +115,7 @@ size (f :@: xs) = 1 + sum (map size xs)
 -- Literals
 
 infix 8 :=:
-data Atomic = !Term :=: !Term | Tru !Term
+data Atomic = Term :=: Term | Tru Term
 
 -- Helper for (Eq Atomic, Ord Atomic, Hashable Atomic) instances
 normAtomic :: Atomic -> Either (Term, Term) Term
@@ -130,7 +132,7 @@ instance Ord Atomic where
 instance Hashable Atomic where
   hashWithSalt s = hashWithSalt s . normAtomic
 
-data Signed a = Pos !a | Neg !a deriving (Show, Eq, Ord)
+data Signed a = Pos a | Neg a deriving (Show, Eq, Ord)
 $(derive makeHashable ''Signed)
 
 instance Functor Signed where
@@ -168,8 +170,8 @@ data Form
   | And (Seq Form)
   | Or (Seq Form)
   | Equiv Form Form
-  | ForAll (Bind Form)
-  | Exists (Bind Form)
+  | ForAll {-# UNPACK #-} !(Bind Form)
+  | Exists {-# UNPACK #-} !(Bind Form)
     -- Just exists so that parsing followed by pretty-printing is
     -- somewhat lossless; the simplify function will get rid of it
   | Connective Connective Form Form
@@ -184,7 +186,7 @@ connective Xor t u = nt (t `Equiv` u)
 connective Nor t u = nt (t \/ u)
 connective Nand t u = nt (t /\ u)
 
-data Bind a = Bind !(NameMap Variable) !a
+data Bind a = Bind (NameMap Variable) a
 
 true, false :: Form
 true = And S.Nil
@@ -334,9 +336,9 @@ instance Show Answer where
 data NoAnswerReason = GaveUp | TimeOut deriving (Eq, Ord, Show)
 
 data Input a = Input
-  { tag ::  !Tag,
-    kind :: !Kind,
-    what :: !a }
+  { tag ::  Tag,
+    kind :: Kind,
+    what :: a }
 
 type Problem a = Closed [Input a]
 
@@ -588,27 +590,73 @@ checkBinder vs s | not debugging = s
                  | Map.null (free [ t | _ ::: t <- NameMap.toList s ] `Map.intersection` vs) = s
                  | otherwise = error "Form.checkBinder: capturing substitution"
 
+-- Reestablish sharing in a formula.
+type ShareState = (NameMap Type, NameMap Variable, NameMap Function)
+
+share :: Symbolic a => a -> a
+share x = evalState (aux x) initial
+  where initial :: ShareState
+        initial = (Map.empty, Map.empty, Map.empty)
+
+        aux :: Symbolic a => a -> State ShareState a
+        aux x =
+          case (typeRep x, x, unpack x) of
+            (BindRep, Bind vs x, _) ->
+              liftM2 Bind (mapM var vs) (aux x)
+            (TermRep, _, _) -> term x
+            (_, _, Const x) -> return x
+            (_, _, Unary f x) -> fmap f (aux x)
+            (_, _, Binary f x y) -> liftM2 f (aux x) (aux y)
+
+        term :: Term -> State ShareState Term
+        term (Var x) = fmap Var (var x)
+        term (f :@: ts) = liftM2 (:@:) (fun f) (mapM term ts)
+
+        fun :: Function -> State ShareState Function
+        fun (f ::: FunType args res) = do
+          args' <- mapM type_ args
+          res' <- type_ res
+          memo funAccessor (f ::: FunType args' res')
+
+        var :: Variable -> State ShareState Variable
+        var (x ::: ty) = fmap (x :::) (type_ ty) >>= memo varAccessor
+
+        type_ :: Type -> State ShareState Type
+        type_ = memo typeAccessor
+
+        typeAccessor = (\(x, y, z) -> x, \x (_, y, z) -> (x, y, z))
+        varAccessor = (\(x, y, z) -> y, \y (x, _, z) -> (x, y, z))
+        funAccessor = (\(x, y, z) -> z, \z (x, y, _) -> (x, y, z))
+
+        memo :: Named a =>
+                (ShareState -> NameMap a,
+                 NameMap a -> ShareState -> ShareState) ->
+                a -> State ShareState a
+        memo (get_, put_) x = do
+          m <- gets get_
+          case NameMap.lookup (name x) m of
+            Nothing -> do
+              modify (put_ (NameMap.insert x m))
+              return x
+            Just y ->
+              return y
+
 -- Apply a function to each type, while preserving sharing.
 mapType :: Symbolic a => (Type -> Type) -> a -> a
-mapType f x = aux x
-  where typeMap :: NameMap (Type ::: Type)
-        typeMap = NameMap.fromList [ ty ::: f ty | ty <- types x ]
-        lookupType = typ . flip NameMap.lookup_ typeMap
-        varMap :: NameMap Variable
-        varMap = NameMap.fromList [ n ::: lookupType ty | n ::: ty <- vars x ]
-        funMap :: NameMap Function
-        funMap = NameMap.fromList [ n ::: FunType (map lookupType args)
-                                                  (lookupType res)
-                                  | n ::: FunType args res <- functions x ]
-
-        aux :: Symbolic a => a -> a
+mapType f x = share (aux x)
+  where aux :: Symbolic a => a -> a
         aux x =
           case (typeRep x, x, unpack x) of
             (BindRep, Bind vs t, _) ->
               -- keys of binder don't change
-              Bind (fmap (flip NameMap.lookup_ varMap) vs) (aux t)
-            (TermRep, Var x, _) -> Var (NameMap.lookup_ x varMap)
-            (TermRep, f :@: ts, _) -> NameMap.lookup_ f funMap :@: map aux ts
+              Bind (fmap var vs) (aux t)
+            (TermRep, _, _) -> term x
             (_, _, Const _) -> x
             (_, _, Unary f x) -> f (aux x)
             (_, _, Binary f x y) -> f (aux x) (aux y)
+
+        term (f :@: ts) = fun f :@: map term ts
+        term (Var x) = Var (var x)
+
+        var (x ::: ty) = x ::: f ty
+        fun (x ::: FunType args res) = x ::: FunType (map f args) (f res)

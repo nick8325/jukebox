@@ -54,8 +54,8 @@ justparser = tool info pipeline
         (parseProblemBox =>>=
          clausifyBox =>>=
          oneConjectureBox =>>=
-         pure (\x -> putStrLn "thinking" >> return x) =>>=
          inferBox =>>=
+         printInferredBox =>>=
          prettyPrintBox)
 
 guessmodel = tool info pipeline

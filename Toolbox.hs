@@ -115,6 +115,9 @@ monotonicity cs = do
 
   return (unlines (concat (map info (NameMap.toList m))))
 
+annotateMonotonicityBox :: OptionParser (Problem Clause -> IO (Problem Clause))
+annotateMonotonicityBox = pure annotateMonotonicity
+
 prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (Problem a -> IO ())
 prettyPrintBox = prettyFormIO <$> writeFileBox
 
@@ -181,10 +184,16 @@ allObligsIO solve obligs = loop 1 conjectures
         part i = show i ++ "/" ++ show (length conjectures)
         result x = putStrLn ("+++ RESULT: " ++ x)
 
+inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
+inferBox = pure $ \prob ->
+  let prob' = close prob inferTypes
+  in return (fmap fst prob', snd (open prob'))
+
+printInferredBox :: OptionParser ((Problem Clause, Type -> Type) -> IO (Problem Clause))
+printInferredBox = pure $ \(prob, rep) -> do
+  forM_ (types (open prob)) $ \ty ->
+    putStrLn $ show ty ++ " => " ++ show (rep ty)
+  return prob
+
 equinoxBox :: OptionParser (Problem Clause -> IO Answer)
 equinoxBox = pure (\f -> return (NoAnswer GaveUp)) -- A highly sophisticated proof method. We are sure to win CASC! :)
-
-inferBox :: OptionParser (Problem Clause -> IO (Problem Clause))
-inferBox = pure $ \prob -> return $ close prob $ \inps -> do
-  (inps', _) <- inferTypes inps
-  return inps'

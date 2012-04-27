@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell, TypeOperators #-}
 module Monotonox.Monotonicity where
 
+import Prelude hiding (lookup)
 import Name
 import Form hiding (Form, clause, true, false, conj, disj)
 import Monotonox.Sat
@@ -16,6 +17,16 @@ data Extension = TrueExtend | FalseExtend | CopyExtend deriving Show
 data Var = FalseExtended Function | TrueExtended Function deriving (Eq, Ord)
 
 $(derive makeHashable ''Var)
+
+annotateMonotonicity :: Problem Clause -> IO (Problem Clause)
+annotateMonotonicity prob = do
+  m <- monotone (map what (open prob))
+  let f O = O
+      f ty =
+        case lookup (name ty) m of
+          Nothing -> ty
+          Just{} -> ty { tmonotone = Finite 0 }
+  return (fmap (mapType f) prob)
 
 monotone :: [Clause] -> IO (NameMap (Type ::: Maybe (NameMap (Function ::: Extension))))
 monotone cs = runSat watch tys $ do
