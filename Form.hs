@@ -77,7 +77,7 @@ instance Typed b => Typed (a ::: b) where
 
 type Variable = Name ::: Type
 type Function = Name ::: FunType
-data Term = Var !Variable | !Function :@: [Term] deriving (Eq, Ord)
+data Term = Var Variable | Function :@: [Term] deriving (Eq, Ord)
 $(derive makeHashable ''Term)
 
 instance Named Term where
@@ -113,7 +113,7 @@ size (f :@: xs) = 1 + sum (map size xs)
 -- Literals
 
 infix 8 :=:
-data Atomic = !Term :=: !Term | Tru !Term
+data Atomic = Term :=: Term | Tru Term
 
 -- Helper for (Eq Atomic, Ord Atomic, Hashable Atomic) instances
 normAtomic :: Atomic -> Either (Term, Term) Term
@@ -130,7 +130,7 @@ instance Ord Atomic where
 instance Hashable Atomic where
   hashWithSalt s = hashWithSalt s . normAtomic
 
-data Signed a = Pos !a | Neg !a deriving (Show, Eq, Ord)
+data Signed a = Pos a | Neg a deriving (Show, Eq, Ord)
 $(derive makeHashable ''Signed)
 
 instance Functor Signed where
@@ -168,8 +168,8 @@ data Form
   | And (Seq Form)
   | Or (Seq Form)
   | Equiv Form Form
-  | ForAll (Bind Form)
-  | Exists (Bind Form)
+  | ForAll {-# UNPACK #-} !(Bind Form)
+  | Exists {-# UNPACK #-} !(Bind Form)
     -- Just exists so that parsing followed by pretty-printing is
     -- somewhat lossless; the simplify function will get rid of it
   | Connective Connective Form Form
@@ -184,7 +184,7 @@ connective Xor t u = nt (t `Equiv` u)
 connective Nor t u = nt (t \/ u)
 connective Nand t u = nt (t /\ u)
 
-data Bind a = Bind !(NameMap Variable) !a
+data Bind a = Bind (NameMap Variable) a
 
 true, false :: Form
 true = And S.Nil
@@ -334,9 +334,9 @@ instance Show Answer where
 data NoAnswerReason = GaveUp | TimeOut deriving (Eq, Ord, Show)
 
 data Input a = Input
-  { tag ::  !Tag,
-    kind :: !Kind,
-    what :: !a }
+  { tag ::  Tag,
+    kind :: Kind,
+    what :: a }
 
 type Problem a = Closed [Input a]
 
