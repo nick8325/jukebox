@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
-module Sat where
+module Monotonox.Sat where
 
 import MiniSat
 import qualified MiniSat

@@ -3,7 +3,7 @@ module Monotonox.Monotonicity where
 
 import Name
 import Form hiding (Form, clause, true, false, conj, disj)
-import Sat
+import Monotonox.Sat
 import NameMap
 import Utils
 import Data.DeriveTH

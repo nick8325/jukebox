@@ -28,11 +28,11 @@ Executable jukebox
     -- InferTypes
     Monotonox.Monotonicity
     Monotonox.ToFOF
+    Monotonox.Sat
     Name
     NameMap
     Options
     ProgressBar
-    Sat
     Seq
     Toolbox
     TPTP.Binary
