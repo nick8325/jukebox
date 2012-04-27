@@ -1,10 +1,10 @@
-module UnionFind(UF, Replacement((:>)), (=:=), rep, evalUF, execUF, runUF, S, isRep, initial) where
+module UnionFind(UF, Replacement((:>)), (=:=), rep, evalUF, execUF, runUF, S, isRep, initial, reps) where
 
 import Prelude hiding (min)
 import Control.Monad.State.Strict
 import Data.Hashable
-import Data.Map(Map)
-import qualified Data.Map as Map
+import Map(Map)
+import qualified Map
 
 type S a = Map a a
 type UF a = State (S a)
@@ -52,6 +52,11 @@ rep s = do
       --     v <- rep' t u
       --     modify (Map.insert s v)
       --     return v
+
+reps :: (Hashable a, Ord a) => UF a (a -> a)
+reps = do
+  s <- get
+  return (\x -> evalUF s (rep x))
 
 -- rep' :: (Hashable a, Ord a) => a -> a -> UF a a
 -- rep' s t = do

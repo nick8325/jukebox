@@ -78,3 +78,7 @@ Mostly to do with name generation:
   there are terms, which use variables, binders, that bind variables,
   and a lot of connective stuff in the middle. Can we make a simpler
   API that just deals with the connectives?
+
+* Remove the OptionParser wrapper around optionless boxes, use pure instead.
+
+* Add memo-combinators instead of silly share thing.
