@@ -320,7 +320,7 @@ instance Show Answer where
   show Unsatisfiable = "Unsatisfiable"
   show (NoAnswer x) = show x
 
-data NoAnswerReason = GaveUp | TimeOut deriving (Eq, Ord, Show)
+data NoAnswerReason = GaveUp | Timeout deriving (Eq, Ord, Show)
 
 data Input a = Input
   { tag ::  Tag,
