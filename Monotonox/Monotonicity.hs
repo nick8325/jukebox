@@ -4,7 +4,7 @@ module Monotonox.Monotonicity where
 import Prelude hiding (lookup)
 import Name
 import Form hiding (Form, clause, true, false, conj, disj)
-import Monotonox.Sat
+import HighSat
 import NameMap
 import Utils
 import Data.DeriveTH

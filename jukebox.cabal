@@ -25,10 +25,10 @@ Executable jukebox
     Data.Derive.BinaryUnshared
     Data.Derive.Hashable
     Form
+    HighSat
     InferTypes
     Monotonox.Monotonicity
     Monotonox.ToFOF
-    Monotonox.Sat
     Name
     NameMap
     Options
