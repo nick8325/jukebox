@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification, GeneralizedNewtypeDeriving, TemplateHaskell #-}
+{-# LANGUAGE ExistentialQuantification, GeneralizedNewtypeDeriving #-}
 module BinaryShared where
 
 import qualified Data.Binary.Put as Put
@@ -98,7 +98,7 @@ instance Ord Obj where
       Nothing -> objType x `compare` objType y
 
 instance Hashable Obj where
-  hashWithSalt s (Obj x) = s `hashWithSalt` objType x `hashWithSalt` x 
+  hashWithSalt s (Obj x) = s `hashWithSalt` objType x `hashWithSalt` x
 
 encode :: Binary a => a -> BSL.ByteString
 encode x = Put.runPut (runReaderT (runPut (put x)) (S 0 Map.empty))

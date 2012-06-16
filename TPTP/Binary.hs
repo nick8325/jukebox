@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, TemplateHaskell, TypeSynonymInstances, FlexibleInstances, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TypeOperators, TypeSynonymInstances, FlexibleInstances, GeneralizedNewtypeDeriving #-}
 module TPTP.Binary where
 
 import Data.DeriveTH

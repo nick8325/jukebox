@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE DeriveDataTypeable, TemplateHaskell, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns, PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns, PatternGuards #-}
 module Form where
 
 import Prelude hiding (sequence, mapM)
@@ -18,8 +18,6 @@ import Name
 import Control.Monad.State.Strict hiding (sequence, mapM)
 import Data.List hiding (nub)
 import Utils
-import Data.DeriveTH
-import Data.Derive.Hashable
 import Data.Typeable(Typeable)
 import Data.Monoid
 import Data.Traversable
@@ -81,7 +79,11 @@ instance Typed b => Typed (a ::: b) where
 type Variable = Name ::: Type
 type Function = Name ::: FunType
 data Term = Var Variable | Function :@: [Term] deriving (Eq, Ord)
-$(derive makeHashable ''Term)
+
+instance Hashable Term where
+  hashWithSalt s = hashWithSalt s . convert
+    where convert (Var x) = Left x
+          convert (f :@: ts) = Right (f, ts)
 
 instance Named Term where
   name (Var x) = name x
@@ -134,7 +136,11 @@ instance Hashable Atomic where
   hashWithSalt s = hashWithSalt s . normAtomic
 
 data Signed a = Pos a | Neg a deriving (Show, Eq, Ord)
-$(derive makeHashable ''Signed)
+
+instance Hashable a => Hashable (Signed a) where
+  hashWithSalt s = hashWithSalt s . convert
+    where convert (Pos x) = Left x
+          convert (Neg x) = Right x
 
 instance Functor Signed where
   fmap f (Pos x) = Pos (f x)

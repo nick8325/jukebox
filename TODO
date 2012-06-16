@@ -74,13 +74,12 @@ Mostly to do with name generation:
 * Make = a predicate? Would need to have some way of
   pattern-matching on it.
 
-* The generic stuff is a bit complicated. What we have, really, is:
-  there are terms, which use variables, binders, that bind variables,
-  and a lot of connective stuff in the middle. Can we make a simpler
-  API that just deals with the connectives?
-
 * Remove the OptionParser wrapper around optionless boxes, use pure instead.
 
 * Add memo-combinators instead of silly share thing.
 
 * Look at Stratego for inspiration with generic stuff.
+
+* See if static minisat works.
+
+* Look at GHC generics.
