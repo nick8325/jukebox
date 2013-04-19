@@ -63,7 +63,7 @@ guessModel expansive univ prob = close prob $ \forms -> do
 
 ind :: Symbolic a => a -> Type
 ind x =
-  case filter (/= O) (types x) of
+  case types' x of
     [ty] -> ty
     [] -> Type nameI Infinite Infinite
     _ -> error "GuessModel: can't deal with many-typed problems"

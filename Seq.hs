@@ -5,6 +5,7 @@ import Prelude hiding (concat, concatMap, length, mapM, mapM_)
 import Control.Monad hiding (mapM, mapM_)
 import Data.Hashable
 import qualified Data.HashSet as Set
+import Data.Monoid
 
 data Seq a = Append (Seq a) (Seq a) | Unit a | Nil
 
@@ -55,6 +56,10 @@ instance Monad Seq where
 instance MonadPlus Seq where
   mzero = Nil
   mplus = append
+
+instance Monoid (Seq a) where
+  mempty = Nil
+  mappend = append
 
 concat :: (List f, List g) => f (g a) -> Seq a
 concat = concatMap id

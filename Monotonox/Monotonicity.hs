@@ -1,14 +1,12 @@
-{-# LANGUAGE TemplateHaskell, TypeOperators #-}
+{-# LANGUAGE TypeOperators #-}
 module Monotonox.Monotonicity where
 
 import Prelude hiding (lookup)
 import Name
 import Form hiding (Form, clause, true, false, conj, disj)
-import Monotonox.Sat
+import HighSat
 import NameMap
 import Utils
-import Data.DeriveTH
-import Data.Derive.Hashable
 import Data.Hashable
 import Control.Monad
 
@@ -16,7 +14,10 @@ data Extension = TrueExtend | FalseExtend | CopyExtend deriving Show
 
 data Var = FalseExtended Function | TrueExtended Function deriving (Eq, Ord)
 
-$(derive makeHashable ''Var)
+instance Hashable Var where
+  hashWithSalt s = hashWithSalt s . convert
+    where convert (FalseExtended x) = Left x
+          convert (TrueExtended x) = Right x
 
 annotateMonotonicity :: Problem Clause -> IO (Problem Clause)
 annotateMonotonicity prob = do
@@ -43,7 +44,7 @@ monotone cs = runSat watch tys $ do
           addForm (disj [Lit (Neg (FalseExtended f)),
                          Lit (Neg (TrueExtended f))])
         watch _ = return ()
-        tys = filter (/= O) (types cs)
+        tys = types' cs
 
 fromModel :: [Function] -> Type -> (Var -> Bool) -> NameMap (Function ::: Extension)
 fromModel fs ty m = NameMap.fromList [ f ::: extension f m | f <- fs, typ f == O, ty `elem` args (rhs f) ]

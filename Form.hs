@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE DeriveDataTypeable, TemplateHaskell, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns, PatternGuards #-}
 module Form where
 
 import Prelude hiding (sequence, mapM)
@@ -18,9 +18,8 @@ import Name
 import Control.Monad.State.Strict hiding (sequence, mapM)
 import Data.List hiding (nub)
 import Utils
-import Data.DeriveTH
-import Data.Derive.Hashable
 import Data.Typeable(Typeable)
+import Data.Monoid
 import Data.Traversable
 
 -- Set to True to switch on some sanity checks
@@ -80,7 +79,11 @@ instance Typed b => Typed (a ::: b) where
 type Variable = Name ::: Type
 type Function = Name ::: FunType
 data Term = Var Variable | Function :@: [Term] deriving (Eq, Ord)
-$(derive makeHashable ''Term)
+
+instance Hashable Term where
+  hashWithSalt s = hashWithSalt s . convert
+    where convert (Var x) = Left x
+          convert (f :@: ts) = Right (f, ts)
 
 instance Named Term where
   name (Var x) = name x
@@ -133,7 +136,11 @@ instance Hashable Atomic where
   hashWithSalt s = hashWithSalt s . normAtomic
 
 data Signed a = Pos a | Neg a deriving (Show, Eq, Ord)
-$(derive makeHashable ''Signed)
+
+instance Hashable a => Hashable (Signed a) where
+  hashWithSalt s = hashWithSalt s . convert
+    where convert (Pos x) = Left x
+          convert (Neg x) = Right x
 
 instance Functor Signed where
   fmap f (Pos x) = Pos (f x)
@@ -277,20 +284,6 @@ simplify (Exists (Bind vs t)) = exists vs (simplify t)
         exists vs t = Exists (Bind vs t)
 
 ----------------------------------------------------------------------
--- Substitutions
-
-type Subst = NameMap (Name ::: Term)
-
-ids :: Subst
-ids = Map.empty
-
-(|=>) :: Named a => a -> Term -> Subst
-v |=> x = NameMap.singleton (name v ::: x)
-
-(|+|) :: Subst -> Subst -> Subst
-(|+|) = Map.union
-
-----------------------------------------------------------------------
 -- Clauses
 
 type CNF = Closed Obligs
@@ -333,7 +326,7 @@ instance Show Answer where
   show Unsatisfiable = "Unsatisfiable"
   show (NoAnswer x) = show x
 
-data NoAnswerReason = GaveUp | TimeOut deriving (Eq, Ord, Show)
+data NoAnswerReason = GaveUp | Timeout deriving (Eq, Ord, Show)
 
 data Input a = Input
   { tag ::  Tag,
@@ -348,138 +341,177 @@ instance Functor Input where
 ----------------------------------------------------------------------
 -- Symbolic stuff
 
--- A universe of types
-data TypeRep a where
-  FormRep :: TypeRep Form
-  ClauseRep :: TypeRep Clause
-  TermRep :: TypeRep Term
-  AtomicRep :: TypeRep Atomic
-  -- The Symbolic (Signed a) etc. witnesses are unnecessary
-  -- but cause GHC to generate better code
-  -- (without them it needlessly recomputes the dictionaries)
-  SignedRep :: (Symbolic a, Symbolic (Signed a)) => TypeRep (Signed a)
-  BindRep :: (Symbolic a, Symbolic (Bind a)) => TypeRep (Bind a)
-  ListRep :: (Symbolic a, Symbolic [a]) => TypeRep [a]
-  SeqRep :: (Symbolic a, Symbolic (Seq a)) => TypeRep (Seq a)
-  InputRep :: (Symbolic a, Symbolic (Input a)) => TypeRep (Input a)
+-- A universe of types with typecase
+data TypeOf a where
+  Form :: TypeOf Form
+  Clause_ :: TypeOf Clause
+  Term :: TypeOf Term
+  Atomic :: TypeOf Atomic
+  Signed :: (Symbolic a, Symbolic (Signed a)) => TypeOf (Signed a)
+  Bind_ :: (Symbolic a, Symbolic (Bind a)) => TypeOf (Bind a)
+  List :: (Symbolic a, Symbolic [a]) => TypeOf [a]
+  Seq :: (Symbolic a, Symbolic (Seq a)) => TypeOf (Seq a)
+  Input_ :: (Symbolic a, Symbolic (Input a)) => TypeOf (Input a)
+  Obligs_ :: TypeOf Obligs
 
 class Symbolic a where
-  typeRep_ :: TypeRep a
+  typeOf :: a -> TypeOf a
 
-typeRep :: Symbolic a => a -> TypeRep a
-typeRep _ = typeRep_
+instance Symbolic Form where typeOf _ = Form
+instance Symbolic Clause where typeOf _ = Clause_
+instance Symbolic Term where typeOf _ = Term
+instance Symbolic Atomic where typeOf _ = Atomic
+instance Symbolic a => Symbolic (Signed a) where typeOf _ = Signed
+instance Symbolic a => Symbolic (Bind a) where typeOf _ = Bind_
+instance Symbolic a => Symbolic [a] where typeOf _ = List
+instance Symbolic a => Symbolic (Seq a) where typeOf _ = Seq
+instance Symbolic a => Symbolic (Input a) where typeOf _ = Input_
+instance Symbolic Obligs where typeOf _ = Obligs_
 
--- $(symbolicInstances ''TypeRep ''Symbolic 'typeRep)
-instance Symbolic Form where typeRep_ = FormRep
-instance Symbolic Clause where typeRep_ = ClauseRep
-instance Symbolic Term where typeRep_ = TermRep
-instance Symbolic Atomic where typeRep_ = AtomicRep
-instance Symbolic a => Symbolic (Signed a) where typeRep_ = SignedRep
-instance Symbolic a => Symbolic (Bind a) where typeRep_ = BindRep
-instance Symbolic a => Symbolic [a] where typeRep_ = ListRep
-instance Symbolic a => Symbolic (Seq a) where typeRep_ = SeqRep
-instance Symbolic a => Symbolic (Input a) where typeRep_ = InputRep
-
--- Unpacking a type
-data Unpacked a where
-  Const :: !a -> Unpacked a
-  Unary :: Symbolic a => (a -> b) -> a -> Unpacked b
-  Binary :: (Symbolic a, Symbolic b) => (a -> b -> c) -> a -> b -> Unpacked c
-
-class Unpack a where
-  unpack' :: a -> Unpacked a
+-- Generic representations of values.
+data Rep a where
+  Const :: !a -> Rep a
+  Unary :: Symbolic a => (a -> b) -> a -> Rep b
+  Binary :: (Symbolic a, Symbolic b) => (a -> b -> c) -> a -> b -> Rep c
 
 -- This inline declaration is crucial so that
--- pattern-matching on an unpack degenerates into typecase.
-{-# INLINE unpack #-}
-unpack :: Symbolic a => a -> Unpacked a
-unpack x = unpackRep (typeRep x) x -- $(mkUnpack ''TypeRep [| unpack' x |] [| typeRep x |])
+-- pattern-matching on a rep degenerates into typecase.
+{-# INLINE rep #-}
+rep :: Symbolic a => a -> Rep a
+rep x =
+  case typeOf x of
+    Form -> rep' x
+    Clause_ -> rep' x
+    Term -> rep' x
+    Atomic -> rep' x
+    Signed -> rep' x
+    Bind_ -> rep' x
+    List -> rep' x
+    Seq -> rep' x
+    Input_ -> rep' x
+    Obligs_ -> rep' x
 
-{-# INLINE unpackRep #-}
-unpackRep :: TypeRep a -> a -> Unpacked a
-unpackRep FormRep = unpack'
-unpackRep ClauseRep = unpack'
-unpackRep TermRep = unpack'
-unpackRep AtomicRep = unpack'
-unpackRep SignedRep = unpack'
-unpackRep BindRep = unpack'
-unpackRep ListRep = unpack'
-unpackRep SeqRep = unpack'
-unpackRep InputRep = unpack'
+-- Implementation of rep for all types
+class Unpack a where
+  rep' :: a -> Rep a
 
 instance Unpack Form where
-  unpack' (Literal l) = Unary Literal l
-  unpack' (Not t) = Unary Not t
-  unpack' (And ts) = Unary And ts
-  unpack' (Or ts) = Unary Or ts
-  unpack' (Equiv t u) = Binary Equiv t u
-  unpack' (ForAll b) = Unary ForAll b
-  unpack' (Exists b) = Unary Exists b
-  unpack' (Connective c t u) = Binary (Connective c) t u
+  rep' (Literal l) = Unary Literal l
+  rep' (Not t) = Unary Not t
+  rep' (And ts) = Unary And ts
+  rep' (Or ts) = Unary Or ts
+  rep' (Equiv t u) = Binary Equiv t u
+  rep' (ForAll b) = Unary ForAll b
+  rep' (Exists b) = Unary Exists b
+  rep' (Connective c t u) = Binary (Connective c) t u
 
 instance Unpack Clause where
-  unpack' (Clause ls) = Unary Clause ls
+  rep' (Clause ls) = Unary Clause ls
 
 instance Unpack Term where
-  unpack' t@Var{} = Const t
-  unpack' (f :@: ts) = Unary (f :@:) ts
+  rep' t@Var{} = Const t
+  rep' (f :@: ts) = Unary (f :@:) ts
 
 instance Unpack Atomic where
-  unpack' (t :=: u) = Binary (:=:) t u
-  unpack' (Tru p) = Unary Tru p
+  rep' (t :=: u) = Binary (:=:) t u
+  rep' (Tru p) = Unary Tru p
 
 instance Symbolic a => Unpack (Signed a) where
-  unpack' (Pos x) = Unary Pos x
-  unpack' (Neg x) = Unary Neg x
+  rep' (Pos x) = Unary Pos x
+  rep' (Neg x) = Unary Neg x
 
 instance Symbolic a => Unpack (Bind a) where
-  unpack' (Bind vs x) = Unary (Bind vs) x
+  rep' (Bind vs x) = Unary (Bind vs) x
 
 instance Symbolic a => Unpack [a] where
-  unpack' [] = Const []
-  unpack' (x:xs) = Binary (:) x xs
+  rep' [] = Const []
+  rep' (x:xs) = Binary (:) x xs
 
 instance Symbolic a => Unpack (Seq a) where
-  unpack' S.Nil = Const S.Nil
-  unpack' (S.Unit x) = Unary S.Unit x
-  unpack' (S.Append x y) = Binary S.Append x y
+  rep' S.Nil = Const S.Nil
+  rep' (S.Unit x) = Unary S.Unit x
+  rep' (S.Append x y) = Binary S.Append x y
 
 instance Symbolic a => Unpack (Input a) where
-  unpack' (Input tag kind what) = Unary (Input tag kind) what
+  rep' (Input tag kind what) = Unary (Input tag kind) what
+
+instance Unpack Obligs where
+  rep' (Obligs ax conj s1 s2) =
+    Binary (\ax' conj' -> Obligs ax' conj' s1 s2) ax conj
+
+-- Little generic strategies
+
+{-# INLINE recursively #-}
+recursively :: Symbolic a => (forall a. Symbolic a => a -> a) -> a -> a
+recursively h t =
+  case rep t of
+    Const x -> x
+    Unary f x -> f (h x)
+    Binary f x y -> f (h x) (h y)
+
+{-# INLINE recursivelyM #-}
+recursivelyM :: (Monad m, Symbolic a) => (forall a. Symbolic a => a -> m a) -> a -> m a
+recursivelyM h t =
+  case rep t of
+    Const x -> return x
+    Unary f x -> liftM f (h x)
+    Binary f x y -> liftM2 f (h x) (h y)
+
+{-# INLINE collect #-}
+collect :: (Symbolic a, Monoid b) => (forall a. Symbolic a => a -> b) -> a -> b
+collect h t =
+  case rep t of
+    Const x -> mempty
+    Unary f x -> h x
+    Binary f x y -> h x `mappend` h y
+
+----------------------------------------------------------------------
+-- Substitutions
+
+type Subst = NameMap (Name ::: Term)
+
+ids :: Subst
+ids = Map.empty
+
+(|=>) :: Named a => a -> Term -> Subst
+v |=> x = NameMap.singleton (name v ::: x)
+
+(|+|) :: Subst -> Subst -> Subst
+(|+|) = Map.union
+
+subst :: Symbolic a => Subst -> a -> a
+subst s t =
+  case typeOf t of
+    Term -> term t
+    Bind_ -> bind t
+    _ -> generic t
+  where
+    term (Var x)
+      | Just u <- NameMap.lookup (name x) s = rhs u
+    term t = generic t
+
+    bind :: Symbolic a => Bind a -> Bind a
+    bind (Bind vs t) =
+      Bind vs (subst (checkBinder vs (s Map.\\ vs)) t)
+
+    generic :: Symbolic a => a -> a
+    generic t = recursively (subst s) t
 
 ----------------------------------------------------------------------
 -- Functions operating on symbolic terms
 
-subst :: Symbolic a => Subst -> a -> a
-subst s t = aux s (typeRep t) t (unpack t)
-  where
-    aux s TermRep Var{} _ =
-      case NameMap.lookup (name t) s of
-        Just (_ ::: u) -> u
-        Nothing -> t
-    aux s BindRep (Bind vs x) _ = Bind vs (subst (checkBinder vs (s Map.\\ vs)) x)
-    aux s _ _ Const{} = t
-    aux s _ _ (Unary f x) = f (subst s x)
-    aux s _ _ (Binary f x y) = f (subst s x) (subst s y)
-
-{-# INLINE collect #-}
-collect :: forall a b. Symbolic a => (forall a. TypeRep a -> a -> Seq b) -> a -> Seq b
-collect f = aux
-  where aux :: forall a. Symbolic a => a -> Seq b
-        aux x =
-          f (typeRep x) x `S.append` 
-          case unpack x of
-            Const{} -> S.Nil
-            Unary _ x -> aux x
-            Binary _ x y -> aux x `S.append` aux y
-
 free :: Symbolic a => a -> NameMap Variable
-free x = aux (typeRep x) x (unpack x)
-  where aux TermRep (Var v) _ = NameMap.singleton v
-        aux BindRep (Bind vs x) t = free x Map.\\ vs
-        aux _ _ Const{} = Map.empty
-        aux _ _ (Unary _ x) = free x
-        aux _ _ (Binary _ x y) = free x `Map.union` free y
+free t
+  | Term <- typeOf t,
+    Var x <- t        = var x
+  | Bind_ <- typeOf t = bind t
+  | otherwise         = collect free t
+  where
+    var :: Variable -> NameMap Variable
+    var x = NameMap.singleton x
+
+    bind :: Symbolic a => Bind a -> NameMap Variable
+    bind (Bind vs t) = free t Map.\\ vs
 
 ground :: Symbolic a => a -> Bool
 ground = Map.null . free
@@ -487,60 +519,76 @@ ground = Map.null . free
 bind :: Symbolic a => a -> Bind a
 bind x = Bind (free x) x
 
+-- Helper function for collecting information from terms and binders.
+termsAndBinders :: forall a b.
+                   Symbolic a =>
+                   (Term -> Seq b) ->
+                   (forall a. Symbolic a => Bind a -> Seq b) ->
+                   a -> Seq b
+termsAndBinders term bind = aux where
+  aux :: Symbolic c => c -> Seq b
+  aux t =
+    collect aux t `S.append`
+    case typeOf t of
+      Term -> term t
+      Bind_ -> bind t
+      _ -> S.Nil
+
 names :: Symbolic a => a -> [Name]
-names = nub . collect f
-  where {-# INLINE f #-}
-        f :: TypeRep a -> a -> Seq Name
-        f TermRep t = S.Unit (name t) `S.append` S.Unit (name (typ t))
-        f BindRep (Bind vs _) = S.fromList (map name (NameMap.toList vs))
-        f _ _ = S.Nil
+names = nub . termsAndBinders term bind where
+  term t = return (name t) `mappend` return (name (typ t))
+
+  bind :: Symbolic a => Bind a -> Seq Name
+  bind (Bind vs _) = S.fromList (map name (NameMap.toList vs))
 
 types :: Symbolic a => a -> [Type]
-types = nub . collect f
-  where {-# INLINE f #-}
-        f :: TypeRep a -> a -> Seq Type
-        f TermRep t = S.Unit (typ t)
-        f BindRep (Bind vs _) = S.fromList (map typ (NameMap.toList vs))
-        f _ _ = S.Nil
+types = nub . termsAndBinders term bind where
+  term t = return (typ t)
+
+  bind :: Symbolic a => Bind a -> Seq Type
+  bind (Bind vs _) = S.fromList (map typ (NameMap.toList vs))
+
+types' :: Symbolic a => a -> [Type]
+types' = filter (/= O) . types
 
 terms :: Symbolic a => a -> [Term]
-terms = nub . collect f
-  where {-# INLINE f #-}
-        f :: TypeRep a -> a -> Seq Term
-        f TermRep t = S.Unit t
-        f _ _ = S.Nil
+terms = nub . termsAndBinders term mempty where
+  term t = return t
 
 vars :: Symbolic a => a -> [Variable]
-vars = nub . collect f
-  where {-# INLINE f #-}
-        f :: TypeRep a -> a -> Seq Variable
-        f TermRep (Var x) = S.Unit x
-        f BindRep (Bind vs _) = S.fromList (NameMap.toList vs)
-        f _ _ = S.Nil
+vars = nub . termsAndBinders term bind where
+  term (Var x) = return x
+  term _ = mempty
+
+  bind :: Symbolic a => Bind a -> Seq Variable
+  bind (Bind vs _) = S.fromList (NameMap.toList vs)
 
 functions :: Symbolic a => a -> [Function]
-functions = nub . collect f
-  where {-# INLINE f #-}
-        f :: TypeRep a -> a -> Seq Function
-        f TermRep (f :@: _) = S.Unit f
-        f _ _ = S.Nil
+functions = nub . termsAndBinders term mempty where
+  term (f :@: _) = return f
+  term _ = mempty
 
 isFof :: Symbolic a => a -> Bool
-isFof f = all fof (functions f) && all (`elem` open stdNames) (map name (types f))
-  where fof (_ ::: FunType args res) =
-          and [ name (typ arg) == nameI | arg <- args ] &&
-            name res `elem` [nameI, nameO]
+isFof f = length (types' f) <= 1
 
 uniqueNames :: Symbolic a => a -> NameM a
-uniqueNames x = evalStateT (aux Map.empty x) (free x)
+uniqueNames t = evalStateT (aux Map.empty t) (free t)
   where aux :: Symbolic a => Subst -> a -> StateT (NameMap Variable) NameM a
-        aux s x = aux' s (typeRep x) x
-        aux' :: Subst -> TypeRep a -> a -> StateT (NameMap Variable) NameM a
-        aux' s TermRep t@(Var v) = do
-          case NameMap.lookup (name v) s of
+        aux s t =
+          case typeOf t of
+            Term -> term s t
+            Bind_ -> bind s t
+            _ -> generic s t
+
+        term :: Subst -> Term -> StateT (NameMap Variable) NameM Term
+        term s t@(Var x) = do
+          case NameMap.lookup (name x) s of
             Nothing -> return t
-            Just (_ ::: t) -> return t
-        aux' s BindRep (Bind vs x) = do
+            Just (_ ::: u) -> return u
+        term s t = generic s t
+
+        bind :: Symbolic a => Subst -> Bind a -> StateT (NameMap Variable) NameM (Bind a)
+        bind s (Bind vs x) = do
           used <- get
           let (stale, fresh) = partition (`NameMap.member` used) (NameMap.toList vs)
           stale' <- sequence [ lift (newSymbol x t) | x ::: t <- stale ]
@@ -552,37 +600,43 @@ uniqueNames x = evalStateT (aux Map.empty x) (free x)
                 let s' = NameMap.fromList [name x ::: Var y | (x, y) <- stale `zip` stale'] `Map.union` s
                     vs' = NameMap.fromList (stale' ++ fresh)
                 fmap (Bind vs') (aux s' x)
-        aux' s r t =
-          case unpackRep r t of
-           Const{} -> return t
-           Unary f x -> fmap f (aux s x)
-           Binary f x y -> liftM2 f (aux s x) (aux s y)
+
+        generic :: Symbolic a => Subst -> a -> StateT (NameMap Variable) NameM a
+        generic s t = recursivelyM (aux s) t
 
 -- Force a value.
 force :: Symbolic a => a -> a
-force x = aux x `seq` x
-  where aux :: Symbolic a => a -> ()
-        aux x =
-          case unpack x of
+force x = rnf x `seq` x
+  where rnf :: Symbolic a => a -> ()
+        rnf x =
+          case rep x of
             Const !_ -> ()
-            Unary _ x -> aux x
-            Binary _ x y -> aux x `seq` aux y
+            Unary _ x -> rnf x
+            Binary _ x y -> rnf x `seq` rnf y
 
 -- Check that there aren't two nested binders binding the same variable
 check :: Symbolic a => a -> a
 check x | not debugging = x
-        | aux (free x) x = x
+        | check' (free x) x = x
         | otherwise = error "Form.check: invariant broken"
-  where aux :: Symbolic a => NameMap Variable -> a -> Bool
-        aux vars x = aux' vars (typeRep x) x (unpack x)
-        aux' :: NameMap Variable -> TypeRep a -> a -> Unpacked a -> Bool
-        aux' vars TermRep (Var v) _ = v `NameMap.member` vars
-        aux' vars BindRep (Bind vs t) _ =
+  where check' :: Symbolic a => NameMap Variable -> a -> Bool
+        check' vars t =
+          case typeOf t of
+            Term -> term vars t
+            Bind_ -> bind vars t
+            _ -> generic vars t
+
+        term :: NameMap Variable -> Term -> Bool
+        term vars (Var x) = x `NameMap.member` vars
+        term vars t = generic vars t
+
+        bind :: Symbolic a => NameMap Variable -> Bind a -> Bool
+        bind vars (Bind vs t) =
           Map.null (vs `Map.intersection` vars) &&
-          aux (vs `Map.union` vars) t
-        aux' vars _ _ Const{} = True
-        aux' vars _ _ (Unary _ x) = aux vars x
-        aux' vars _ _ (Binary _ x y) = aux vars x && aux vars y
+          check' (vs `Map.union` vars) t
+
+        generic :: Symbolic a => NameMap Variable -> a -> Bool
+        generic vars = getAll . collect (All . generic vars)
 
 -- Check that a binder doesn't capture variables from a substitution.
 checkBinder :: NameMap Variable -> Subst -> Subst
@@ -594,19 +648,20 @@ checkBinder vs s | not debugging = s
 type ShareState = (NameMap Type, NameMap Variable, NameMap Function)
 
 share :: Symbolic a => a -> a
-share x = evalState (aux x) initial
+share x = evalState (shareM x) initial
   where initial :: ShareState
         initial = (Map.empty, Map.empty, Map.empty)
 
-        aux :: Symbolic a => a -> State ShareState a
-        aux x =
-          case (typeRep x, x, unpack x) of
-            (BindRep, Bind vs x, _) ->
-              liftM2 Bind (mapM var vs) (aux x)
-            (TermRep, _, _) -> term x
-            (_, _, Const x) -> return x
-            (_, _, Unary f x) -> fmap f (aux x)
-            (_, _, Binary f x y) -> liftM2 f (aux x) (aux y)
+        shareM :: Symbolic a => a -> State ShareState a
+        shareM t =
+          case typeOf t of
+            Term -> term t
+            Bind_ -> bind t
+            _ -> recursivelyM shareM t
+
+        bind :: Symbolic a => Bind a -> State ShareState (Bind a)
+        bind (Bind vs x) =
+          liftM2 Bind (mapM var vs) (shareM x)
 
         term :: Term -> State ShareState Term
         term (Var x) = fmap Var (var x)
@@ -643,17 +698,16 @@ share x = evalState (aux x) initial
 
 -- Apply a function to each type, while preserving sharing.
 mapType :: Symbolic a => (Type -> Type) -> a -> a
-mapType f x = share (aux x)
-  where aux :: Symbolic a => a -> a
-        aux x =
-          case (typeRep x, x, unpack x) of
-            (BindRep, Bind vs t, _) ->
-              -- keys of binder don't change
-              Bind (fmap var vs) (aux t)
-            (TermRep, _, _) -> term x
-            (_, _, Const _) -> x
-            (_, _, Unary f x) -> f (aux x)
-            (_, _, Binary f x y) -> f (aux x) (aux y)
+mapType f = share . mapType'
+  where mapType' :: Symbolic a => a -> a
+        mapType' t =
+          case typeOf t of
+            Term -> term t
+            Bind_ -> bind t
+            _ -> recursively mapType' t
+
+        bind :: Symbolic a => Bind a -> Bind a
+        bind (Bind vs t) = Bind (fmap var vs) (mapType' t)
 
         term (f :@: ts) = fun f :@: map term ts
         term (Var x) = Var (var x)

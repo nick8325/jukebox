@@ -116,7 +116,9 @@ monotonicity cs = do
   return (unlines (concat (map info (NameMap.toList m))))
 
 annotateMonotonicityBox :: OptionParser (Problem Clause -> IO (Problem Clause))
-annotateMonotonicityBox = pure annotateMonotonicity
+annotateMonotonicityBox = pure $ \x -> do
+  putStrLn "Monotonicity analysis..."
+  annotateMonotonicity x
 
 prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (Problem a -> IO ())
 prettyPrintBox = prettyFormIO <$> writeFileBox
@@ -185,9 +187,10 @@ allObligsIO solve obligs = loop 1 conjectures
         result x = putStrLn ("+++ RESULT: " ++ x)
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
-inferBox = pure $ \prob ->
+inferBox = pure $ \prob -> do
+  putStrLn "Inferring types..."
   let prob' = close prob inferTypes
-  in return (fmap fst prob', snd (open prob'))
+  return (fmap fst prob', snd (open prob'))
 
 printInferredBox :: OptionParser ((Problem Clause, Type -> Type) -> IO (Problem Clause))
 printInferredBox = pure $ \(prob, rep) -> do
