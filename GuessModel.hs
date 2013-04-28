@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE GADTs, PatternGuards #-}
 module GuessModel where
 
 import Control.Monad
@@ -9,14 +9,12 @@ import Clausify hiding (cnf)
 import TPTP.Print
 import TPTP.ParseSnippet
 import Utils
-import qualified HighSat as S
-import HighSat(Sat1)
-import Provers.E
-import Control.Monad.Trans
 
-type Universe = ([Function], [Form])
+data Universe = Peano | Trees
 
-peano, trees :: Type -> NameM Universe
+universe :: Universe -> Type -> NameM ([Function], [Form])
+universe Peano = peano
+universe Trees = trees
 
 peano i = do
   zero <- newFunction "zero" [] i
@@ -26,7 +24,7 @@ peano i = do
       funs = [("zero", zero),
               ("succ", succ),
               ("pred", pred)]
-
+  
   prelude <- mapM (cnf types funs) [
     "zero != succ(X)",
     "pred(succ(X)) = X"
@@ -43,13 +41,25 @@ trees i = do
               ("bin", bin),
               ("left", left),
               ("right", right)]
-
+  
   prelude <- mapM (cnf types funs) [
     "nil != bin(X,Y)",
     "left(bin(X,Y)) = X",
     "right(bin(X,Y)) = Y"
     ]
   return ([nil, bin], prelude)
+
+guessModel :: [String] -> Universe -> Problem Form -> Problem Form
+guessModel expansive univ prob = close prob $ \forms -> do
+  let i = ind forms
+  answerType <- newType "answer"
+  answer <- newFunction "$answer" [answerType] O
+  let withExpansive f func = f func (BS.unpack (base (name func)) `elem` expansive) answer
+  (constructors, prelude) <- universe univ i
+  program <- fmap concat (mapM (withExpansive (function constructors)) (functions forms))
+  return (map (Input (BS.pack "adt") Axiom) prelude ++
+          map (Input (BS.pack "program") Axiom) program ++
+          forms)
 
 ind :: Symbolic a => a -> Type
 ind x =
@@ -58,56 +68,31 @@ ind x =
     [] -> Type nameI Infinite Infinite
     _ -> error "GuessModel: can't deal with many-typed problems"
 
-type Var = Term ::: Form -- Answer term ::: case
-type Choice = Function -> [Var]
+function :: [Function] -> Function -> Bool -> Function -> NameM [Form]
+function constructors f expansive answerP = fmap concat $ do
+  argss <- cases constructors (funArgs f)
+  forM argss $ \args -> do
+    fname <- newFunction ("exhausted_" ++ BS.unpack (base (name f)) ++ "_case")
+               [] (head (funArgs answerP))
+    let answer = Literal (Pos (Tru (answerP :@: [fname :@: []])))
+    let theRhss = rhss constructors args f expansive answer
+    alts <- forM theRhss $ \rhs -> do
+      pred <- newFunction (concat (lines (prettyFormula rhs))) [] O
+      return (Literal (Pos (Tru (pred :@: []))))
+    return $
+      disj alts:
+      [ closeForm (Connective Implies alt rhs)
+      | (alt, rhs) <- zip alts theRhss ]
 
-guessModel :: EFlags -> (Type -> NameM Universe) -> Problem Form -> IO (Problem Form)
-guessModel fl univM prob =
-  S.runSat1 (const (return ())) $ do
-    choice <- initialise answerPred univ
-    loop fl answerPred choice [] univ (fmap (const forms) prob')
-  where
-    prob' = close prob $ \forms -> do
-      let i = ind forms
-      answerPred <- newFunction "$answer" [i] O
-      univ <- univM i
-      return (i, answerPred, univ, forms)
-    (i, answerPred, univ, forms) = open prob'
-
-initialise :: Function -> Universe -> Sat1 (Either Var Function) (Bool -> Choice)
-initialise = undefined
-
-loop :: EFlags -> Function -> (Bool -> Choice) -> [Function] -> Universe -> Problem Form ->
-        Sat1 (Either Var Function) (Problem Form)
-loop fl answerPred choice expansive univ prob = do
-  let choice' f = choice (f `elem` expansive) f
-  mod <- S.model
-  let prob' = fmap (encodeModel answerPred (mod . Left) choice' univ) prob
-  res <- liftIO (runE fl prob')
-  undefined
-
-encodeModel :: Function -> (Var -> Bool) -> Choice -> Universe -> [Input Form] -> [Input Form]
-encodeModel answerPred model choice (constructors, prelude) forms =
-  map (Input (BS.pack "adt") Axiom) prelude ++
-  map (Input (BS.pack "program") Axiom) program ++
-  forms
-  where
-    answer x = Literal (Pos (Tru (answerPred :@: [x])))
-    program =
-      [ rhs \/ answer lhs
-      | func <- functions forms,
-        t@(lhs ::: rhs) <- choice func,
-        model t ]
-
-rhss :: [Function] -> [Term] -> Function -> Bool -> [Form]
-rhss constructors args f expansive =
+rhss :: [Function] -> [Term] -> Function -> Bool -> Form -> [Form]
+rhss constructors args f expansive answer =
   case typ f of
     O ->
       Literal (Pos (Tru (f :@: args))):
       Literal (Neg (Tru (f :@: args))):
       map its (map (f :@:) (recursive args))
     _ | expansive -> map its (usort (unconditional ++ constructor))
-      | otherwise -> map its (usort unconditional)
+      | otherwise -> map its (usort unconditional) ++ [answer]
   where recursive [] = []
         recursive (a:as) = reduce a ++ map (a:) (recursive as)
           where reduce (f :@: xs) = [ x:as' | x <- xs, as' <- as:recursive as ]
@@ -115,7 +100,7 @@ rhss constructors args f expansive =
         constructor = [ c :@: xs
                       | c <- constructors,
                         xs <- sequence (replicate (arity c) unconditional) ]
-
+        
         subterm = terms args
         its t = f :@: args .=. t
         unconditional = map (f :@:) (recursive args) ++ subterm

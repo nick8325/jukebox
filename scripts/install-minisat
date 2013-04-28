@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
+echo
+echo '****'
+echo '** Make sure you have the async package installed!'
+echo '****'
+echo
+
 if [ $# != 0 ]; then
     echo install-minisat doesn\'t take any arguments: use environment variables instead
     exit 1
@@ -37,7 +43,7 @@ ln -sf libminisat.a $prefix/lib/libminisat-static.a
 ln -sf libminisat-c.a $prefix/lib/libminisat-static-c.a
 
 cd $dir/haskell
-runhaskell Setup.lhs configure --extra-include-dirs=$prefix/include --extra-lib-dirs=$prefix/lib --$mode $cabal_opts -p
+runhaskell Setup.lhs configure --extra-include-dirs=$prefix/include --extra-lib-dirs=$prefix/lib --$mode $cabal_opts
 runhaskell Setup.lhs build
 runhaskell Setup.lhs install
 cp $prefix/lib/* $(ghc-pkg $ghcpkg_opts describe minisat|grep '^library-dirs: '|awk '{print $2;}'|head -n 1)
