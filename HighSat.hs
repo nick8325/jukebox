@@ -1,11 +1,11 @@
 {-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
 module HighSat where
 
-import MiniSat
+import MiniSat hiding (neg)
 import qualified MiniSat
 import qualified Seq as Seq
 import Seq(Seq, List)
-import Form(Signed(..))
+import Form(Signed(..), neg)
 import qualified Map
 import Map(Map)
 import Control.Monad.State.Strict
@@ -17,7 +17,7 @@ import Control.Applicative
 import Data.Maybe
 import Data.List(partition)
 
-newtype Sat1 a b = Sat1 { runSat1 :: ReaderT Solver (ReaderT (Watch a) (StateT (Map a Lit) IO)) b } deriving (Functor, Monad, MonadIO)
+newtype Sat1 a b = Sat1 { runSat1_ :: ReaderT Solver (ReaderT (Watch a) (StateT (Map a Lit) IO)) b } deriving (Functor, Monad, MonadIO)
 newtype Sat a b c = Sat { runSat_ :: ReaderT (Watch a) (StateT (Map b (SatState a)) IO) c } deriving (Functor, Monad, MonadIO)
 data SatState a = SatState Solver (Map a Lit)
 type Watch a = a -> Sat1 a ()
@@ -27,6 +27,11 @@ data Form a
   | And (Seq (Form a))
   | Or (Seq (Form a))
 
+nt :: Form a -> Form a
+nt (Lit x) = Lit (neg x)
+nt (And xs) = Or (fmap nt xs)
+nt (Or xs) = And (fmap nt xs)
+
 conj, disj :: List f => f (Form a) -> Form a
 conj = And . Seq.fromList
 disj = Or . Seq.fromList
@@ -35,17 +40,26 @@ true, false :: Form a
 true = And Seq.Nil
 false = Or Seq.Nil
 
+unique :: List f => f (Form a) -> Form a
+unique = u . Seq.toList
+  where u [x] = true
+        u (x:xs) = conj [disj [nt x, conj (map nt xs)],
+                         u xs]
+
 runSat :: (Hashable b, Ord b) => Watch a -> [b] -> Sat a b c -> IO c
 runSat w idxs x = go idxs Map.empty
   where go [] m = evalStateT (runReaderT (runSat_ x) w) m
         go (idx:idxs) m =
           withNewSolver $ \s -> go idxs (Map.insert idx (SatState s Map.empty) m)
 
+runSat1 :: (Ord a, Hashable a) => Watch a -> Sat1 a b -> IO b
+runSat1 w x = runSat w [()] (atIndex () x)
+
 atIndex :: (Ord a, Hashable a, Ord b, Hashable b) => b -> Sat1 a c -> Sat a b c
 atIndex !idx m = do
   watch <- Sat ask
   SatState s ls <- Sat (gets (Map.findWithDefault (error "withSolver: index not found") idx))
-  (x, ls') <- liftIO (runStateT (runReaderT (runReaderT (runSat1 m) s) watch) ls)
+  (x, ls') <- liftIO (runStateT (runReaderT (runReaderT (runSat1_ m) s) watch) ls)
   Sat (modify (Map.insert idx (SatState s ls')))
   return x
 

@@ -34,12 +34,12 @@ eflags =
        "Default: eprover"]
       "eprover"
       argFile <*>
-    flag "timeout"  
+    flag "timeout"
       ["Timeout for E, in seconds.",
        "Default: (off)"]
       Nothing
       (fmap Just argNum) <*>
-    flag "memory"  
+    flag "memory"
       ["Memory limit for E, in megabytes.",
        "Default: (off)"]
       Nothing
@@ -77,10 +77,10 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
         funMap = Map.fromList [(env (name x), x) | x <- functions prob]
         result = lines str
         status = head $
-          [Satisfiable | "# SZS status Satisfiable" <- result] ++ 
+          [Satisfiable | "# SZS status Satisfiable" <- result] ++
           [Satisfiable | "# SZS status CounterSatisfiable" <- result] ++
           [Unsatisfiable | "# SZS status Unsatisfiable" <- result] ++
-          [Unsatisfiable | "# SZS status Theorem" <- result] ++ 
+          [Unsatisfiable | "# SZS status Theorem" <- result] ++
           [NoAnswer Timeout | "# SZS status ResourceOut" <- result] ++
           [NoAnswer Timeout | "# SZS status Timeout" <- result] ++
           [NoAnswer Timeout | "# SZS status MemyOut" <- result] ++
@@ -91,7 +91,7 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
           , let prefix = "# SZS answers Tuple ["
                 suffix = "|_]"
                 (prefix', mid) = splitAt (length prefix) line
-                (suffix', xs) = splitAt (length mid - length suffix) line
+                (xs, suffix') = splitAt (length mid - length suffix) mid
           , prefix == prefix'
           , suffix == suffix' ]
         parse xs =
