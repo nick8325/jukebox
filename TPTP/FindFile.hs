@@ -1,7 +1,7 @@
 module TPTP.FindFile where
 
 import System.FilePath
-import System.Directory
+import System.Directory(doesFileExist)
 import System.Environment
 import Control.Applicative
 import Control.Exception
