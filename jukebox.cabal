@@ -9,8 +9,7 @@ Flag static
   description: Try linking against minisat statically (a hack!)
   default: True
 
-Executable jukebox
-  Main-is: Main.hs
+Library
   Build-depends: bytestring, base >= 4 && < 5, array, mtl, directory,
     filepath, pretty, hashable, minisat,
     binary, unordered-containers, process
@@ -18,8 +17,7 @@ Executable jukebox
   Ghc-options: -funfolding-use-threshold=500
   if flag(static)
     Ghc-options: -pgml scripts/gcc-static-minisat
-  Other-modules:
-    BinaryShared
+  Exposed-modules:
     Clausify
     Form
     HighSat
@@ -32,7 +30,6 @@ Executable jukebox
     ProgressBar
     Seq
     Toolbox
-    TPTP.Binary
     TPTP.ClauseParser
     TPTP.FindFile
     TPTP.Lexer
@@ -40,3 +37,6 @@ Executable jukebox
     TPTP.ParseProblem
     TPTP.Print
     Utils
+
+Executable jukebox
+  Main-is: Main.hs
