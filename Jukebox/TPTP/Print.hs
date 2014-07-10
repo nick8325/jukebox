@@ -39,10 +39,10 @@ instance Pretty Type where
   pPrint prec lev env t
     | lev >= Chatty = 
       hcat . punctuate (text "/") $
-        [pPrint prec lev env (tname t)] ++
+        [text (BS.unpack (escapeAtom (env (tname t))))] ++
         [size (tmonotone t) | tmonotone t /= Infinite || tsize t /= Infinite] ++
         [size (tsize t) | tsize t /= Infinite]
-    | otherwise = pPrint prec lev env (tname t)
+    | otherwise = text (BS.unpack (escapeAtom (env (tname t))))
     where size Infinite = empty
           size (Finite n) = int n
 
@@ -91,10 +91,10 @@ prettyProblem :: (Symbolic a, Pretty a) => String -> Level -> Problem a -> Doc
 prettyProblem family l prob = vcat (map typeDecl (S.unique (types prob')) ++
                                     map funcDecl (S.unique (functions prob')) ++
                                     map (prettyInput family l env) prob')
-    where typeDecl ty | name ty `elem` open stdNames = empty
+    where typeDecl ty | name ty `elem` open stdNames || isFof prob' = empty
                       | otherwise = typeClause ty (text "$tType")
-          funcDecl x@(f ::: ty) | isFof (x :@: []) = empty
-                                | otherwise = typeClause f (pPrint 0 l env ty)
+          funcDecl (f ::: ty) | isFof prob' = empty
+                              | otherwise = typeClause f (pPrint 0 l env ty)
           typeClause name ty = prettyClause "tff" "type" "type"
                                       (pPrint 0 l env name <+> colon <+> ty)
           env = uniquify (S.unique (names prob'))
