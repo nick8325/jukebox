@@ -1,4 +1,4 @@
-module API where
+module Jukebox.API where
 
 -- this is not actual code, it is just for writing down ideas
 

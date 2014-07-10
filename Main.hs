@@ -1,10 +1,10 @@
 module Main where
 
 import Control.Monad
-import Options
+import Jukebox.Options
 import Control.Applicative
 import Data.Monoid
-import Toolbox
+import Jukebox.Toolbox
 
 tools = mconcat [fof, cnf, monotonox, justparser, guessmodel, equinox]
 

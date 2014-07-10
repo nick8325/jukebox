@@ -20,6 +20,6 @@ mv scratch/jukebox.tar.gz .
 rm -r scratch
 
 if [ x$1 = xupload ]; then
-    scp jukebox.tar.gz nicsma@remote12.chalmers.se:www/www.cse.chalmers.se
-    ssh nicsma@remote12.chalmers.se chmod a+r www/www.cse.chalmers.se/jukebox.tar.gz
+    scp jukebox.tar.gz nicsma@remote12.chalmers.se:www/www.cse.chalmers.se/files
+    ssh nicsma@remote12.chalmers.se chmod a+r www/www.cse.chalmers.se/files/jukebox.tar.gz
 fi

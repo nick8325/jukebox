@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Graph where
+module Jukebox.Graph where
 
 import Data.Map as M
 import Data.Set as S

@@ -1,6 +1,6 @@
 Name: jukebox
 Version: 0
-Cabal-version: >= 1.2
+Cabal-version: >= 1.8
 Build-type: Simple
 
 Extra-Source-Files: build scripts/fetch-minisat scripts/install-minisat scripts/gcc-static-minisat
@@ -12,31 +12,48 @@ Flag static
 Library
   Build-depends: bytestring, base >= 4 && < 5, array, mtl, directory,
     filepath, pretty, hashable, minisat,
-    binary, unordered-containers, process
+    binary, unordered-containers, process, containers
   Build-tools: alex
   Ghc-options: -funfolding-use-threshold=500
   if flag(static)
     Ghc-options: -pgml scripts/gcc-static-minisat
   Exposed-modules:
-    Clausify
-    Form
-    HighSat
-    InferTypes
-    Monotonox.Monotonicity
-    Monotonox.ToFOF
-    Name
-    NameMap
-    Options
-    ProgressBar
-    Seq
-    Toolbox
-    TPTP.ClauseParser
-    TPTP.FindFile
-    TPTP.Lexer
-    TPTP.Parsec
-    TPTP.ParseProblem
-    TPTP.Print
-    Utils
+    Jukebox.Clausify
+    Jukebox.Form
+    Jukebox.GuessModel
+    Jukebox.HighSat
+    Jukebox.InferTypes
+    Jukebox.Map
+    Jukebox.Monotonox.Monotonicity
+    Jukebox.Monotonox.ToFOF
+    Jukebox.Name
+    Jukebox.NameMap
+    Jukebox.Options
+    Jukebox.ProgressBar
+    Jukebox.Provers.E
+    Jukebox.Sat3
+    Jukebox.SatEq
+    Jukebox.Sat
+    Jukebox.SatMin
+    Jukebox.Seq
+    Jukebox.Toolbox
+    Jukebox.TPTP.ClauseParser
+    Jukebox.TPTP.FindFile
+    Jukebox.TPTP.Lexer
+    Jukebox.TPTP.Parsec
+    Jukebox.TPTP.ParseProblem
+    Jukebox.TPTP.ParseSnippet
+    Jukebox.TPTP.Print
+    Jukebox.UnionFind
+    Jukebox.Utils
 
 Executable jukebox
   Main-is: Main.hs
+  Build-depends: bytestring, base >= 4 && < 5, array, mtl, directory,
+    filepath, pretty, hashable, minisat,
+    binary, unordered-containers, process, containers,
+    jukebox
+  Build-tools: alex
+  Ghc-options: -funfolding-use-threshold=500
+  if flag(static)
+    Ghc-options: -pgml scripts/gcc-static-minisat
