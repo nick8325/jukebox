@@ -94,9 +94,9 @@ prettyProblem family l prob = vcat (map typeDecl (S.unique (types prob')) ++
     where typeDecl ty | name ty `elem` open stdNames || isFof prob' = empty
                       | otherwise = typeClause ty (text "$tType")
           funcDecl (f ::: ty) | isFof prob' = empty
-                              | otherwise = typeClause f (pPrint 0 l env ty)
+                              | otherwise = typeClause f (pPrint 0 l (escapeAtom . env) ty)
           typeClause name ty = prettyClause "tff" "type" "type"
-                                      (pPrint 0 l env name <+> colon <+> ty)
+                                      (pPrint 0 l (escapeAtom . env) name <+> colon <+> ty)
           env = uniquify (S.unique (names prob'))
           prob' = open prob
 
