@@ -1,3 +1,4 @@
+{-# LANGUAGE TupleSections #-}
 module Jukebox.Utils where
 
 import Data.List
@@ -26,7 +27,7 @@ merge (x:xs) (y:ys) =
 nub :: (Seq.List f, Ord a, Hashable a) => f a -> [a]
 nub = Set.toList . Set.fromList . Seq.toList
 
-popen :: FilePath -> [String] -> BS.ByteString -> IO (Either Int BS.ByteString)
+popen :: FilePath -> [String] -> BS.ByteString -> IO (ExitCode, BS.ByteString)
 popen prog args inp = do
   (stdin, stdout, stderr_, pid) <- runInteractiveProcess prog args Nothing Nothing
   forkIO $ hGetContents stderr_ >>= hPutStr stderr
@@ -34,7 +35,4 @@ popen prog args inp = do
   hFlush stdin
   hClose stdin
   code <- waitForProcess pid
-  (case code of
-    ExitSuccess -> fmap Right (BS.hGetContents stdout)
-    ExitFailure code -> return (Left code))
-    <* hClose stdout
+  fmap (code,) (BS.hGetContents stdout) <* hClose stdout

@@ -19,6 +19,7 @@ import qualified Jukebox.Seq as S
 import qualified Jukebox.Map as Map
 import Jukebox.Map(Map)
 import Data.Hashable
+import System.Exit
 
 data EFlags = EFlags {
   eprover :: String,
@@ -60,11 +61,11 @@ runE :: (Pretty a, Symbolic a) => EFlags -> Problem a -> IO (Either Answer [Term
 runE flags prob
   | not (isFof (open prob)) = error "runE: E doesn't support many-typed problems"
   | otherwise = do
-    res <- popen (eprover flags) eflags
-           (BS.pack (render (prettyProblem "fof" Normal (close prob mangleAnswer))))
-    case res of
-      Left code -> error $ "runE: E failed with exit code " ++ show code
-      Right str -> return (extractAnswer (open prob) (BS.unpack str))
+    (code, str) <- popen (eprover flags) eflags
+                   (BS.pack (render (prettyProblem "fof" Normal (close prob mangleAnswer))))
+    case code of
+      ExitFailure code -> error $ "runE: E failed with exit code " ++ show code ++ ":\n" ++ BS.unpack str
+    return (extractAnswer (open prob) (BS.unpack str))
   where eflags = [ "--soft-cpu-limit=" ++ show n | Just n <- [timeout flags] ] ++
                  ["--memory-limit=" ++ show n | Just n <- [memory flags] ] ++
                  ["--tstp-in", "--tstp-out", "-tAuto", "-xAuto"] ++
