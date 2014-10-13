@@ -185,7 +185,7 @@ data Flag = Flag
   { flagName :: String,
     flagGroup :: String,
     flagHelp :: [String],
-    flagArgs :: String } deriving Show
+    flagArgs :: String } deriving (Eq, Show)
 
 -- From a flag name and and argument parser, produce an OptionParser.
 flag :: String -> [String] -> a -> ArgParser a -> OptionParser a
@@ -333,7 +333,7 @@ help t p = concat [
   [greeting t],
   usage t "",
   ["<option> can be any of the following:"],
-  concat [ justify ("--" ++ flagName f ++ " " ++ flagArgs f) (flagHelp f) | f <- descr p ]
+  concat [ justify ("--" ++ flagName f ++ " " ++ flagArgs f) (flagHelp f) | f <- nub (descr p) ]
   ]
 
 greeting :: Tool -> String
