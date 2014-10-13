@@ -1,13 +1,22 @@
 Name: jukebox
-Version: 0
+Version: 0.1
 Cabal-version: >= 1.8
 Build-type: Simple
+Author: Nick Smallbone
+Maintainer: nicsma@chalmers.se
+Copyright: 2009-2014 Nick Smallbone, Koen Claessen, Ann Lillieström
 
-Extra-Source-Files: build scripts/fetch-minisat scripts/install-minisat scripts/gcc-static-minisat
+Category:            Logic
 
-Flag static
-  description: Try linking against minisat statically (a hack!)
-  default: True
+Synopsis:            A first-order reasoning toolbox
+Description:
+  Jukebox is a suite of tools for transforming problems in first-order logic.
+  It reads problems in TPTP (FOF and TFF) format.
+  .
+  Currently it can translate typed problems to untyped (by efficiently
+  encoding types) and clausify problems (both typed and untyped).
+License: BSD3
+License-file: LICENSE
 
 Library
   Build-depends: bytestring, base >= 4 && < 5, array, mtl, directory,
