@@ -63,8 +63,8 @@ runE flags prob
   | otherwise = do
     (code, str) <- popen (eprover flags) eflags
                    (BS.pack (render (prettyProblem "fof" Normal (close prob mangleAnswer))))
-    case code of
-      ExitFailure code -> error $ "runE: E failed with exit code " ++ show code ++ ":\n" ++ BS.unpack str
+    --case code of
+    --  ExitFailure code -> error $ "runE: E failed with exit code " ++ show code ++ ":\n" ++ BS.unpack str
     return (extractAnswer (open prob) (BS.unpack str))
   where eflags = [ "--soft-cpu-limit=" ++ show n | Just n <- [timeout flags] ] ++
                  ["--memory-limit=" ++ show n | Just n <- [memory flags] ] ++
