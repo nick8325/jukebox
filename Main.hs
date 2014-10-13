@@ -6,12 +6,12 @@ import Control.Applicative
 import Data.Monoid
 import Jukebox.Toolbox
 
-tools = mconcat [fof, cnf, monotonox, justparser, guessmodel, equinox]
+tools = mconcat [fof, cnf, monotonox, guessmodel]
 
 fof = tool info pipeline
   where
     info = Tool "fof" "Jukebox TFF-to-FOF translator" "1"
-                "Translate from TFF to FOF"
+                "Translate from TFF (typed) to FOF (untyped)"
     pipeline =
       greetingBox info =>>
       allFilesBox <*>

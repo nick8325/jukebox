@@ -2,6 +2,7 @@ module Jukebox.Toolbox where
 
 import Jukebox.Options
 import qualified Data.ByteString.Char8 as BS
+import qualified Data.ByteString.Lazy.Char8 as BSL
 import Jukebox.Form
 import Jukebox.Name
 import qualified Jukebox.NameMap as NameMap
@@ -18,6 +19,24 @@ import Jukebox.TPTP.FindFile
 import Text.PrettyPrint.HughesPJ
 import Jukebox.GuessModel
 import Jukebox.InferTypes
+import Jukebox.TPTP.Parsec hiding (Error)
+import qualified Jukebox.TPTP.Parsec as Parser
+import Jukebox.TPTP.ClauseParser
+import Jukebox.TPTP.Lexer hiding (Error, name, Normal)
+import qualified Jukebox.TPTP.Lexer as Lexer
+
+data GlobalFlags =
+  GlobalFlags {
+    quiet :: Bool }
+  deriving Show
+
+globalFlags :: OptionParser GlobalFlags
+globalFlags =
+  inGroup "Global options" $
+  GlobalFlags <$>
+    bool "quiet"
+      ["Do not print any informational output.",
+       "Default: (off)"]
 
 (=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
 f =>>= g = (>=>) <$> f <*> g
@@ -28,7 +47,11 @@ x =>> y = (>>) <$> x <*> y
 infixl 1 =>> -- same as >>
 
 greetingBox :: Tool -> OptionParser (IO ())
-greetingBox t = pure (hPutStrLn stderr (greeting t))
+greetingBox t = greetingBoxIO t <$> globalFlags
+
+greetingBoxIO :: Tool -> GlobalFlags -> IO ()
+greetingBoxIO t GlobalFlags{quiet = quiet} =
+  unless quiet $ hPutStrLn stderr (greeting t)
 
 allFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
 allFilesBox = flip allFiles <$> filenames
@@ -51,16 +74,40 @@ parseProblemIO dirs f = do
       exitWith (ExitFailure 1)
     Right x -> return x
 
-clausifyBox :: OptionParser (Problem Form -> IO CNF)
-clausifyBox = clausifyIO <$> clausifyFlags
+withString :: (Symbolic a, Pretty a) => String -> (Problem Form -> IO (Problem a)) -> String -> IO String
+withString kind f x = do
+  let errorAt (UserState _ (At (Lexer.Pos l c) _)) err =
+        error $ "At line " ++ show l ++ ", column " ++ show c ++ ": " ++ err
+  case run_ (section (const True) <* eof)
+            (UserState initialState (scan (BSL.pack x))) of
+    Ok (UserState (MkState p _ _ _ _ n) (At _ (Cons Eof _))) Nothing -> do
+      let prob = close_ n (return (reverse p))
+      res <- f prob
+      return (render (prettyProblem kind Normal res))
+    Ok s@(UserState _ (At _ (Cons Eof _))) (Just _) ->
+      errorAt s "can't handle include files"
+    Ok s _ ->
+      errorAt s "lexical error"
+    Parser.Error s msg -> errorAt s $ "parse error: " ++ msg
+    Expected s exp -> errorAt s $ "parse error: expected " ++ show exp
 
-clausifyIO :: ClausifyFlags -> Problem Form -> IO CNF
-clausifyIO flags prob = do
-  hPutStrLn stderr "Clausifying problem..."
+encodeString :: String -> IO String
+encodeString = withString "fof" f
+  where
+    f = toFofIO globals (return . clausify clFlags) (tags False)
+    globals = GlobalFlags { quiet = True }
+    clFlags = ClausifyFlags { splitting = False }
+
+clausifyBox :: OptionParser (Problem Form -> IO CNF)
+clausifyBox = clausifyIO <$> globalFlags <*> clausifyFlags
+
+clausifyIO :: GlobalFlags -> ClausifyFlags -> Problem Form -> IO CNF
+clausifyIO globals flags prob = do
+  unless (quiet globals) $ hPutStrLn stderr "Clausifying problem..."
   return $! clausify flags prob
 
 toFofBox :: OptionParser (Problem Form -> IO (Problem Form))
-toFofBox = toFofIO <$> clausifyBox <*> schemeBox
+toFofBox = toFofIO <$> globalFlags <*> clausifyBox <*> schemeBox
 
 oneConjectureBox :: OptionParser (CNF -> IO (Problem Clause))
 oneConjectureBox = pure oneConjecture
@@ -72,10 +119,10 @@ oneConjecture cnf = closedIO (close cnf f)
           hPutStrLn stderr "Error: more than one conjecture found in input problem"
           exitWith (ExitFailure 1)
 
-toFofIO :: (Problem Form -> IO CNF) -> Scheme -> Problem Form -> IO (Problem Form)
-toFofIO clausify scheme f = do
+toFofIO :: GlobalFlags -> (Problem Form -> IO CNF) -> Scheme -> Problem Form -> IO (Problem Form)
+toFofIO globals clausify scheme f = do
   cs <- clausify f >>= oneConjecture
-  hPutStrLn stderr "Monotonicity analysis..."
+  unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
   m <- monotone (map what (open cs))
   let isMonotone ty =
         case NameMap.lookup (name ty) m of
@@ -97,11 +144,11 @@ schemeBox =
         choose "tags" flags = tags flags
 
 monotonicityBox :: OptionParser (Problem Clause -> IO String)
-monotonicityBox = pure monotonicity
+monotonicityBox = monotonicity <$> globalFlags
 
-monotonicity :: Problem Clause -> IO String
-monotonicity cs = do
-  hPutStrLn stderr "Monotonicity analysis..."
+monotonicity :: GlobalFlags -> Problem Clause -> IO String
+monotonicity globals cs = do
+  unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
   m <- monotone (map what (open cs))
   let info (ty ::: Nothing) = [BS.unpack (baseName ty) ++ ": not monotone"]
       info (ty ::: Just m) =
@@ -116,26 +163,28 @@ monotonicity cs = do
   return (unlines (concat (map info (NameMap.toList m))))
 
 annotateMonotonicityBox :: OptionParser (Problem Clause -> IO (Problem Clause))
-annotateMonotonicityBox = pure $ \x -> do
-  putStrLn "Monotonicity analysis..."
-  annotateMonotonicity x
+annotateMonotonicityBox = (\globals x -> do
+  unless (quiet globals) $ putStrLn "Monotonicity analysis..."
+  annotateMonotonicity x) <$> globalFlags
 
 prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (Problem a -> IO ())
-prettyPrintBox = prettyFormIO <$> writeFileBox
+prettyPrintBox = prettyFormIO <$> globalFlags <*> writeFileBox
 
-prettyFormIO :: (Symbolic a, Pretty a) => (String -> IO ()) -> Problem a -> IO ()
-prettyFormIO write prob
-  | isFof (open prob) = prettyPrintIO "fof" write prob
-  | otherwise = prettyPrintIO "tff" write prob
+prettyFormIO :: (Symbolic a, Pretty a) => GlobalFlags -> (String -> IO ()) -> Problem a -> IO ()
+prettyFormIO globals write prob
+  | isFof (open prob) = prettyPrintIO globals "fof" write prob
+  | otherwise = prettyPrintIO globals "tff" write prob
 
 prettyClauseBox :: OptionParser (Problem Clause -> IO ())
-prettyClauseBox = f <$> writeFileBox
-  where f write cs | isFof (open cs) = prettyPrintIO "cnf" write cs
-                   | otherwise = prettyPrintIO "tff" write (fmap (map (fmap toForm)) cs)
+prettyClauseBox = f <$> globalFlags <*> writeFileBox
+  where
+    f globals write cs
+      | isFof (open cs) = prettyPrintIO globals "cnf" write cs
+      | otherwise = prettyPrintIO globals "tff" write (fmap (map (fmap toForm)) cs)
 
-prettyPrintIO :: (Symbolic a, Pretty a) => String -> (String -> IO ()) -> Problem a -> IO ()
-prettyPrintIO kind write prob = do
-  hPutStrLn stderr "Writing output..."
+prettyPrintIO :: (Symbolic a, Pretty a) => GlobalFlags -> String -> (String -> IO ()) -> Problem a -> IO ()
+prettyPrintIO globals kind write prob = do
+  unless (quiet globals) $ hPutStrLn stderr "Writing output..."
   write (render (prettyProblem kind Normal prob) ++ "\n")
 
 writeFileBox :: OptionParser (String -> IO ())
@@ -187,10 +236,10 @@ allObligsIO solve obligs = loop 1 conjectures
         result x = putStrLn ("+++ RESULT: " ++ x)
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
-inferBox = pure $ \prob -> do
-  putStrLn "Inferring types..."
+inferBox = (\globals prob -> do
+  unless (quiet globals) $ putStrLn "Inferring types..."
   let prob' = close prob inferTypes
-  return (fmap fst prob', snd (open prob'))
+  return (fmap fst prob', snd (open prob'))) <$> globalFlags
 
 printInferredBox :: OptionParser ((Problem Clause, Type -> Type) -> IO (Problem Clause))
 printInferredBox = pure $ \(prob, rep) -> do
