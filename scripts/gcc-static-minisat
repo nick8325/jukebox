@@ -1,2 +1,0 @@
-#!/bin/sh
-g++ $(echo $*|sed 's/-lminisat\([^ ]*\) /-lminisat-static\1 /g'|sed "s,-lgmp,$(gcc -print-file-name=libgmp.a),")
