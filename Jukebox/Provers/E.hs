@@ -68,7 +68,7 @@ runE flags prob
     return (extractAnswer (open prob) (BS.unpack str))
   where eflags = [ "--soft-cpu-limit=" ++ show n | Just n <- [timeout flags] ] ++
                  ["--memory-limit=" ++ show n | Just n <- [memory flags] ] ++
-                 ["--tstp-in", "--tstp-out", "-tAuto", "-xAuto"] ++
+                 ["--tstp-in", "--tstp-out", "--auto-schedule"] ++
                  ["-l", "0"]
 
 extractAnswer :: Symbolic a => a -> String -> Either Answer [Term]
