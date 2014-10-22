@@ -38,6 +38,7 @@ Library
     Jukebox.Options
     Jukebox.ProgressBar
     Jukebox.Provers.E
+    Jukebox.Provers.SPASS
     Jukebox.Sat3
     Jukebox.SatEq
     Jukebox.Sat
