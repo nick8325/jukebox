@@ -18,6 +18,7 @@ import Data.Ord
 import Data.Int
 import Data.Typeable
 import Control.Monad.State.Strict
+import Control.Applicative
 
 data Name =
   Name {
@@ -75,7 +76,7 @@ instance Named a => Named (a ::: b) where
 
 newtype NameM a =
   NameM { unNameM :: State Int64 a }
-    deriving (Functor, Monad)
+    deriving (Functor, Applicative, Monad)
 
 newName :: Named a => a -> NameM Name
 newName x = NameM $ do

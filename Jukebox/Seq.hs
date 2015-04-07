@@ -6,6 +6,7 @@ import Control.Monad hiding (mapM, mapM_)
 import Data.Hashable
 import qualified Data.HashSet as Set
 import Data.Monoid
+import Control.Applicative
 
 data Seq a = Append (Seq a) (Seq a) | Unit a | Nil
 
@@ -48,10 +49,18 @@ instance Functor Seq where
   fmap f (Unit x) = Unit (f x)
   fmap f Nil = Nil
 
+instance Applicative Seq where
+  pure = return
+  (<*>) = liftM2 ($)
+
 instance Monad Seq where
   return = Unit
   x >>= f = concatMapA f x
   fail _ = Nil
+
+instance Alternative Seq where
+  empty = mzero
+  (<|>) = mplus
 
 instance MonadPlus Seq where
   mzero = Nil

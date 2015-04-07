@@ -23,7 +23,8 @@ parseProblem dirs name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP
 
 parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Form))
 parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile name Nothing "<command line>" (Pos 0 0) initialState))
-  where err file (Pos l c) msg = throwError msg'
+  where err :: String -> Pos -> String -> ErrorT String IO a
+        err file (Pos l c) msg = throwError msg'
           where msg' = "Error at " ++ file ++ " (line " ++ show l ++ ", column " ++ show c ++ "):\n" ++ msg
         liftMaybeIO :: IO (Maybe a) -> FilePath -> Pos -> String -> ErrorT String IO a
         liftMaybeIO m file pos msg = do
