@@ -153,7 +153,7 @@ guards1 mono ps = Scheme1
     exists = \(Bind vs f) ->
        let bound = foldr (/\) true (map guard (NameMap.toList vs))
            guard v | mono (typ v) = true
-                   | not (naked True v f) = true
+--                   | not (naked True v f) = true
                    | otherwise = Literal (Pos (Tru (ps (typ v) :@: [Var v])))
        in Exists (Bind vs (simplify bound /\ f)),
     equals = \t u -> Literal (Pos (t :=: u)),
