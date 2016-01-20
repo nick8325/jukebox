@@ -275,15 +275,21 @@ tool t p =
 -- Use the program name as a tool name if possible.
 getEffectiveArgs :: ToolParser a -> IO [String]
 getEffectiveArgs (Annotated tools _) = do
-  progName <- getProgName
+  progName <-
+    case tools of
+      [tool] -> return (toolProgName tool)
+      _ -> getProgName
   args <- getArgs
-  if length tools > 1 && progName `elem` map toolProgName tools
+  if progName `elem` map toolProgName tools
     then return (progName:args)
     else return args
 
 parseCommandLine :: Tool -> ToolParser a -> IO a
 parseCommandLine t p = do
-  let p' = versionTool t `mappend` helpTool t p `mappend` p
+  let p' =
+        case p of
+          Annotated [_] _ -> p
+          _ -> versionTool t `mappend` helpTool t p `mappend` p
   args <- getEffectiveArgs p'
   case runPref (parser p') args of
     Left (Mistake err) -> printHelp (ExitFailure 1) (argError t err)
