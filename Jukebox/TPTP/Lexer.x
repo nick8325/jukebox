@@ -18,6 +18,7 @@ import qualified Data.ByteString.Char8 as BS
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import Data.ByteString.Lazy.Internal
 import Data.Word
+import Data.Char
 }
 
 $alpha = [a-zA-Z0-9_]
