@@ -277,7 +277,7 @@ getEffectiveArgs :: ToolParser a -> IO [String]
 getEffectiveArgs (Annotated tools _) = do
   progName <- getProgName
   args <- getArgs
-  if progName `elem` map toolProgName tools
+  if length tools > 1 && progName `elem` map toolProgName tools
     then return (progName:args)
     else return args
 
@@ -337,7 +337,7 @@ help t p = concat [
   ]
 
 greeting :: Tool -> String
-greeting t = toolName t ++ ", version " ++ toolVersion t ++ ", 2011-10-04."
+greeting t = toolName t ++ ", version " ++ toolVersion t ++ "."
 
 usage :: Tool -> String -> [String]
 usage t opts = [
