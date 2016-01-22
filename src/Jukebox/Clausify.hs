@@ -10,7 +10,7 @@ import Control.Monad.Reader
 import Control.Monad.State.Strict
 import qualified Jukebox.NameMap as NameMap
 import Jukebox.NameMap(NameMap)
-import qualified Jukebox.Map as Map
+import qualified Data.IntMap.Strict as Map
 import qualified Data.HashSet as Set
 import Jukebox.Utils
 import Jukebox.Options

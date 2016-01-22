@@ -21,7 +21,7 @@ import Control.Applicative
 
 data Name =
   Name {
-    uniqueId :: {-# UNPACK #-} !Int64,
+    uniqueId :: {-# UNPACK #-} !Int,
     base :: String } deriving Typeable
 
 unsafeMakeName = Name
@@ -71,7 +71,7 @@ instance Named a => Named (a ::: b) where
   name (a ::: b) = name a
 
 newtype NameM a =
-  NameM { unNameM :: State Int64 a }
+  NameM { unNameM :: State Int a }
     deriving (Functor, Applicative, Monad)
 
 newName :: Named a => a -> NameM Name
@@ -84,7 +84,7 @@ newName x = NameM $ do
 
 data Closed a =
   Closed {
-    maxIndex :: {-# UNPACK #-} !Int64,
+    maxIndex :: {-# UNPACK #-} !Int,
     open :: !a } deriving Typeable
 
 unsafeClose = Closed

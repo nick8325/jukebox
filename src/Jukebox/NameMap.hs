@@ -1,15 +1,18 @@
-module Jukebox.NameMap(NameMap, lookup, lookup_, insert, member, delete, (!), fromList, toList, singleton) where
+module Jukebox.NameMap(NameMap, empty, lookup, lookup_, insert, member, delete, (!), fromList, toList, singleton, null, union, intersection) where
 
 import Prelude hiding (lookup)
 import Jukebox.Name
-import Jukebox.Map(Map)
-import qualified Jukebox.Map as Map
+import Data.IntMap(IntMap)
+import qualified Data.IntMap as IntMap
 import Data.Int
 
-type NameMap a = Map Int64 a
+type NameMap a = IntMap a
+
+empty :: NameMap a
+empty = IntMap.empty
 
 lookup :: Name -> NameMap a -> Maybe a
-lookup x m = Map.lookup (uniqueId x) m
+lookup x m = IntMap.lookup (uniqueId x) m
 
 lookup_ :: Named a => a -> NameMap b -> b
 lookup_ x m =
@@ -18,28 +21,34 @@ lookup_ x m =
     Just y -> y
 
 insert :: Named a => a -> NameMap a -> NameMap a
-insert x m = Map.insert (uniqueId (name x)) x m
+insert x m = IntMap.insert (uniqueId (name x)) x m
 
 member :: Named a => a -> NameMap a -> Bool
 member x m = keyMember (name x) m
 
 keyMember :: Name -> NameMap a -> Bool
-keyMember x m = Map.member (uniqueId x) m
+keyMember x m = IntMap.member (uniqueId x) m
 
 delete :: Named a => a -> NameMap a -> NameMap a
 delete x m = deleteKey (name x) m
 
 deleteKey :: Name -> NameMap a -> NameMap a
-deleteKey x m = Map.delete (uniqueId x) m
+deleteKey x m = IntMap.delete (uniqueId x) m
 
 (!) :: NameMap a -> Name -> a
-m ! x = m Map.! uniqueId (name x)
+m ! x = m IntMap.! uniqueId (name x)
 
 fromList :: Named a => [a] -> NameMap a
-fromList xs = Map.fromList [ (uniqueId (name x), x) | x <- xs ]
+fromList xs = IntMap.fromList [ (uniqueId (name x), x) | x <- xs ]
 
 toList :: NameMap a -> [a]
-toList = Map.elems
+toList = IntMap.elems
 
 singleton :: Named a => a -> NameMap a
-singleton x = insert x Map.empty
+singleton x = insert x IntMap.empty
+
+union :: NameMap a -> NameMap a -> NameMap a
+union = IntMap.union
+
+intersection :: NameMap a -> NameMap a -> NameMap a
+intersection = IntMap.intersection

@@ -7,7 +7,7 @@ module Jukebox.Form where
 
 import Prelude hiding (sequence, mapM)
 import Data.Hashable
-import qualified Jukebox.Map as Map
+import qualified Data.IntMap as Map
 import Jukebox.NameMap(NameMap)
 import qualified Jukebox.NameMap as NameMap
 import Data.Ord
@@ -637,7 +637,7 @@ type ShareState = (NameMap Type, NameMap Variable, NameMap Function)
 share :: Symbolic a => a -> a
 share x = evalState (shareM x) initial
   where initial :: ShareState
-        initial = (Map.empty, Map.empty, Map.empty)
+        initial = (NameMap.empty, NameMap.empty, NameMap.empty)
 
         shareM :: Symbolic a => a -> State ShareState a
         shareM t =

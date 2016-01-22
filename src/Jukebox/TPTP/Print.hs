@@ -8,7 +8,7 @@ import Text.PrettyPrint.HughesPJ
 import qualified Jukebox.TPTP.Lexer as L
 import Jukebox.Form
 import Data.List
-import qualified Jukebox.Map as Map
+import qualified Data.IntMap.Strict as Map
 import qualified Jukebox.NameMap as NameMap
 import Jukebox.NameMap(NameMap)
 import Jukebox.Name
