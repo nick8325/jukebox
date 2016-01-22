@@ -9,7 +9,6 @@ module Jukebox.Name(
   unsafeClose, maxIndex, supply,
   uniquify) where
 
-import qualified Data.ByteString.Char8 as BS
 import Data.Hashable
 import qualified Jukebox.Map as Map
 import Jukebox.Utils
@@ -23,7 +22,7 @@ import Control.Applicative
 data Name =
   Name {
     uniqueId :: {-# UNPACK #-} !Int64,
-    base :: BS.ByteString } deriving Typeable
+    base :: String } deriving Typeable
 
 unsafeMakeName = Name
 
@@ -38,23 +37,20 @@ instance Hashable Name where
 
 instance Show Name where
   show Name { uniqueId = uniqueId, base = base } =
-    BS.unpack base ++ show uniqueId
+    base ++ show uniqueId
 
 class Named a where
   name :: a -> Name
-  baseName :: a -> BS.ByteString
+  baseName :: a -> String
   baseName = base . name
 
+{-# DEPRECATED stringBaseName "use baseName" #-}
 stringBaseName :: Named a => a -> String
-stringBaseName = BS.unpack . baseName
-
-instance Named BS.ByteString where
-  name = error "Name.name: used a ByteString as a name"
-  baseName = id
+stringBaseName = baseName
 
 instance Named [Char] where
   name = error "Name.name: used a String as a name"
-  baseName = BS.pack
+  baseName = id
 
 instance Named Name where
   name = id
@@ -125,7 +121,7 @@ supply f = NameM $ do
   put (maxIndex res)
   return (open res)
 
-uniquify :: [Name] -> (Name -> BS.ByteString)
+uniquify :: [Name] -> (Name -> String)
 uniquify xs = f
   -- Note to self: nameO should always be mapped to "$o".
   -- Therefore we make sure that smaller names have priority
@@ -142,7 +138,7 @@ uniquify xs = f
         b = Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") x
             (Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") (baseName x) baseMap)
     combine s 0 = s
-    combine s n = disambiguate (BS.append s (BS.pack (show n)))
+    combine s n = disambiguate (s ++ show n)
     disambiguate s
       | not (Map.member s baseMap) = s
       | otherwise =
@@ -150,4 +146,4 @@ uniquify xs = f
         -- and two names with baseName "f", which would normally
         -- become "f" and "f1", but the "f1" conflicts.
         -- Try appending some suffix.
-        disambiguate (BS.snoc s '_')
+        disambiguate (s ++ "_")

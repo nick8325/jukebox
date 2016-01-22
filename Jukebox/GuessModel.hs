@@ -2,7 +2,6 @@
 module Jukebox.GuessModel where
 
 import Control.Monad
-import qualified Data.ByteString.Char8 as BS
 import Jukebox.Name
 import Jukebox.Form
 import Jukebox.Clausify hiding (cnf)
@@ -54,11 +53,11 @@ guessModel expansive univ prob = close prob $ \forms -> do
   let i = ind forms
   answerType <- newType "answer"
   answer <- newFunction "$answer" [answerType] O
-  let withExpansive f func = f func (BS.unpack (base (name func)) `elem` expansive) answer
+  let withExpansive f func = f func (base (name func) `elem` expansive) answer
   (constructors, prelude) <- universe univ i
   program <- fmap concat (mapM (withExpansive (function constructors)) (functions forms))
-  return (map (Input (BS.pack "adt") Axiom) prelude ++
-          map (Input (BS.pack "program") Axiom) program ++
+  return (map (Input "adt" Axiom) prelude ++
+          map (Input "program" Axiom) program ++
           forms)
 
 ind :: Symbolic a => a -> Type
@@ -72,7 +71,7 @@ function :: [Function] -> Function -> Bool -> Function -> NameM [Form]
 function constructors f expansive answerP = fmap concat $ do
   argss <- cases constructors (funArgs f)
   forM argss $ \args -> do
-    fname <- newFunction ("exhausted_" ++ BS.unpack (base (name f)) ++ "_case")
+    fname <- newFunction ("exhausted_" ++ base (name f) ++ "_case")
                [] (head (funArgs answerP))
     let answer = Literal (Pos (Tru (answerP :@: [fname :@: []])))
     let theRhss = rhss constructors args f expansive answer

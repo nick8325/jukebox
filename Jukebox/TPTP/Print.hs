@@ -3,7 +3,6 @@
 module Jukebox.TPTP.Print(prettyShow, chattyShow, prettyFormula, prettyProblem, Level(..), Pretty)
        where
 
-import qualified Data.ByteString.Char8 as BS
 import Data.Char
 import Text.PrettyPrint.HughesPJ
 import qualified Jukebox.TPTP.Lexer as L
@@ -18,12 +17,12 @@ import Jukebox.Name
 data Level = Normal | Chatty deriving (Eq, Ord)
 
 class Pretty a where
-  pPrint :: Int -> Level -> (Name -> BS.ByteString) -> a -> Doc
+  pPrint :: Int -> Level -> (Name -> String) -> a -> Doc
 
 instance Pretty Name where
-  pPrint _ _ env x = text (BS.unpack (env x))
+  pPrint _ _ env x = text (env x)
 
-pPrintSymbol :: Bool -> Int -> Level -> (Name -> BS.ByteString) -> Name ::: Type -> Doc
+pPrintSymbol :: Bool -> Int -> Level -> (Name -> String) -> Name ::: Type -> Doc
 pPrintSymbol full prec lev env (x ::: t)
   | full || lev >= Chatty = pPrint prec lev env x <> colon <> pPrint prec lev env t
   | otherwise = pPrint prec lev env x
@@ -39,10 +38,10 @@ instance Pretty Type where
   pPrint prec lev env t
     | lev >= Chatty = 
       hcat . punctuate (text "/") $
-        [text (BS.unpack (escapeAtom (env (tname t))))] ++
+        [text (escapeAtom (env (tname t)))] ++
         [size (tmonotone t) | tmonotone t /= Infinite || tsize t /= Infinite] ++
         [size (tsize t) | tsize t /= Infinite]
-    | otherwise = text (BS.unpack (escapeAtom (env (tname t))))
+    | otherwise = text (escapeAtom (env (tname t)))
     where size Infinite = empty
           size (Finite n) = int n
 
@@ -50,26 +49,26 @@ instance Show Type where
   show = chattyShow
 
 instance Show L.Token where
-  show L.Atom{L.name = x} = BS.unpack (escapeAtom x)
+  show L.Atom{L.name = x} = escapeAtom x
   show L.Defined{L.defined = x} = show x
-  show L.Var{L.name = x} = BS.unpack x
-  show L.DistinctObject{L.name = x} = BS.unpack (quote '"' x)
+  show L.Var{L.name = x} = x
+  show L.DistinctObject{L.name = x} = quote '"' x
   show L.Number{L.value = x} = show x
   show L.Punct{L.kind = x} = show x
   show L.Eof = "end of file"
   show L.Error = "lexical error"
 
-escapeAtom :: BS.ByteString -> BS.ByteString
-escapeAtom s | not (BS.null s') && isLower (BS.head s') && BS.all isNormal s' = s
+escapeAtom :: String -> String
+escapeAtom s | not (null s') && isLower (head s') && all isNormal s' = s
              | otherwise = quote '\'' s
   where isNormal c = isAlphaNum c || c == '_'
-        s' = BS.dropWhile (== '$') s
+        s' = dropWhile (== '$') s
 
-quote :: Char -> BS.ByteString -> BS.ByteString
-quote c s = BS.concat [BS.pack [c], BS.concatMap escape s, BS.pack [c]]
-  where escape c' | c == c' = BS.pack ['\\', c]
-        escape '\\' = BS.pack "\\\\"
-        escape c = BS.singleton c
+quote :: Char -> String -> String
+quote c s = [c] ++ concatMap escape s ++ [c]
+  where escape c' | c == c' = ['\\', c]
+        escape '\\' = "\\\\"
+        escape c = [c]
 
 instance Pretty FunType where
   pPrint prec lev env FunType{args = args, res = res} =
@@ -107,8 +106,8 @@ prettyClause family name kind rest =
 instance (Symbolic a, Pretty a) => Show (Problem a) where
   show = render . prettyProblem "tff" Chatty
 
-prettyInput :: Pretty a => String -> Level -> (Name -> BS.ByteString) -> Input a -> Doc
-prettyInput family l env i = prettyClause family (BS.unpack (tag i)) (show (kind i)) (pPrint 0 l env (what i))
+prettyInput :: Pretty a => String -> Level -> (Name -> String) -> Input a -> Doc
+prettyInput family l env i = prettyClause family (tag i) (show (kind i)) (pPrint 0 l env (what i))
 
 instance Pretty a => Pretty (Input a) where
   pPrint _ l env = prettyInput "tff" l env
@@ -193,7 +192,7 @@ instance Show Kind where
 
 prettyShow, chattyShow :: Pretty a => a -> String
 prettyShow = render . pPrint 0 Normal base
-chattyShow = render . pPrint 0 Chatty (BS.pack . show)
+chattyShow = render . pPrint 0 Chatty show
 
 prettyFormula :: (Pretty a, Symbolic a) => a -> String
 prettyFormula prob = render . pPrint 0 Normal env $ prob

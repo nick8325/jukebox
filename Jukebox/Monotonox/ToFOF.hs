@@ -6,7 +6,6 @@ import Jukebox.Name
 import qualified Jukebox.NameMap as NameMap
 import Jukebox.Form
 import Jukebox.Options
-import qualified Data.ByteString.Char8 as BS
 import Control.Monad hiding (guard)
 import Data.Monoid
 
@@ -64,7 +63,7 @@ translate1 scheme mono f = close f $ \inps -> do
         map (simplify . ForAll . bind) . split . simplify . foldr (/\) true $
           funcAxioms ++ typeAxioms
   return $
-    [ Input (BS.pack ("types" ++ show i)) Axiom axiom | (axiom, i) <- zip axioms [1..] ] ++
+    [ Input ("types" ++ show i) Axiom axiom | (axiom, i) <- zip axioms [1..] ] ++
     map (guard scheme1' mono') inps
 
 translate scheme mono f =
@@ -91,7 +90,7 @@ tagsFlags =
 tags :: Bool -> Scheme
 tags moreAxioms = Scheme
   { makeFunction = \ty ->
-      newFunction (BS.append (BS.pack "to_") (baseName ty)) [ty] ty,
+      newFunction ("to_" ++ baseName ty) [ty] ty,
     scheme1 = tags1 moreAxioms }
 
 tags1 :: Bool -> (Type -> Bool) -> (Type -> Function) -> Scheme1
@@ -139,7 +138,7 @@ tagsExists mono ty f
 guards :: Scheme
 guards = Scheme
   { makeFunction = \ty ->
-      newFunction (BS.append (BS.pack "is_") (baseName ty)) [ty] O,
+      newFunction ("is_" ++ baseName ty) [ty] O,
     scheme1 = guards1 }
 
 guards1 :: (Type -> Bool) -> (Type -> Function) -> Scheme1

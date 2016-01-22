@@ -14,9 +14,6 @@ module Jukebox.TPTP.Lexer(
   TokenStream(..),
   Contents(..)) where
 
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import Data.ByteString.Lazy.Internal
 import Data.Word
 import Data.Char
 }
@@ -76,7 +73,7 @@ $white+ ;
 -- Distinct objects, which are double-quoted
 \" @dquoted+  \" { DistinctObject . unquote }
 -- Integers
-[\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { Number . readNumber }
+[\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { Number . read }
 
 -- Operators (FOF)
 "("  { p LParen }  ")"   { p RParen }  "["  { p LBrack }   "]"  { p RBrack }
@@ -94,10 +91,10 @@ $white+ ;
 
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
-data Token = Atom { keyword :: !Keyword, name :: !BS.ByteString }
+data Token = Atom { keyword :: !Keyword, name :: String }
            | Defined { defined :: !Defined  }
-           | Var { name :: !BS.ByteString }
-           | DistinctObject { name :: !BS.ByteString }
+           | Var { name :: String }
+           | DistinctObject { name :: String }
            | Number { value :: !Integer }
            | Punct { kind :: !Punct }
            | Eof
@@ -160,45 +157,33 @@ p x = const (Punct x)
 k x = Atom x . copy
 d x = const (Defined x)
 
-copy :: BS.ByteString -> BS.ByteString
+copy :: String -> String
 copy = id -- could change to a string interning function later
 
-unquote :: BS.ByteString -> BS.ByteString
-unquote x =
-  case BSL.toChunks (BSL.tail (unquote' x)) of
-    [] -> BS.empty
-    [x] -> copy x
-    xs -> BS.concat xs
-
-unquote' :: BS.ByteString -> BSL.ByteString
-unquote' x | BS.null z = chunk (BS.init y) Empty
-           | otherwise = chunk y (BS.index z 1 `BSL.cons'` unquote' (BS.drop 2 z))
-           where (y, z) = BS.break (== '\\') x
+unquote :: String -> String
+unquote x
+  | null z = init y
+  | otherwise = y ++ [z !! 1] ++ unquote (drop 2 z)
+  where (y, z) = break (== '\\') x
     
-readNumber :: BS.ByteString -> Integer
-readNumber x | BS.null r = n
-  where Just (n, r) = BS.readInteger x
-
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
 data TokenStream = At {-# UNPACK #-} !Pos !Contents
 data Contents = Cons !Token TokenStream
 
-scan xs = go (Input (Pos 1 1) '\n' BS.empty xs)
-  where go inp@(Input pos _ x xs) =
+scan xs = go (Input (Pos 1 1) '\n' xs)
+  where go inp@(Input pos _ xs) =
           case alexScan inp 0 of
                 AlexEOF -> let t = At pos (Cons Eof t) in t
                 AlexError _ -> let t = At pos (Cons Error t) in t
                 AlexSkip  inp' len -> go inp'
                 AlexToken inp' len act ->
-                  let token | len <= BS.length x = BS.take len x
-                            | otherwise = BS.concat (BSL.toChunks (BSL.take (fromIntegral len) (chunk x xs)))
-                  in At pos (act token `Cons` go inp')
+                  At pos (act (take len xs) `Cons` go inp')
 
-data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char {-# UNPACK #-} !BS.ByteString BSL.ByteString
+data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char String
 
 alexInputPrevChar :: AlexInput -> Char
-alexInputPrevChar (Input p c x xs) = c
+alexInputPrevChar (Input p c xs) = c
 
 {-# INLINE alexGetByte #-}
 alexGetByte :: AlexInput -> Maybe (Word8,AlexInput)
@@ -206,14 +191,9 @@ alexGetByte i = fmap f (alexGetChar i)
   where f (c, i') = (fromIntegral (ord c), i')
 {-# INLINE alexGetChar #-}
 alexGetChar :: AlexInput -> Maybe (Char,AlexInput)
-alexGetChar (Input p _ x xs) | not (BS.null x) = getCharNonEmpty p x xs
-alexGetChar (Input p _ _ (Chunk x xs)) = getCharNonEmpty p x xs
-alexGetChar (Input p _ _ Empty) = Nothing
-{-# INLINE getCharNonEmpty #-}
-getCharNonEmpty p x xs =
-  let !c = BS.head x
-      !next = Input (advance p c) c (BS.tail x) xs
-  in Just (c, next)
+alexGetChar (Input p _ (x:xs)) =
+  Just (x, Input (advance p x) x xs)
+alexGetChar _ = Nothing
 
 {-# INLINE advance #-}
 advance :: Pos -> Char -> Pos

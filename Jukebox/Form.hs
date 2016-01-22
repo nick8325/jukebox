@@ -13,7 +13,6 @@ import qualified Jukebox.Map as Map
 import Jukebox.NameMap(NameMap)
 import qualified Jukebox.NameMap as NameMap
 import Data.Ord
-import qualified Data.ByteString.Char8 as BS
 import Jukebox.Name
 import Control.Monad.State.Strict hiding (sequence, mapM)
 import Data.List hiding (nub)
@@ -314,7 +313,7 @@ toLiterals (Clause (Bind _ ls)) = ls
 ----------------------------------------------------------------------
 -- Problems
 
-type Tag = BS.ByteString
+type Tag = String
 
 data Kind = Axiom | Conjecture | Question deriving (Eq, Ord)
 

@@ -14,7 +14,6 @@ import qualified Jukebox.NameMap as NameMap
 import Jukebox.NameMap(NameMap)
 import qualified Jukebox.Map as Map
 import qualified Data.HashSet as Set
-import qualified Data.ByteString.Char8 as BS
 import Jukebox.Utils
 import Jukebox.Options
 import Control.Applicative
@@ -105,7 +104,7 @@ split p =
 ----------------------------------------------------------------------
 -- core clausification algorithm
 
-clausForm :: BS.ByteString -> Form -> M [Input Clause]
+clausForm :: String -> Form -> M [Input Clause]
 clausForm s p =
   withName s $
     do miniscoped      <- miniscope . check . simplify                      . check $ p
@@ -116,7 +115,7 @@ clausForm s p =
        let !cnf_        = S.concatMap cnf                                   . check $ noForAllPs
            !simp        = simplifyCNF . fmap S.toList                       . check $ cnf_
            cs           = S.toList . fmap clause                                    $ simp
-           inps         = [ Input (BS.append s (BS.pack i)) Axiom c
+           inps         = [ Input (s ++ i) Axiom c
                           | (c, i) <- zip cs ("":
                                         [ '_':show i | i <- [1..] ]) ]
        return $! force . check                                                      $ inps
@@ -405,14 +404,14 @@ simplifyCNF =
 type M = ReaderT Tag (StateT Int NameM)
 
 run :: M a -> NameM a
-run x = evalStateT (runReaderT x BS.empty) 0
+run x = evalStateT (runReaderT x "") 0
 
 skolemName :: Named a => String -> a -> M Name
 skolemName prefix v = do
   i <- get
   put (i+1)
   s <- getName
-  lift . lift . newName $ prefix ++ show i ++ concat [ "_" ++ t | t <- map BS.unpack [s, baseName v], not (null t) ]
+  lift . lift . newName $ prefix ++ show i ++ concat [ "_" ++ t | t <- [s, baseName v], not (null t) ]
 
 nextSk :: M Int
 nextSk = do

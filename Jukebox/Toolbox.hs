@@ -1,8 +1,6 @@
 module Jukebox.Toolbox where
 
 import Jukebox.Options
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as BSL
 import Jukebox.Form
 import Jukebox.Name
 import qualified Jukebox.NameMap as NameMap
@@ -79,7 +77,7 @@ withString kind f x = do
   let errorAt (UserState _ (At (Lexer.Pos l c) _)) err =
         error $ "At line " ++ show l ++ ", column " ++ show c ++ ": " ++ err
   case run_ (section (const True) <* eof)
-            (UserState initialState (scan (BSL.pack x))) of
+            (UserState initialState (scan x)) of
     Ok (UserState (MkState p _ _ _ _ n) (At _ (Cons Eof _))) Nothing -> do
       let prob = close_ n (return (reverse p))
       res <- f prob
@@ -150,14 +148,14 @@ monotonicity :: GlobalFlags -> Problem Clause -> IO String
 monotonicity globals cs = do
   unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
   m <- monotone (map what (open cs))
-  let info (ty ::: Nothing) = [BS.unpack (baseName ty) ++ ": not monotone"]
+  let info (ty ::: Nothing) = [baseName ty ++ ": not monotone"]
       info (ty ::: Just m) =
         [prettyShow ty ++ ": monotone"] ++
         concat
         [ case ext of
              CopyExtend -> []
-             TrueExtend -> ["  " ++ BS.unpack (baseName p) ++ " true-extended"]
-             FalseExtend -> ["  " ++ BS.unpack (baseName p) ++ " false-extended"]
+             TrueExtend -> ["  " ++ baseName p ++ " true-extended"]
+             FalseExtend -> ["  " ++ baseName p ++ " false-extended"]
         | p ::: ext <- NameMap.toList m ]
 
   return (unlines (concat (map info (NameMap.toList m))))

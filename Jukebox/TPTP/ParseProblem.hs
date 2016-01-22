@@ -1,7 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Jukebox.TPTP.ParseProblem where
 
-import Jukebox.ProgressBar
 import Jukebox.TPTP.FindFile
 import Jukebox.TPTP.ClauseParser
 import Jukebox.TPTP.Lexer hiding (Include, Error)
@@ -10,19 +9,18 @@ import Jukebox.TPTP.Print
 import qualified Jukebox.TPTP.Lexer as L
 import Control.Monad.Error
 import Jukebox.Form hiding (Pos)
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import qualified Data.ByteString.Char8 as BS
 import Control.Monad.Identity
 import Control.Exception
 import Prelude hiding (catch)
 import Data.List
 import Jukebox.Name
+import System.IO
 
 parseProblem :: [FilePath] -> FilePath -> IO (Either String (Problem Form))
-parseProblem dirs name = withProgressBar $ \pb -> parseProblemWith (findFileTPTP dirs) pb name
+parseProblem dirs name = parseProblemWith (findFileTPTP dirs) name
 
-parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> ProgressBar -> FilePath -> IO (Either String (Problem Form))
-parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile name Nothing "<command line>" (Pos 0 0) initialState))
+parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> FilePath -> IO (Either String (Problem Form))
+parseProblemWith findFile name = runErrorT (fmap finalise (parseFile name Nothing "<command line>" (Pos 0 0) initialState))
   where err :: String -> Pos -> String -> ErrorT String IO a
         err file (Pos l c) msg = throwError msg'
           where msg' = "Error at " ++ file ++ " (line " ++ show l ++ ", column " ++ show c ++ "):\n" ++ msg
@@ -43,9 +41,9 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
                      ParseState -> ErrorT FilePath IO ParseState
         parseFile name clauses file0 pos st = do
           file <- liftMaybeIO (findFile name) file0 pos ("File " ++ name ++ " not found")
-          liftIO $ enter progressBar $ "Reading " ++ file
+          liftIO $ hPutStrLn stderr $ "Reading " ++ file ++ "..."
           contents <- liftEitherIO
-                        (fmap Right (BSL.readFile file >>= tickOnRead progressBar)
+                        (fmap Right (readFile file)
                           `catch` (\(e :: IOException) -> return (Left e)))
                         file (Pos 0 0) show
           let s = UserState st (scan contents)
@@ -63,11 +61,10 @@ parseProblemWith findFile progressBar name = runErrorT (fmap finalise (parseFile
             (UserState{userStream=At pos _}, Left e) ->
               err file pos (concat (intersperse "\n" e))
             (s'@UserState{userStream=At _ (Cons Eof _)}, Right Nothing) -> do
-              liftIO $ leave progressBar
               return s'
             (UserState{userStream=stream@(At pos _),userState=state},
              Right (Just (Include name clauses'))) -> do
-              s' <- parseFile (BS.unpack name) (clauses `merge` clauses') file pos state
+              s' <- parseFile name (clauses `merge` clauses') file pos state
               parseSections clauses file (UserState s' stream)
 
         included :: Maybe [Tag] -> Tag -> Bool

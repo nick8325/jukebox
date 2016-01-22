@@ -13,8 +13,6 @@ import Jukebox.TPTP.Print
 import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, name, Var)
 import Text.PrettyPrint.HughesPJ hiding (parens)
 import Data.Maybe
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Jukebox.Seq as S
 import qualified Jukebox.Map as Map
 import Jukebox.Map(Map)
@@ -51,8 +49,8 @@ runSPASS flags prob
   | not (isFof (open prob)) = error "runSPASS: SPASS doesn't support many-typed problems"
   | otherwise = do
     (code, str) <- popen (spass flags) spassFlags
-                   (BS.pack (render (prettyProblem "cnf" Normal prob)))
-    return (extractAnswer (BS.unpack str))
+                   (render (prettyProblem "cnf" Normal prob))
+    return (extractAnswer str)
   where
     spassFlags =
       ["-TimeLimit=" ++ show n | Just n <- [timeout flags] ] ++

@@ -13,8 +13,6 @@ import Jukebox.TPTP.Print
 import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, name, Var)
 import Text.PrettyPrint.HughesPJ hiding (parens)
 import Data.Maybe
-import qualified Data.ByteString.Char8 as BS
-import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Jukebox.Seq as S
 import qualified Jukebox.Map as Map
 import Jukebox.Map(Map)
@@ -62,10 +60,10 @@ runE flags prob
   | not (isFof (open prob)) = error "runE: E doesn't support many-typed problems"
   | otherwise = do
     (code, str) <- popen (eprover flags) eflags
-                   (BS.pack (render (prettyProblem "fof" Normal (close prob mangleAnswer))))
+                   (render (prettyProblem "fof" Normal (close prob mangleAnswer)))
     --case code of
-    --  ExitFailure code -> error $ "runE: E failed with exit code " ++ show code ++ ":\n" ++ BS.unpack str
-    return (extractAnswer (open prob) (BS.unpack str))
+    --  ExitFailure code -> error $ "runE: E failed with exit code " ++ show code ++ ":\n" ++ str
+    return (extractAnswer (open prob) str)
   where eflags = [ "--soft-cpu-limit=" ++ show n | Just n <- [timeout flags] ] ++
                  ["--memory-limit=" ++ show n | Just n <- [memory flags] ] ++
                  ["--tstp-in", "--tstp-out", "-tAuto", "-xAuto"] ++
@@ -96,7 +94,7 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
           , prefix == prefix'
           , suffix == suffix' ]
         parse xs =
-          let toks = scan (BSL.pack xs)
+          let toks = scan xs
           in case run_ parser (UserState initialState toks) of
             Ok _ ts -> ts
             _ -> error "runE: couldn't parse result from E"
@@ -109,5 +107,5 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
         terms =
           bracks (term `sepBy1` punct Comma)
           <|> return []
-        lookup :: (Ord a, Hashable a) => Map BS.ByteString a -> BS.ByteString -> a
+        lookup :: (Ord a, Hashable a) => Map String a -> String -> a
         lookup m x = Map.findWithDefault (error "runE: result from E mentions free names") x m

@@ -6,8 +6,6 @@ module Jukebox.TPTP.ClauseParser where
 import Jukebox.TPTP.Parsec
 import Control.Applicative
 import Control.Monad
-import qualified Data.ByteString.Lazy.Char8 as BSL
-import qualified Data.ByteString.Char8 as BS
 import qualified Jukebox.Map as Map
 import Jukebox.Map(Map)
 import qualified Jukebox.Seq as S
@@ -30,20 +28,20 @@ import qualified Jukebox.Name as Name
 
 data ParseState =
   MkState ![Input Form]                           -- problem being constructed, inputs are in reverse order
-          !(Map BS.ByteString Type)               -- types
-          !(Map BS.ByteString (Name ::: FunType)) -- functions
-          !(Map BS.ByteString (Name ::: Type))    -- free variables in CNF clause
+          !(Map String Type)                      -- types
+          !(Map String (Name ::: FunType))        -- functions
+          !(Map String (Name ::: Type))           -- free variables in CNF clause
           Type                                    -- the $i type
           !(Closed ())                            -- name generation
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
 
 -- An include-clause.
-data IncludeStatement = Include BS.ByteString (Maybe [Tag]) deriving Show
+data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = MkState [] (Map.insert (BS.pack "$i") typeI Map.empty) Map.empty Map.empty typeI closed0
+initialState = MkState [] (Map.insert "$i" typeI Map.empty) Map.empty Map.empty typeI closed0
   where typeI = Type nameI Infinite Infinite
 
 instance Stream TokenStream Token where
@@ -55,7 +53,7 @@ instance Stream TokenStream Token where
 
 -- Wee function for testing.
 testParser :: Parser a -> String -> Either [String] a
-testParser p s = snd (run (const []) p (UserState initialState (scan (BSL.pack s))))
+testParser p s = snd (run (const []) p (UserState initialState (scan s)))
 
 getProblem :: Parser [Input Form]
 getProblem = do
@@ -157,7 +155,7 @@ kind = axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
 
 -- A formula name.
 tag :: Parser Tag
-tag = atom <|> fmap (BS.pack . show) number <?> "clause name"
+tag = atom <|> fmap show number <?> "clause name"
 
 -- An include declaration.
 include :: Parser IncludeStatement
@@ -183,7 +181,7 @@ newNameFrom n name = (close_ n' (return ()), open n')
   where n' = close_ n (newName name)
 
 {-# INLINE findType #-}
-findType :: BS.ByteString -> Parser Type
+findType :: String -> Parser Type
 findType name = do
   MkState p t f v i n <- getState
   case Map.lookup name t of
@@ -194,17 +192,17 @@ findType name = do
       return ty
     Just x -> return x
 
-newFunction :: BS.ByteString -> FunType -> Parser (Name ::: FunType)
+newFunction :: String -> FunType -> Parser (Name ::: FunType)
 newFunction name ty' = do
   f@(_ ::: ty) <- lookupFunction ty' name
   unless (ty == ty') $ do
-    fatalError $ "Constant " ++ BS.unpack name ++
+    fatalError $ "Constant " ++ name ++
                  " was declared to have type " ++ prettyShow ty' ++
                  " but already has type " ++ prettyShow ty
   return f
 
 {-# INLINE applyFunction #-}
-applyFunction :: BS.ByteString -> [Term] -> Type -> Parser Term
+applyFunction :: String -> [Term] -> Type -> Parser Term
 applyFunction name args' res = do
   i <- individual
   f@(_ ::: ty) <- lookupFunction (FunType (replicate (length args') i) res) name
@@ -227,7 +225,7 @@ typeError f@(x ::: ty) args' = do
                    plural (length (args ty)) " argument" " arguments"
 
 {-# INLINE lookupFunction #-}
-lookupFunction :: FunType -> BS.ByteString -> Parser (Name ::: FunType)
+lookupFunction :: FunType -> String -> Parser (Name ::: FunType)
 lookupFunction def name = do
   MkState p t f v i n <- getState
   case Map.lookup name f of
@@ -269,14 +267,14 @@ fof =
 -- A thing is either a term or a formula, or a literal that we don't know
 -- if it should be a term or a formula. Instead of a separate formula-parser
 -- and term-parser we have a combined thing-parser.
-data Thing = Apply !BS.ByteString ![Term]
+data Thing = Apply !String ![Term]
            | Term !Term
            | Formula !Form
 
 instance Show Thing where
-  show (Apply f []) = BS.unpack f
+  show (Apply f []) = f
   show (Apply f args) =
-    BS.unpack f ++
+    f ++
       case args of
         [] -> ""
         args -> prettyShow args
@@ -300,10 +298,10 @@ class TermLike a where
   -- Convert from a Thing.
   fromThing :: Thing -> Parser a
   -- Parse a variable occurrence as a term on its own, if that's allowed.
-  var :: (?ctx :: Maybe (Map BS.ByteString Variable)) => Parser a
+  var :: (?ctx :: Maybe (Map String Variable)) => Parser a
   -- A parser for this type.
   parser :: (?binder :: Parser Variable,
-             ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser a
+             ?ctx :: Maybe (Map String Variable)) => Parser a
 
 instance TermLike Form where
   {-# INLINE fromThing #-}
@@ -335,7 +333,7 @@ instance TermLike Term where
       Just ctx ->
         case Map.lookup x ctx of
           Just v -> return (Var v)
-          Nothing -> fatalError $ "unbound variable " ++ BS.unpack x
+          Nothing -> fatalError $ "unbound variable " ++ x
 
 instance TermLike Thing where
   fromThing = return
@@ -350,10 +348,10 @@ instance FormulaLike Form where fromFormula = id
 instance FormulaLike Thing where fromFormula = Formula
 
 -- An atomic expression.
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Term #-}
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Form #-}
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Thing #-}
-term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable), TermLike a) => Parser a
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Term #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Form #-}
+{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Thing #-}
+term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable), TermLike a) => Parser a
 term = function <|> var <|> parens parser
   where {-# INLINE function #-}
         function = do
@@ -362,7 +360,7 @@ term = function <|> var <|> parens parser
           fromThing (Apply x args)
 
 literal, unitary, quantified, formula ::
-  (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable), FormulaLike a) => Parser a
+  (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable), FormulaLike a) => Parser a
 {-# INLINE literal #-}
 literal = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
@@ -384,8 +382,8 @@ literal = true <|> false <|> binary <?> "literal"
                return (fromFormula form)
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
-{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Form #-}
-{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Thing #-}
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Form #-}
+{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Thing #-}
 unitary = negation <|> quantified <|> literal
   where {-# INLINE negation #-}
         negation = do
@@ -404,8 +402,8 @@ quantified = do
   return (fromFormula (q (Bind (NameMap.fromList vars) rest)))
 
 -- A general formula.
-{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Form #-}
-{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map BS.ByteString Variable)) => Parser Thing #-}
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Form #-}
+{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Thing #-}
 formula = do
   x <- unitary :: Parser Thing
   let binop op t u = op (S.Unit t `S.append` S.Unit u)

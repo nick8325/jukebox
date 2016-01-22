@@ -6,7 +6,6 @@ import qualified Jukebox.Seq as Seq
 import qualified Data.HashSet as Set
 import Data.Hashable
 import System.Process
-import qualified Data.ByteString.Char8 as BS
 import System.IO
 import System.Exit
 import Control.Applicative
@@ -27,12 +26,12 @@ merge (x:xs) (y:ys) =
 nub :: (Seq.List f, Ord a, Hashable a) => f a -> [a]
 nub = Set.toList . Set.fromList . Seq.toList
 
-popen :: FilePath -> [String] -> BS.ByteString -> IO (ExitCode, BS.ByteString)
+popen :: FilePath -> [String] -> String -> IO (ExitCode, String)
 popen prog args inp = do
   (stdin, stdout, stderr_, pid) <- runInteractiveProcess prog args Nothing Nothing
   forkIO $ hGetContents stderr_ >>= hPutStr stderr
-  BS.hPutStr stdin inp
+  hPutStr stdin inp
   hFlush stdin
   hClose stdin
   code <- waitForProcess pid
-  fmap (code,) (BS.hGetContents stdout) <* hClose stdout
+  fmap (code,) (hGetContents stdout) <* hClose stdout
