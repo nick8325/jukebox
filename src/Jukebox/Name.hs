@@ -1,57 +1,47 @@
-{-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances, DeriveDataTypeable #-}
-module Jukebox.Name(
-  Name, uniqueId, base,
-  stringBaseName,
-  unsafeMakeName,
-  (:::)(..), lhs, rhs,
-  Named(..),
-  Closed, close, close_, closedIO, open, closed0, stdNames, nameO, nameI, NameM, newName,
-  unsafeClose, maxIndex, supply,
-  uniquify) where
+{-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances #-}
+module Jukebox.Name where
 
+import Control.Monad.State.Strict
 import qualified Data.Map.Strict as Map
-import Jukebox.Utils
 import Data.List
 import Data.Ord
+import Jukebox.Utils
 import Data.Int
-import Data.Typeable
-import Control.Monad.State.Strict
-import Control.Applicative
 
 data Name =
-  Name {
-    uniqueId :: {-# UNPACK #-} !Int,
-    base :: String } deriving Typeable
+    Fixed String
+  | Unique {-# UNPACK #-} !Int64 String
 
-unsafeMakeName = Name
+base :: Named a => a -> String
+base x =
+  case name x of
+    Fixed xs -> xs
+    Unique _ xs -> xs
 
 instance Eq Name where
-  x == y = uniqueId x == uniqueId y
+  x == y = compareName x == compareName y
 
 instance Ord Name where
-  compare = comparing uniqueId
+  compare = comparing compareName
+
+compareName :: Name -> Either String Int64
+compareName (Fixed xs) = Left xs
+compareName (Unique n _) = Right n
 
 instance Show Name where
-  show Name { uniqueId = uniqueId, base = base } =
-    base ++ show uniqueId
+  show (Fixed xs) = xs
+  show (Unique n xs) = xs ++ show n
 
 class Named a where
   name :: a -> Name
-  baseName :: a -> String
-  baseName = base . name
-
-{-# DEPRECATED stringBaseName "use baseName" #-}
-stringBaseName :: Named a => a -> String
-stringBaseName = baseName
 
 instance Named [Char] where
-  name = error "Name.name: used a String as a name"
-  baseName = id
+  name = Fixed
 
 instance Named Name where
   name = id
 
-data a ::: b = !a ::: !b deriving (Show, Typeable)
+data a ::: b = a ::: b deriving Show
 
 lhs :: (a ::: b) -> a
 lhs (x ::: _) = x
@@ -66,55 +56,20 @@ instance Named a => Named (a ::: b) where
   name (a ::: b) = name a
 
 newtype NameM a =
-  NameM { unNameM :: State Int a }
+  NameM { unNameM :: State Int64 a }
     deriving (Functor, Applicative, Monad)
+
+runNameM :: [Name] -> NameM a -> a
+runNameM xs m =
+  evalState (unNameM m) (maximum (0:[ succ n | Unique n _ <- xs ]))
 
 newName :: Named a => a -> NameM Name
 newName x = NameM $ do
   idx <- get
-  let idx'= idx+1
+  let idx' = idx+1
   when (idx' < 0) $ error "Name.newName: too many names"
   put $! idx'
-  return $! Name idx' (baseName x)
-
-data Closed a =
-  Closed {
-    maxIndex :: {-# UNPACK #-} !Int,
-    open :: !a } deriving Typeable
-
-unsafeClose = Closed
-
-instance Functor Closed where
-  fmap f (Closed m x) = Closed m (f x)
-
-closed0 :: Closed ()
-nameO, nameI :: Name
-
-closed0 = close_ stdNames (return ())
-[nameO, nameI] = open stdNames
-
-stdNames :: Closed [Name]
-stdNames = close (Closed 0 ["$o", "$i"]) (mapM newName)
-
-close :: Closed a -> (a -> NameM b) -> Closed b
-close Closed{ maxIndex = maxIndex, open = open } f =
-  let (open', maxIndex') = runState (unNameM (f open)) maxIndex
-  in Closed{ maxIndex = maxIndex', open = open' }
-
-close_ :: Closed a -> NameM b -> Closed b
-close_ x m = close x (const m)
-
-closedIO :: Closed (IO a) -> IO (Closed a)
-closedIO Closed { maxIndex = maxIndex, open = open } = do
-  open' <- open
-  return Closed { maxIndex = maxIndex, open = open' }
-
-supply :: (Closed () -> Closed a) -> NameM a
-supply f = NameM $ do
-  idx <- get
-  let res = f (Closed idx ())
-  put (maxIndex res)
-  return (open res)
+  return $! Unique idx' (base x)
 
 uniquify :: [Name] -> (Name -> String)
 uniquify xs = f
@@ -131,7 +86,7 @@ uniquify xs = f
     f x = combine (base x) b
       where
         b = Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") x
-            (Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") (baseName x) baseMap)
+            (Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") (base x) baseMap)
     combine s 0 = s
     combine s n = disambiguate (s ++ show n)
     disambiguate s

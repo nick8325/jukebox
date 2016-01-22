@@ -33,7 +33,7 @@ data DomainSize = Finite Int | Infinite deriving (Eq, Ord, Show, Typeable)
 data Type =
     O
   | Type {
-      tname :: {-# UNPACK #-} !Name,
+      tname :: !Name,
       -- type is monotone when domain size is >= tmonotone
       tmonotone :: DomainSize,
       -- if there is a model of size >= tsize then there is a model of size tsize
@@ -53,7 +53,7 @@ instance Ord Type where
   compare = comparing typeMaybeName
 
 instance Named Type where
-  name O = nameO
+  name O = name "$o"
   name Type{tname = t} = t
 
 -- Typeclass of "things that have a type"
@@ -265,19 +265,17 @@ simplify (Exists (Bind vs t)) = exists vs (simplify t)
 ----------------------------------------------------------------------
 -- Clauses
 
-type CNF = Closed Obligs
+data CNF =
+  CNF {
+    axioms :: [Input Clause],
+    conjectures :: [[Input Clause]],
+    satisfiable :: String,
+    unsatisfiable :: String }
 
-data Obligs = Obligs {
-  axioms :: [Input Clause],
-  conjectures :: [[Input Clause]],
-  satisfiable :: String,
-  unsatisfiable :: String
-  }
-
-toObligs :: [Input Clause] -> [[Input Clause]] -> Obligs
-toObligs axioms [] = Obligs axioms [[]] "Satisfiable" "Unsatisfiable"
-toObligs axioms [conjecture] = Obligs axioms [conjecture] "CounterSatisfiable" "Theorem"
-toObligs axioms conjectures = Obligs axioms conjectures "GaveUp" "Theorem"
+toCNF :: [Input Clause] -> [[Input Clause]] -> CNF
+toCNF axioms [] = CNF axioms [[]] "Satisfiable" "Unsatisfiable"
+toCNF axioms [conjecture] = CNF axioms [conjecture] "CounterSatisfiable" "Theorem"
+toCNF axioms conjectures = CNF axioms conjectures "GaveUp" "Theorem"
 
 newtype Clause = Clause (Bind [Literal])
 
@@ -312,7 +310,7 @@ data Input a = Input
     kind :: Kind,
     what :: a }
 
-type Problem a = Closed [Input a]
+type Problem a = [Input a]
 
 instance Functor Input where
   fmap f x = x { what = f (what x) }
@@ -330,7 +328,7 @@ data TypeOf a where
   Bind_ :: (Symbolic a, Symbolic (Bind a)) => TypeOf (Bind a)
   List :: (Symbolic a, Symbolic [a]) => TypeOf [a]
   Input_ :: (Symbolic a, Symbolic (Input a)) => TypeOf (Input a)
-  Obligs_ :: TypeOf Obligs
+  CNF_ :: TypeOf CNF
 
 class Symbolic a where
   typeOf :: a -> TypeOf a
@@ -343,7 +341,7 @@ instance Symbolic a => Symbolic (Signed a) where typeOf _ = Signed
 instance Symbolic a => Symbolic (Bind a) where typeOf _ = Bind_
 instance Symbolic a => Symbolic [a] where typeOf _ = List
 instance Symbolic a => Symbolic (Input a) where typeOf _ = Input_
-instance Symbolic Obligs where typeOf _ = Obligs_
+instance Symbolic CNF where typeOf _ = CNF_
 
 -- Generic representations of values.
 data Rep a where
@@ -365,7 +363,7 @@ rep x =
     Bind_ -> rep' x
     List -> rep' x
     Input_ -> rep' x
-    Obligs_ -> rep' x
+    CNF_ -> rep' x
 
 -- Implementation of rep for all types
 class Unpack a where
@@ -406,9 +404,9 @@ instance Symbolic a => Unpack [a] where
 instance Symbolic a => Unpack (Input a) where
   rep' (Input tag kind what) = Unary (Input tag kind) what
 
-instance Unpack Obligs where
-  rep' (Obligs ax conj s1 s2) =
-    Binary (\ax' conj' -> Obligs ax' conj' s1 s2) ax conj
+instance Unpack CNF where
+  rep' (CNF ax conj s1 s2) =
+    Binary (\ax' conj' -> CNF ax' conj' s1 s2) ax conj
 
 -- Little generic strategies
 
@@ -511,6 +509,9 @@ names = usort . termsAndBinders term bind where
 
   bind :: Symbolic a => Bind a -> [Name]
   bind (Bind vs _) = map name (Set.toList vs)
+
+run :: Symbolic a => a -> (a -> NameM b) -> b
+run x f = runNameM (names x) (f x)
 
 types :: Symbolic a => a -> [Type]
 types = usort . termsAndBinders term bind where

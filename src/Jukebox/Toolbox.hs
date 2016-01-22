@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Jukebox.Toolbox where
 
 import Jukebox.Options
@@ -6,7 +7,7 @@ import Jukebox.Name
 import Jukebox.TPTP.Print
 import Control.Monad
 import Control.Applicative
-import Jukebox.Clausify
+import Jukebox.Clausify hiding (run)
 import Jukebox.TPTP.ParseProblem
 import Jukebox.Monotonox.Monotonicity hiding (guards)
 import Jukebox.Monotonox.ToFOF
@@ -16,7 +17,7 @@ import Jukebox.TPTP.FindFile
 import Text.PrettyPrint.HughesPJ
 import Jukebox.GuessModel
 import Jukebox.InferTypes
-import Jukebox.TPTP.Parsec hiding (Error)
+import Jukebox.TPTP.Parsec hiding (Error, run)
 import qualified Jukebox.TPTP.Parsec as Parser
 import Jukebox.TPTP.ClauseParser
 import Jukebox.TPTP.Lexer hiding (Error, name, Normal)
@@ -78,8 +79,8 @@ withString kind f x = do
         error $ "At line " ++ show l ++ ", column " ++ show c ++ ": " ++ err
   case run_ (section (const True) <* eof)
             (UserState initialState (scan x)) of
-    Ok (UserState (MkState p _ _ _ _ n) (At _ (Cons Eof _))) Nothing -> do
-      let prob = close_ n (return (reverse p))
+    Ok (UserState (MkState p _ _ _ n) (At _ (Cons Eof _))) Nothing -> do
+      let prob = reverse p
       res <- f prob
       return (render (prettyProblem kind Normal res))
     Ok s@(UserState _ (At _ (Cons Eof _))) (Just _) ->
@@ -111,8 +112,8 @@ oneConjectureBox :: OptionParser (CNF -> IO (Problem Clause))
 oneConjectureBox = pure oneConjecture
 
 oneConjecture :: CNF -> IO (Problem Clause)
-oneConjecture cnf = closedIO (close cnf f)
-  where f (Obligs cs [cs'] _ _) = return (return (cs ++ cs'))
+oneConjecture cnf = run cnf f
+  where f (CNF cs [cs'] _ _) = return (return (cs ++ cs'))
         f _ = return $ do
           hPutStrLn stderr "Error: more than one conjecture found in input problem"
           exitWith (ExitFailure 1)
@@ -121,7 +122,7 @@ toFofIO :: GlobalFlags -> (Problem Form -> IO CNF) -> Scheme -> Problem Form -> 
 toFofIO globals clausify scheme f = do
   cs <- clausify f >>= oneConjecture
   unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
-  m <- monotone (map what (open cs))
+  m <- monotone (map what cs)
   let isMonotone ty =
         case Map.lookup ty m of
           Just Nothing -> False
@@ -147,15 +148,15 @@ monotonicityBox = monotonicity <$> globalFlags
 monotonicity :: GlobalFlags -> Problem Clause -> IO String
 monotonicity globals cs = do
   unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
-  m <- monotone (map what (open cs))
-  let info (ty, Nothing) = [baseName ty ++ ": not monotone"]
+  m <- monotone (map what cs)
+  let info (ty, Nothing) = [base ty ++ ": not monotone"]
       info (ty, Just m) =
         [prettyShow ty ++ ": monotone"] ++
         concat
         [ case ext of
              CopyExtend -> []
-             TrueExtend -> ["  " ++ baseName p ++ " true-extended"]
-             FalseExtend -> ["  " ++ baseName p ++ " false-extended"]
+             TrueExtend -> ["  " ++ base p ++ " true-extended"]
+             FalseExtend -> ["  " ++ base p ++ " false-extended"]
         | (p, ext) <- Map.toList m ]
 
   return (unlines (concat (map info (Map.toList m))))
@@ -170,15 +171,15 @@ prettyPrintBox = prettyFormIO <$> globalFlags <*> writeFileBox
 
 prettyFormIO :: (Symbolic a, Pretty a) => GlobalFlags -> (String -> IO ()) -> Problem a -> IO ()
 prettyFormIO globals write prob
-  | isFof (open prob) = prettyPrintIO globals "fof" write prob
+  | isFof prob = prettyPrintIO globals "fof" write prob
   | otherwise = prettyPrintIO globals "tff" write prob
 
 prettyClauseBox :: OptionParser (Problem Clause -> IO ())
 prettyClauseBox = f <$> globalFlags <*> writeFileBox
   where
     f globals write cs
-      | isFof (open cs) = prettyPrintIO globals "cnf" write cs
-      | otherwise = prettyPrintIO globals "tff" write (fmap (map (fmap toForm)) cs)
+      | isFof cs = prettyPrintIO globals "cnf" write cs
+      | otherwise = prettyPrintIO globals "tff" write (map (fmap toForm) cs)
 
 prettyPrintIO :: (Symbolic a, Pretty a) => GlobalFlags -> String -> (String -> IO ()) -> Problem a -> IO ()
 prettyPrintIO globals kind write prob = do
@@ -212,18 +213,14 @@ guessModelBox = guessModelIO <$> expansive <*> universe
 guessModelIO :: [String] -> Universe -> Problem Form -> IO (Problem Form)
 guessModelIO expansive univ prob = return (guessModel expansive univ prob)
 
-allObligsBox :: OptionParser ((Problem Clause -> IO Answer) -> Closed Obligs -> IO ())
+allObligsBox :: OptionParser ((Problem Clause -> IO Answer) -> CNF -> IO ())
 allObligsBox = pure allObligsIO
 
-allObligsIO solve obligs = loop 1 conjectures
-  where Obligs { axioms = axioms, conjectures = conjectures,
-                 satisfiable = satisfiable, unsatisfiable = unsatisfiable } =
-          open obligs
-
-        loop _ [] = result unsatisfiable
+allObligsIO solve CNF{..} = loop 1 conjectures
+  where loop _ [] = result unsatisfiable
         loop i (c:cs) = do
           when multi $ putStrLn $ "Part " ++ part i
-          answer <- solve (close_ obligs (return (axioms ++ c)))
+          answer <- solve (axioms ++ c)
           when multi $ putStrLn $ "+++ PARTIAL (" ++ part i ++ "): " ++ show answer
           case answer of
             Satisfiable -> result satisfiable
@@ -236,12 +233,11 @@ allObligsIO solve obligs = loop 1 conjectures
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
 inferBox = (\globals prob -> do
   unless (quiet globals) $ putStrLn "Inferring types..."
-  let prob' = close prob inferTypes
-  return (fmap fst prob', snd (open prob'))) <$> globalFlags
+  return (run prob inferTypes)) <$> globalFlags
 
 printInferredBox :: OptionParser ((Problem Clause, Type -> Type) -> IO (Problem Clause))
 printInferredBox = pure $ \(prob, rep) -> do
-  forM_ (types (open prob)) $ \ty ->
+  forM_ (types prob) $ \ty ->
     putStrLn $ show ty ++ " => " ++ show (rep ty)
   return prob
 

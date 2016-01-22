@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeOperators, BangPatterns #-}
 module Jukebox.Clausify where
 
-import Jukebox.Form
+import Jukebox.Form hiding (run)
 import qualified Jukebox.Form as Form
 import Jukebox.Name
 import Data.List( maximumBy, sortBy, partition )
@@ -27,10 +27,10 @@ clausifyFlags =
 -- clausify
 
 clausify :: ClausifyFlags -> Problem Form -> CNF
-clausify flags inps = close inps (run . clausifyInputs [] [])
+clausify flags inps = Form.run inps (run . clausifyInputs [] [])
  where
   clausifyInputs theory obligs [] =
-    do return (toObligs (reverse theory) (reverse obligs))
+    do return (toCNF (reverse theory) (reverse obligs))
   
   clausifyInputs theory obligs (inp:inps) | kind inp == Axiom =
     do cs <- clausForm (tag inp) (what inp)
@@ -405,7 +405,7 @@ skolemName prefix v = do
   i <- get
   put (i+1)
   s <- getName
-  lift . lift . newName $ prefix ++ show i ++ concat [ "_" ++ t | t <- [s, baseName v], not (null t) ]
+  lift . lift . newName $ prefix ++ show i ++ concat [ "_" ++ t | t <- [s, base v], not (null t) ]
 
 nextSk :: M Int
 nextSk = do

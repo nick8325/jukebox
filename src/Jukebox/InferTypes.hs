@@ -61,9 +61,8 @@ solve funMap varMap prob = (prob', rep)
 
         var (x ::: _) = x ::: type_ (Map.findWithDefault __ x varMap)
 
-        type_ (name, _) 
-          | name == nameO = O
-          | otherwise = Type (rep name) Infinite Infinite
+        type_ (_, O) = O
+        type_ (name, _) = Type (rep name) Infinite Infinite
 
         rep = evalUF initial $ do
           generate funMap varMap prob

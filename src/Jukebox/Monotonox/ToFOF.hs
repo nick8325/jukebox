@@ -3,7 +3,8 @@ module Jukebox.Monotonox.ToFOF where
 
 import Jukebox.Clausify(split, removeEquiv, run, withName)
 import Jukebox.Name
-import Jukebox.Form
+import Jukebox.Form hiding (run)
+import qualified Jukebox.Form as Form
 import Jukebox.Options
 import Control.Monad hiding (guard)
 import Data.Monoid
@@ -45,7 +46,7 @@ guard scheme mono (Input t k f) = Input t k (aux (pos k) f)
         pos Conjecture = False
 
 translate, translate1 :: Scheme -> (Type -> Bool) -> Problem Form -> Problem Form
-translate1 scheme mono f = close f $ \inps -> do
+translate1 scheme mono f = Form.run f $ \inps -> do
   let tys = types inps
       funcs = functions inps
       -- Hardly any use adding guards if there's only one type.
@@ -69,15 +70,15 @@ translate1 scheme mono f = close f $ \inps -> do
 
 translate scheme mono f =
   let f' =
-        close f $ \inps -> do
+        Form.run f $ \inps -> do
           forM inps $ \(Input tag kind f) -> do
             let prepare f = fmap (foldr (/\) true) (run (withName tag (removeEquiv (simplify f))))
             fmap (Input tag kind) $
               case kind of
                 Axiom -> prepare f
                 Conjecture -> fmap notInwards (prepare (nt f))
-      typeI = Type nameI (Finite 0) Infinite
-  in close (translate1 scheme mono f') (return . mapType (const typeI))
+      typeI = Type (name "$i") (Finite 0) Infinite
+  in Form.run (translate1 scheme mono f') (return . mapType (const typeI))
 
 -- Typing functions.
 
@@ -91,7 +92,7 @@ tagsFlags =
 tags :: Bool -> Scheme
 tags moreAxioms = Scheme
   { makeFunction = \ty ->
-      newFunction ("to_" ++ baseName ty) [ty] ty,
+      newFunction ("to_" ++ base ty) [ty] ty,
     scheme1 = tags1 moreAxioms }
 
 tags1 :: Bool -> (Type -> Bool) -> (Type -> Function) -> Scheme1
@@ -139,7 +140,7 @@ tagsExists mono ty f
 guards :: Scheme
 guards = Scheme
   { makeFunction = \ty ->
-      newFunction ("is_" ++ baseName ty) [ty] O,
+      newFunction ("is_" ++ base ty) [ty] O,
     scheme1 = guards1 }
 
 guards1 :: (Type -> Bool) -> (Type -> Function) -> Scheme1

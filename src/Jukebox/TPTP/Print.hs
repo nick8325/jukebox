@@ -27,13 +27,13 @@ pPrintSymbol full prec lev env (x ::: t)
   | otherwise = pPrint prec lev env x
 
 pPrintBinding prec lev env (x ::: t) =
-  pPrintSymbol (name t /= nameI) prec lev env (x ::: typ t)
+  pPrintSymbol True prec lev env (x ::: typ t)
 
 pPrintUse prec lev env (x ::: t) =
   pPrintSymbol False prec lev env (x ::: typ t)
 
 instance Pretty Type where
-  pPrint prec lev env O = pPrint prec lev env nameO
+  pPrint prec lev env O = text "$o"
   pPrint prec lev env t
     | lev >= Chatty = 
       hcat . punctuate (text "/") $
@@ -86,17 +86,16 @@ instance Pretty [Type] where
                   (map (pPrint 0 lev env) args)))
 
 prettyProblem :: (Symbolic a, Pretty a) => String -> Level -> Problem a -> Doc
-prettyProblem family l prob = vcat (map typeDecl (usort (types prob')) ++
-                                    map funcDecl (usort (functions prob')) ++
-                                    map (prettyInput family l env) prob')
-    where typeDecl ty | name ty `elem` open stdNames || isFof prob' = empty
+prettyProblem family l prob = vcat (map typeDecl (usort (types prob)) ++
+                                    map funcDecl (usort (functions prob)) ++
+                                    map (prettyInput family l env) prob)
+    where typeDecl ty -- XXX | name ty `elem` open stdNames || isFof prob = empty
                       | otherwise = typeClause ty (text "$tType")
-          funcDecl (f ::: ty) | isFof prob' = empty
+          funcDecl (f ::: ty) | isFof prob = empty
                               | otherwise = typeClause f (pPrint 0 l (escapeAtom . env) ty)
           typeClause name ty = prettyClause "tff" "type" "type"
                                       (pPrint 0 l (escapeAtom . env) name <+> colon <+> ty)
-          env = uniquify (usort (names prob'))
-          prob' = open prob
+          env = uniquify (usort (names prob))
 
 prettyClause :: String -> String -> String -> Doc -> Doc
 prettyClause family name kind rest =
@@ -134,8 +133,8 @@ instance Show Atomic where
 
 instance Pretty Clause where
   pPrint p l env c@(Clause (Bind vs ts))
-    | and [ name (typ v) == nameI | v <- Set.toList vs ] =
-       prettyConnective l p env "$false" "|" (map Literal ts)
+    -- xxx | and [ name (typ v) == nameI | v <- Set.toList vs ] =
+    --   prettyConnective l p env "$false" "|" (map Literal ts)
     | otherwise =
        pPrint p l env (toForm c)
 

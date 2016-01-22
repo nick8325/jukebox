@@ -8,7 +8,7 @@ import Jukebox.TPTP.Parsec
 import Jukebox.TPTP.Print
 import qualified Jukebox.TPTP.Lexer as L
 import Control.Monad.Error
-import Jukebox.Form hiding (Pos)
+import Jukebox.Form hiding (Pos, run)
 import Control.Monad.Identity
 import Control.Exception
 import Prelude hiding (catch)
@@ -77,4 +77,4 @@ parseProblemWith findFile name = runErrorT (fmap finalise (parseFile name Nothin
         merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
         finalise :: ParseState -> Problem Form
-        finalise (MkState p _ _ _ _ n) = close_ n (return (reverse p))
+        finalise (MkState p _ _ _ n) = reverse p

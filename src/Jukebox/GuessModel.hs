@@ -4,7 +4,7 @@ module Jukebox.GuessModel where
 import Control.Monad
 import Jukebox.Name
 import Jukebox.Form
-import Jukebox.Clausify hiding (cnf)
+import Jukebox.Clausify hiding (cnf, run)
 import Jukebox.TPTP.Print
 import Jukebox.TPTP.ParseSnippet
 import Jukebox.Utils
@@ -49,7 +49,7 @@ trees i = do
   return ([nil, bin], prelude)
 
 guessModel :: [String] -> Universe -> Problem Form -> Problem Form
-guessModel expansive univ prob = close prob $ \forms -> do
+guessModel expansive univ prob = run prob $ \forms -> do
   let i = ind forms
   answerType <- newType "answer"
   answer <- newFunction "$answer" [answerType] O
@@ -64,7 +64,7 @@ ind :: Symbolic a => a -> Type
 ind x =
   case types' x of
     [ty] -> ty
-    [] -> Type nameI Infinite Infinite
+    [] -> Type (name "$i") Infinite Infinite
     _ -> error "GuessModel: can't deal with many-typed problems"
 
 function :: [Function] -> Function -> Bool -> Function -> NameM [Form]

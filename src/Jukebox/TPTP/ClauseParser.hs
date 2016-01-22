@@ -13,6 +13,7 @@ import Data.List
 import Jukebox.TPTP.Print
 import Jukebox.Name hiding (name)
 import qualified Data.Set as Set
+import Data.Int
 
 import Jukebox.TPTP.Lexer hiding
   (Pos, Error, Include, Var, Type, Not, ForAll,
@@ -20,18 +21,17 @@ import Jukebox.TPTP.Lexer hiding
    keyword, defined, kind)
 import qualified Jukebox.TPTP.Lexer as L
 import qualified Jukebox.Form as Form
-import Jukebox.Form hiding (tag, kind, Axiom, Conjecture, Question, newFunction, TypeOf(..))
+import Jukebox.Form hiding (tag, kind, Axiom, Conjecture, Question, newFunction, TypeOf(..), run)
 import qualified Jukebox.Name as Name
 
 -- The parser monad
 
 data ParseState =
-  MkState ![Input Form]                           -- problem being constructed, inputs are in reverse order
-          !(Map String Type)                      -- types
-          !(Map String (Name ::: FunType))        -- functions
-          !(Map String (Name ::: Type))           -- free variables in CNF clause
-          Type                                    -- the $i type
-          !(Closed ())                            -- name generation
+  MkState ![Input Form]                    -- problem being constructed, inputs are in reverse order
+          !(Map String Type)               -- types
+          !(Map String (Name ::: FunType)) -- functions
+          !(Map String (Name ::: Type))    -- free variables in CNF clause
+          !Int64                           -- name generation
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
 
@@ -40,8 +40,7 @@ data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = MkState [] (Map.insert "$i" typeI Map.empty) Map.empty Map.empty typeI closed0
-  where typeI = Type nameI Infinite Infinite
+initialState = MkState [] (Map.insert "$i" individual Map.empty) Map.empty Map.empty 0
 
 instance Stream TokenStream Token where
   primToken (At _ (Cons Eof _)) ok err fatal = err
@@ -56,7 +55,7 @@ testParser p s = snd (run (const []) p (UserState initialState (scan s)))
 
 getProblem :: Parser [Input Form]
 getProblem = do
-  MkState p _ _ _ _ _ <- getState
+  MkState p _ _ _ _ <- getState
   return (reverse p)
 
 -- Primitive parsers.
@@ -172,22 +171,21 @@ include = do
 
 newFormula :: Input Form -> Parser ()
 newFormula input = do
-  MkState p t f v i n <- getState
-  putState (MkState (input:p) t f Map.empty i n)
+  MkState p t f v n <- getState
+  putState (MkState (input:p) t f Map.empty n)
   
-newNameFrom :: Named a => Closed () -> a -> (Closed (), Name)
-newNameFrom n name = (close_ n' (return ()), open n')
-  where n' = close_ n (newName name)
+newNameFrom :: Named a => Int64 -> a -> (Int64, Name)
+newNameFrom n name = (n+1, Unique n (base name))
 
 {-# INLINE findType #-}
 findType :: String -> Parser Type
 findType name = do
-  MkState p t f v i n <- getState
+  MkState p t f v n <- getState
   case Map.lookup name t of
     Nothing -> do
       let (n', name') = newNameFrom n name
           ty = Type { tname = name', tmonotone = Infinite, tsize = Infinite }
-      putState (MkState p (Map.insert name ty t) f v i n')
+      putState (MkState p (Map.insert name ty t) f v n')
       return ty
     Just x -> return x
 
@@ -203,8 +201,7 @@ newFunction name ty' = do
 {-# INLINE applyFunction #-}
 applyFunction :: String -> [Term] -> Type -> Parser Term
 applyFunction name args' res = do
-  i <- individual
-  f@(_ ::: ty) <- lookupFunction (FunType (replicate (length args') i) res) name
+  f@(_ ::: ty) <- lookupFunction (FunType (replicate (length args') individual) res) name
   unless (map typ args' == args ty) $ typeError f args'
   return (f :@: args')
 
@@ -226,21 +223,19 @@ typeError f@(x ::: ty) args' = do
 {-# INLINE lookupFunction #-}
 lookupFunction :: FunType -> String -> Parser (Name ::: FunType)
 lookupFunction def name = do
-  MkState p t f v i n <- getState
+  MkState p t f v n <- getState
   case Map.lookup name f of
     Nothing -> do
       let (n', name') = newNameFrom n name
           decl = name' ::: def
-      putState (MkState p t (Map.insert name decl f) v i n')
+      putState (MkState p t (Map.insert name decl f) v n')
       return decl
     Just f -> return f
 
 -- The type $i (anything whose type is not specified gets this type)
 {-# INLINE individual #-}
-individual :: Parser Type
-individual = do
-  MkState _ _ _ _ i _ <- getState
-  return i
+individual :: Type
+individual = Type (Fixed "$i") Infinite Infinite
 
 -- Parsing formulae.
 
@@ -313,7 +308,7 @@ instance TermLike Form where
 
 instance TermLike Term where
   {-# INLINE fromThing #-}
-  fromThing t@(Apply x xs) = individual >>= applyFunction x xs
+  fromThing t@(Apply x xs) = applyFunction x xs individual
   fromThing (Term t) = return t
   fromThing (Formula _) = mzero
   parser = term
@@ -321,13 +316,13 @@ instance TermLike Term where
     x <- variable
     case ?ctx of
       Nothing -> do
-        MkState p t f vs i n <- getState
+        MkState p t f vs n <- getState
         case Map.lookup x vs of
           Just v -> return (Var v)
           Nothing -> do
             let (n', name) = newNameFrom n x
-                v = name ::: i
-            putState (MkState p t f (Map.insert x v vs) i n')
+                v = name ::: individual
+            putState (MkState p t f (Map.insert x v vs) n')
             return (Var v)
       Just ctx ->
         case Map.lookup x ctx of
@@ -429,17 +424,17 @@ varDecl typed = do
   ty <- do { punct Colon;
              when (not typed) $
                fatalError "Used a typed quantification in an untyped formula";
-             type_ } <|> individual
-  MkState p t f v i n <- getState
+             type_ } <|> return individual
+  MkState p t f v n <- getState
   let (n', name) = newNameFrom n x
-  putState (MkState p t f v i n')
+  putState (MkState p t f v n')
   return (name ::: ty)
 
 -- Parse a type
 type_ :: Parser Type
 type_ =
   do { name <- atom; findType name } <|>
-  do { defined DI; individual }
+  do { defined DI; return individual }
 
 -- A little data type to help with parsing types.
 data Type_ = TType | Fun [Type] Type | Prod [Type]

@@ -7,7 +7,7 @@ import Jukebox.Options
 import Control.Applicative hiding (Const)
 import Control.Monad
 import Jukebox.Utils
-import Jukebox.TPTP.Parsec
+import Jukebox.TPTP.Parsec hiding (run)
 import Jukebox.TPTP.ClauseParser hiding (newFunction, Term)
 import Jukebox.TPTP.Print
 import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, name, Var)
@@ -48,20 +48,20 @@ mangleAnswer t =
   case typeOf t of
     Term -> term t
     _ -> recursivelyM mangleAnswer t
-  where term (f :@: [t]) | stringBaseName f == "$answer" = do
+  where term (f :@: [t]) | base f == "$answer" = do
           wrap <- newFunction "answer" [typ t] (head (funArgs f))
           return (f :@: [wrap :@: [t]])
         term t = recursivelyM mangleAnswer t
 
 runE :: (Pretty a, Symbolic a) => EFlags -> Problem a -> IO (Either Answer [Term])
 runE flags prob
-  | not (isFof (open prob)) = error "runE: E doesn't support many-typed problems"
+  | not (isFof prob) = error "runE: E doesn't support many-typed problems"
   | otherwise = do
     (code, str) <- popen (eprover flags) eflags
-                   (render (prettyProblem "fof" Normal (close prob mangleAnswer)))
+                   (render (prettyProblem "fof" Normal (run prob mangleAnswer)))
     --case code of
     --  ExitFailure code -> error $ "runE: E failed with exit code " ++ show code ++ ":\n" ++ str
-    return (extractAnswer (open prob) str)
+    return (extractAnswer prob str)
   where eflags = [ "--soft-cpu-limit=" ++ show n | Just n <- [timeout flags] ] ++
                  ["--memory-limit=" ++ show n | Just n <- [memory flags] ] ++
                  ["--tstp-in", "--tstp-out", "-tAuto", "-xAuto"] ++

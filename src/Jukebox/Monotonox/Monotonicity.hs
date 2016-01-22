@@ -16,7 +16,7 @@ data Var = FalseExtended Function | TrueExtended Function deriving (Eq, Ord)
 
 annotateMonotonicity :: Problem Clause -> IO (Problem Clause)
 annotateMonotonicity prob = do
-  m <- monotone (map what (open prob))
+  m <- monotone (map what prob)
   let f O = O
       f ty =
         case Map.lookup ty m of

@@ -44,7 +44,7 @@ spassFlags =
 
 runSPASS :: (Pretty a, Symbolic a) => SPASSFlags -> Problem a -> IO Answer
 runSPASS flags prob
-  | not (isFof (open prob)) = error "runSPASS: SPASS doesn't support many-typed problems"
+  | not (isFof prob) = error "runSPASS: SPASS doesn't support many-typed problems"
   | otherwise = do
     (code, str) <- popen (spass flags) spassFlags
                    (render (prettyProblem "cnf" Normal prob))
