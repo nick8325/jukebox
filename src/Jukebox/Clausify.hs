@@ -8,13 +8,11 @@ import Data.List( maximumBy, sortBy, partition )
 import Data.Ord
 import Control.Monad.Reader
 import Control.Monad.State.Strict
-import qualified Jukebox.NameMap as NameMap
-import Jukebox.NameMap(NameMap)
-import qualified Data.IntMap.Strict as Map
-import qualified Data.Set as Set
 import Jukebox.Utils
 import Jukebox.Options
 import Control.Applicative
+import qualified Data.Set as Set
+import Data.Set(Set)
 
 newtype ClausifyFlags = ClausifyFlags { splitting :: Bool } deriving Show
 
@@ -128,36 +126,36 @@ miniscope (Equiv f g) = liftM2 Equiv (miniscope f) (miniscope g)
 miniscope (ForAll (Bind xs f)) = miniscope f >>= forAll xs
 miniscope (Exists (Bind xs f)) = miniscope f >>= forAll xs . nt >>= return . nt
 
-forAll :: NameMap Variable -> Form -> M Form
-forAll xs a | Map.null xs = return a
+forAll :: Set Variable -> Form -> M Form
+forAll xs a | Set.null xs = return a
 forAll xs a =
   case positive a of
     And as ->
       fmap And (mapM (forAll xs) as)
     
     ForAll (Bind ys a)
-      | Map.null m -> return (ForAll (Bind ys a))
+      | Set.null m -> return (ForAll (Bind ys a))
       | otherwise -> fmap (forAll' ys) (forAll m a)
-      where m = xs Map.\\ ys
-            forAll' vs (ForAll (Bind vs' t)) = ForAll (Bind (vs `Map.union` vs') t)
+      where m = xs Set.\\ ys
+            forAll' vs (ForAll (Bind vs' t)) = ForAll (Bind (vs `Set.union` vs') t)
             forAll' vs t = ForAll (Bind vs t)
 
     Or as -> forAllOr xs [ (a, free a) | a <- as ]
 
     _ -> return (ForAll (Bind xs a))
 
-forAllOr :: NameMap Variable -> [(Form, NameMap Variable)] -> M Form
+forAllOr :: Set Variable -> [(Form, Set Variable)] -> M Form
 forAllOr xs avss = do { y <- yes; forAll xs' (y \/ no) }
   where
-    v         = head (NameMap.toList xs)
-    xs'       = NameMap.delete v xs
-    (bs1,bs2) = partition ((v `NameMap.member`) . snd) avss
+    v         = head (Set.toList xs)
+    xs'       = Set.delete v xs
+    (bs1,bs2) = partition ((v `Set.member`) . snd) avss
     no        = orl [ b | (b,_) <- bs2 ]
     body      = orl [ b | (b,_) <- bs1 ]
     yes       = case bs1 of
                   []      -> return (orl [])
-                  [(b,_)] -> forAll (NameMap.singleton v) b
-                  _       -> return (ForAll (Bind (NameMap.singleton v) body))
+                  [(b,_)] -> forAll (Set.singleton v) b
+                  _       -> return (ForAll (Bind (Set.singleton v) body))
     orl       = foldr (\/) false
 
 ----------------------------------------------------------------------
@@ -263,7 +261,7 @@ removeExists (ForAll (Bind xs p)) =
     
 removeExists t@(Exists (Bind xs p)) =
   -- skolemterms have only variables as arguments, arities are large(r)
-  do ss <- sequence [ fmap (x |=>) (skolem x (free t)) | x <- NameMap.toList xs ]
+  do ss <- sequence [ fmap (x |=>) (skolem x (free t)) | x <- Set.toList xs ]
      removeExists (subst (foldr (|+|) ids ss) p)
   {-
   -- skolemterms can have other skolemterms as arguments, arities are small(er)
@@ -421,21 +419,21 @@ withName s m = lift (runReaderT m s)
 getName :: M Tag
 getName = ask
 
-skolem :: Variable -> NameMap Variable -> M Term
+skolem :: Variable -> Set Variable -> M Term
 skolem (v ::: t) vs =
   do n <- skolemName "sK" v
      let f = n ::: FunType (map typ args) t
      return (f :@: map Var args)
  where
-  args = NameMap.toList vs
+  args = Set.toList vs
 
-literal :: String -> NameMap Variable -> M Atomic
+literal :: String -> Set Variable -> M Atomic
 literal w vs =
   do n <- skolemName "sP" w
      let p = n ::: FunType (map typ args) O
      return (Tru (p :@: map Var args))
  where
-  args = NameMap.toList vs
+  args = Set.toList vs
 
 ----------------------------------------------------------------------
 -- the end.

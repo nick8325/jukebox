@@ -28,6 +28,7 @@ Library
     binary, unordered-containers, process, containers
   Build-tools: alex
   Hs-source-dirs: src
+  include-dirs: src
   Exposed-modules:
     Jukebox.Clausify
     Jukebox.Form
@@ -37,7 +38,6 @@ Library
     Jukebox.Monotonox.Monotonicity
     Jukebox.Monotonox.ToFOF
     Jukebox.Name
-    Jukebox.NameMap
     Jukebox.Options
     Jukebox.Provers.E
     Jukebox.Provers.SPASS

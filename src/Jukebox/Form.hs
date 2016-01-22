@@ -6,9 +6,10 @@
 module Jukebox.Form where
 
 import Prelude hiding (sequence, mapM)
-import qualified Data.IntMap.Strict as Map
-import Jukebox.NameMap(NameMap)
-import qualified Jukebox.NameMap as NameMap
+import qualified Data.Set as Set
+import Data.Set(Set)
+import qualified Data.Map.Strict as Map
+import Data.Map(Map)
 import Data.Ord
 import Jukebox.Name
 import Control.Monad.State.Strict hiding (sequence, mapM)
@@ -175,7 +176,7 @@ connective Xor t u = nt (t `Equiv` u)
 connective Nor t u = nt (t \/ u)
 connective Nand t u = nt (t /\ u)
 
-data Bind a = Bind (NameMap Variable) a
+data Bind a = Bind (Set Variable) a
 
 true, false :: Form
 true = And []
@@ -212,7 +213,7 @@ a     \/ Or bs = Or (a:bs)
 a     \/ b     = Or [a, b]
 
 closeForm :: Form -> Form
-closeForm f | Map.null vars = f
+closeForm f | Set.null vars = f
             | otherwise = ForAll (Bind vars f)
   where vars = free f
 
@@ -253,12 +254,12 @@ simplify (Equiv t u) = equiv (simplify t) (simplify u)
                   | isFalse u = nt t
                   | otherwise = Equiv t u
 simplify (ForAll (Bind vs t)) = forAll vs (simplify t)
-  where forAll vs t | Map.null vs = t
-        forAll vs (ForAll (Bind vs' t)) = ForAll (Bind (Map.union vs vs') t)
+  where forAll vs t | Set.null vs = t
+        forAll vs (ForAll (Bind vs' t)) = ForAll (Bind (Set.union vs vs') t)
         forAll vs t = ForAll (Bind vs t)
 simplify (Exists (Bind vs t)) = exists vs (simplify t)
-  where exists vs t | Map.null vs = t
-        exists vs (Exists (Bind vs' t)) = Exists (Bind (Map.union vs vs') t)
+  where exists vs t | Set.null vs = t
+        exists vs (Exists (Bind vs' t)) = Exists (Bind (Set.union vs vs') t)
         exists vs t = Exists (Bind vs t)
 
 ----------------------------------------------------------------------
@@ -438,13 +439,13 @@ collect h t =
 ----------------------------------------------------------------------
 -- Substitutions
 
-type Subst = NameMap (Name ::: Term)
+type Subst = Map Variable Term
 
 ids :: Subst
 ids = Map.empty
 
-(|=>) :: Named a => a -> Term -> Subst
-v |=> x = NameMap.singleton (name v ::: x)
+(|=>) :: Variable -> Term -> Subst
+v |=> x = Map.singleton v x
 
 (|+|) :: Subst -> Subst -> Subst
 (|+|) = Map.union
@@ -457,12 +458,12 @@ subst s t =
     _ -> generic t
   where
     term (Var x)
-      | Just u <- NameMap.lookup (name x) s = rhs u
+      | Just u <- Map.lookup x s = u
     term t = generic t
 
     bind :: Symbolic a => Bind a -> Bind a
     bind (Bind vs t) =
-      Bind vs (subst (checkBinder vs (s Map.\\ vs)) t)
+      Bind vs (subst (checkBinder vs (Map.filterWithKey (\x _ -> x `Set.member` vs) s)) t)
 
     generic :: Symbolic a => a -> a
     generic t = recursively (subst s) t
@@ -470,21 +471,21 @@ subst s t =
 ----------------------------------------------------------------------
 -- Functions operating on symbolic terms
 
-free :: Symbolic a => a -> NameMap Variable
+free :: Symbolic a => a -> Set Variable
 free t
   | Term <- typeOf t,
     Var x <- t        = var x
   | Bind_ <- typeOf t = bind t
   | otherwise         = collect free t
   where
-    var :: Variable -> NameMap Variable
-    var x = NameMap.singleton x
+    var :: Variable -> Set Variable
+    var x = Set.singleton x
 
-    bind :: Symbolic a => Bind a -> NameMap Variable
-    bind (Bind vs t) = free t Map.\\ vs
+    bind :: Symbolic a => Bind a -> Set Variable
+    bind (Bind vs t) = free t Set.\\ vs
 
 ground :: Symbolic a => a -> Bool
-ground = Map.null . free
+ground = Set.null . free
 
 bind :: Symbolic a => a -> Bind a
 bind x = Bind (free x) x
@@ -509,14 +510,14 @@ names = usort . termsAndBinders term bind where
   term t = return (name t) `mappend` return (name (typ t))
 
   bind :: Symbolic a => Bind a -> [Name]
-  bind (Bind vs _) = map name (NameMap.toList vs)
+  bind (Bind vs _) = map name (Set.toList vs)
 
 types :: Symbolic a => a -> [Type]
 types = usort . termsAndBinders term bind where
   term t = return (typ t)
 
   bind :: Symbolic a => Bind a -> [Type]
-  bind (Bind vs _) = map typ (NameMap.toList vs)
+  bind (Bind vs _) = map typ (Set.toList vs)
 
 types' :: Symbolic a => a -> [Type]
 types' = filter (/= O) . types
@@ -531,7 +532,7 @@ vars = usort . termsAndBinders term bind where
   term _ = mempty
 
   bind :: Symbolic a => Bind a -> [Variable]
-  bind (Bind vs _) = NameMap.toList vs
+  bind (Bind vs _) = Set.toList vs
 
 functions :: Symbolic a => a -> [Function]
 functions = usort . termsAndBinders term mempty where
@@ -542,36 +543,37 @@ isFof :: Symbolic a => a -> Bool
 isFof f = length (types' f) <= 1
 
 uniqueNames :: Symbolic a => a -> NameM a
-uniqueNames t = evalStateT (aux Map.empty t) (free t)
-  where aux :: Symbolic a => Subst -> a -> StateT (NameMap Variable) NameM a
+uniqueNames t = evalStateT (aux Map.empty t) (Map.fromList [(x, t) | x ::: t <- Set.toList (free t)])
+  where aux :: Symbolic a => Subst -> a -> StateT (Map Name Type) NameM a
         aux s t =
           case typeOf t of
             Term -> term s t
             Bind_ -> bind s t
             _ -> generic s t
 
-        term :: Subst -> Term -> StateT (NameMap Variable) NameM Term
+        term :: Subst -> Term -> StateT (Map Name Type) NameM Term
         term s t@(Var x) = do
-          case NameMap.lookup (name x) s of
+          case Map.lookup x s of
             Nothing -> return t
-            Just (_ ::: u) -> return u
+            Just u -> return u
         term s t = generic s t
 
-        bind :: Symbolic a => Subst -> Bind a -> StateT (NameMap Variable) NameM (Bind a)
+        bind :: Symbolic a => Subst -> Bind a -> StateT (Map Name Type) NameM (Bind a)
         bind s (Bind vs x) = do
           used <- get
-          let (stale, fresh) = partition (`NameMap.member` used) (NameMap.toList vs)
+          let (stale, fresh) = partition ((`Map.member` used) . lhs) (Set.toList vs)
+              tuple (x ::: y) = (x, y)
           stale' <- sequence [ lift (newSymbol x t) | x ::: t <- stale ]
-          put (used `Map.union` NameMap.fromList fresh `Map.union` NameMap.fromList stale')
+          put (used `Map.union` Map.fromList (map tuple (fresh ++ stale')))
           case stale of
             [] -> fmap (Bind vs) (aux s x)
             _ ->
               do
-                let s' = NameMap.fromList [name x ::: Var y | (x, y) <- stale `zip` stale'] `Map.union` s
-                    vs' = NameMap.fromList (stale' ++ fresh)
+                let s' = Map.fromList [(x, Var y) | (x, y) <- stale `zip` stale'] `Map.union` s
+                    vs' = Set.fromList (stale' ++ fresh)
                 fmap (Bind vs') (aux s' x)
 
-        generic :: Symbolic a => Subst -> a -> StateT (NameMap Variable) NameM a
+        generic :: Symbolic a => Subst -> a -> StateT (Map Name Type) NameM a
         generic s t = recursivelyM (aux s) t
 
 -- Force a value.
@@ -589,38 +591,38 @@ check :: Symbolic a => a -> a
 check x | not debugging = x
         | check' (free x) x = x
         | otherwise = error "Form.check: invariant broken"
-  where check' :: Symbolic a => NameMap Variable -> a -> Bool
+  where check' :: Symbolic a => Set Variable -> a -> Bool
         check' vars t =
           case typeOf t of
             Term -> term vars t
             Bind_ -> bind vars t
             _ -> generic vars t
 
-        term :: NameMap Variable -> Term -> Bool
-        term vars (Var x) = x `NameMap.member` vars
+        term :: Set Variable -> Term -> Bool
+        term vars (Var x) = x `Set.member` vars
         term vars t = generic vars t
 
-        bind :: Symbolic a => NameMap Variable -> Bind a -> Bool
+        bind :: Symbolic a => Set Variable -> Bind a -> Bool
         bind vars (Bind vs t) =
-          Map.null (vs `Map.intersection` vars) &&
-          check' (vs `Map.union` vars) t
+          Set.null (vs `Set.intersection` vars) &&
+          check' (vs `Set.union` vars) t
 
-        generic :: Symbolic a => NameMap Variable -> a -> Bool
+        generic :: Symbolic a => Set Variable -> a -> Bool
         generic vars = getAll . collect (All . generic vars)
 
 -- Check that a binder doesn't capture variables from a substitution.
-checkBinder :: NameMap Variable -> Subst -> Subst
+checkBinder :: Set Variable -> Subst -> Subst
 checkBinder vs s | not debugging = s
-                 | Map.null (free [ t | _ ::: t <- NameMap.toList s ] `Map.intersection` vs) = s
+                 | Set.null (free (Map.elems s) `Set.intersection` vs) = s
                  | otherwise = error "Form.checkBinder: capturing substitution"
 
 -- Reestablish sharing in a formula.
-type ShareState = (NameMap Type, NameMap Variable, NameMap Function)
+type ShareState = (Map Name Type, Map Name Variable, Map Name Function)
 
 share :: Symbolic a => a -> a
 share x = evalState (shareM x) initial
   where initial :: ShareState
-        initial = (NameMap.empty, NameMap.empty, NameMap.empty)
+        initial = (Map.empty, Map.empty, Map.empty)
 
         shareM :: Symbolic a => a -> State ShareState a
         shareM t =
@@ -631,7 +633,7 @@ share x = evalState (shareM x) initial
 
         bind :: Symbolic a => Bind a -> State ShareState (Bind a)
         bind (Bind vs x) =
-          liftM2 Bind (mapM var vs) (shareM x)
+          liftM2 Bind (fmap Set.fromList (mapM var (Set.toList vs))) (shareM x)
 
         term :: Term -> State ShareState Term
         term (Var x) = fmap Var (var x)
@@ -654,14 +656,14 @@ share x = evalState (shareM x) initial
         funAccessor = (\(x, y, z) -> z, \z (x, y, _) -> (x, y, z))
 
         memo :: Named a =>
-                (ShareState -> NameMap a,
-                 NameMap a -> ShareState -> ShareState) ->
+                (ShareState -> Map Name a,
+                 Map Name a -> ShareState -> ShareState) ->
                 a -> State ShareState a
         memo (get_, put_) x = do
           m <- gets get_
-          case NameMap.lookup (name x) m of
+          case Map.lookup (name x) m of
             Nothing -> do
-              modify (put_ (NameMap.insert x m))
+              modify (put_ (Map.insert (name x) x m))
               return x
             Just y ->
               return y
@@ -677,7 +679,7 @@ mapType f = share . mapType'
             _ -> recursively mapType' t
 
         bind :: Symbolic a => Bind a -> Bind a
-        bind (Bind vs t) = Bind (fmap var vs) (mapType' t)
+        bind (Bind vs t) = Bind (Set.map var vs) (mapType' t)
 
         term (f :@: ts) = fun f :@: map term ts
         term (Var x) = Var (var x)

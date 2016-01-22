@@ -1,43 +1,44 @@
-{-# LANGUAGE TypeOperators, GADTs #-}
+{-# LANGUAGE TypeOperators, GADTs, CPP #-}
 module Jukebox.InferTypes where
 
+#include "errors.h"
 import Control.Monad
 import Jukebox.Form
 import Jukebox.Name
-import qualified Jukebox.NameMap as NameMap
-import Jukebox.NameMap(NameMap)
+import qualified Data.Map.Strict as Map
+import Data.Map(Map)
 import Jukebox.UnionFind hiding (rep)
+import qualified Data.Set as Set
 
-type Function' = Name ::: ([Type'], Type')
-type Variable' = Name ::: Type'
-type Type' = Name ::: Type
+type Function' = ([(Name, Type)], (Name, Type))
 
 inferTypes :: [Input Clause] -> NameM ([Input Clause], Type -> Type)
 inferTypes prob = do
   funMap <-
-    fmap NameMap.fromList . sequence $
+    fmap Map.fromList . sequence $
       [ do res <- newName (typ f)
            args <- mapM newName (funArgs f)
-           return (name f :::
-                   (zipWith (:::) args (funArgs f),
-                    res ::: typ f))
+           return (name f,
+                   (zipWith (,) args (funArgs f),
+                    (res, typ f)))
       | f <- functions prob ]
   varMap <-
-    fmap NameMap.fromList . sequence $
+    fmap Map.fromList . sequence $
       [ do ty <- newName (typ v)
-           return (name v ::: (ty ::: typ v))
+           return (name v, (ty, typ v))
       | v <- vars prob ]
   
-  let tyMap = NameMap.fromList $
-              concat [ res:args | _ ::: (args, res) <- NameMap.toList funMap ] ++
-              [ ty | _ ::: ty <- NameMap.toList varMap ]
+  let tyMap = Map.fromList $
+              concat [ res:args | (args, res) <- Map.elems funMap ] ++
+              [ ty | ty <- Map.elems varMap ]
   
   let (prob', rep) = solve funMap varMap prob
-      rep' ty = rhs (NameMap.lookup_ (rep (name ty)) tyMap)
+      rep' ty =
+        Map.findWithDefault __ (rep (name ty)) tyMap
   
   return (prob', rep')
 
-solve :: NameMap Function' -> NameMap Variable' ->
+solve :: Map Name Function' -> Map Name (Name, Type) ->
          [Input Clause] -> ([Input Clause], Name -> Name)
 solve funMap varMap prob = (prob', rep)
   where prob' = share (aux prob)
@@ -49,18 +50,18 @@ solve funMap varMap prob = (prob', rep)
             _ -> recursively aux t
 
         bind :: Symbolic a => Bind a -> Bind a
-        bind (Bind vs t) = Bind (fmap var vs) (aux t)
+        bind (Bind vs t) = Bind (Set.map var vs) (aux t)
 
         term (f :@: ts) = fun f :@: map term ts
         term (Var x) = Var (var x)
 
         fun (f ::: _) =
-          let (args, res) = rhs (NameMap.lookup_ f funMap)
+          let (args, res) = Map.findWithDefault __ f funMap
           in f ::: FunType (map type_ args) (type_ res)
 
-        var (x ::: _) = x ::: type_ (rhs (NameMap.lookup_ x varMap))
+        var (x ::: _) = x ::: type_ (Map.findWithDefault __ x varMap)
 
-        type_ (name ::: _) 
+        type_ (name, _) 
           | name == nameO = O
           | otherwise = Type (rep name) Infinite Infinite
 
@@ -68,15 +69,15 @@ solve funMap varMap prob = (prob', rep)
           generate funMap varMap prob
           reps
 
-generate :: NameMap Function' -> NameMap Variable' -> [Input Clause] -> UF Name ()
+generate :: Map Name Function' -> Map Name (Name, Type) -> [Input Clause] -> UF Name ()
 generate funMap varMap cs = mapM_ (mapM_ atomic) lss
   where lss = map (map the . toLiterals . what) cs
         atomic (Tru p) = void (term p)
         atomic (t :=: u) = do { t' <- term t; u' <- term u; t' =:= u'; return () }
         term (Var x) = return y
-          where _ ::: (y ::: _) = NameMap.lookup_ x varMap
+          where (y, _) = Map.findWithDefault __ (name x) varMap
         term (f :@: xs) = do
           ys <- mapM term xs
-          let _ ::: (zs, r) = NameMap.lookup_ f funMap
-          zipWithM_ (=:=) ys (map lhs zs)
-          return (lhs r)
+          let (zs, r) = Map.findWithDefault __ (name f) funMap
+          zipWithM_ (=:=) ys (map fst zs)
+          return (fst r)

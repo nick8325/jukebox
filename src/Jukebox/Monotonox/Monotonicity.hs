@@ -5,9 +5,10 @@ import Prelude hiding (lookup)
 import Jukebox.Name
 import Jukebox.Form hiding (Form, clause, true, false, And, Or)
 import Jukebox.HighSat
-import Jukebox.NameMap as NameMap
 import Jukebox.Utils
 import Control.Monad
+import qualified Data.Map.Strict as Map
+import Data.Map(Map)
 
 data Extension = TrueExtend | FalseExtend | CopyExtend deriving Show
 
@@ -18,30 +19,30 @@ annotateMonotonicity prob = do
   m <- monotone (map what (open prob))
   let f O = O
       f ty =
-        case lookup (name ty) m of
+        case Map.lookup ty m of
           Nothing -> ty
           Just{} -> ty { tmonotone = Finite 0 }
   return (fmap (mapType f) prob)
 
-monotone :: [Clause] -> IO (NameMap (Type ::: Maybe (NameMap (Function ::: Extension))))
+monotone :: [Clause] -> IO (Map Type (Maybe (Map Function Extension)))
 monotone cs = runSat watch tys $ do
   let fs = functions cs
   mapM_ (clause . toLiterals) cs
-  fmap NameMap.fromList . forM tys $ \ty -> atIndex ty $ do
+  fmap Map.fromList . forM tys $ \ty -> atIndex ty $ do
     r <- solve []
     case r of
-      False -> return (ty ::: Nothing)
+      False -> return (ty, Nothing)
       True -> do
         m <- model
-        return (ty ::: Just (fromModel fs ty m))
+        return (ty, Just (fromModel fs ty m))
   where watch (FalseExtended f) =
           addForm (Or [Lit (Neg (FalseExtended f)),
                        Lit (Neg (TrueExtended f))])
         watch _ = return ()
         tys = types' cs
 
-fromModel :: [Function] -> Type -> (Var -> Bool) -> NameMap (Function ::: Extension)
-fromModel fs ty m = NameMap.fromList [ f ::: extension f m | f <- fs, typ f == O, ty `elem` args (rhs f) ]
+fromModel :: [Function] -> Type -> (Var -> Bool) -> Map Function Extension
+fromModel fs ty m = Map.fromList [ (f, extension f m) | f <- fs, typ f == O, ty `elem` args (rhs f) ]
 
 extension :: Function -> (Var -> Bool) -> Extension
 extension f m =

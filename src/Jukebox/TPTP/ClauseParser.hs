@@ -12,7 +12,7 @@ import Data.Map(Map)
 import Data.List
 import Jukebox.TPTP.Print
 import Jukebox.Name hiding (name)
-import qualified Jukebox.NameMap as NameMap
+import qualified Data.Set as Set
 
 import Jukebox.TPTP.Lexer hiding
   (Pos, Error, Include, Var, Type, Not, ForAll,
@@ -398,7 +398,7 @@ quantified = do
       ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ctx vars
   punct Colon
   rest <- let ?ctx = Just ctx' in (unitary :: Parser Form)
-  return (fromFormula (q (Bind (NameMap.fromList vars) rest)))
+  return (fromFormula (q (Bind (Set.fromList vars) rest)))
 
 -- A general formula.
 {-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Form #-}

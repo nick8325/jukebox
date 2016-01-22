@@ -3,7 +3,6 @@ module Jukebox.Toolbox where
 import Jukebox.Options
 import Jukebox.Form
 import Jukebox.Name
-import qualified Jukebox.NameMap as NameMap
 import Jukebox.TPTP.Print
 import Control.Monad
 import Control.Applicative
@@ -22,6 +21,7 @@ import qualified Jukebox.TPTP.Parsec as Parser
 import Jukebox.TPTP.ClauseParser
 import Jukebox.TPTP.Lexer hiding (Error, name, Normal)
 import qualified Jukebox.TPTP.Lexer as Lexer
+import qualified Data.Map.Strict as Map
 
 data GlobalFlags =
   GlobalFlags {
@@ -123,9 +123,9 @@ toFofIO globals clausify scheme f = do
   unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
   m <- monotone (map what (open cs))
   let isMonotone ty =
-        case NameMap.lookup (name ty) m of
-          Just (_ ::: Nothing) -> False
-          Just (_ ::: Just _) -> True
+        case Map.lookup ty m of
+          Just Nothing -> False
+          Just (Just _) -> True
           Nothing  -> True -- can happen if clausifier removed all clauses about a type
   return (translate scheme isMonotone f)
 
@@ -148,17 +148,17 @@ monotonicity :: GlobalFlags -> Problem Clause -> IO String
 monotonicity globals cs = do
   unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
   m <- monotone (map what (open cs))
-  let info (ty ::: Nothing) = [baseName ty ++ ": not monotone"]
-      info (ty ::: Just m) =
+  let info (ty, Nothing) = [baseName ty ++ ": not monotone"]
+      info (ty, Just m) =
         [prettyShow ty ++ ": monotone"] ++
         concat
         [ case ext of
              CopyExtend -> []
              TrueExtend -> ["  " ++ baseName p ++ " true-extended"]
              FalseExtend -> ["  " ++ baseName p ++ " false-extended"]
-        | p ::: ext <- NameMap.toList m ]
+        | (p, ext) <- Map.toList m ]
 
-  return (unlines (concat (map info (NameMap.toList m))))
+  return (unlines (concat (map info (Map.toList m))))
 
 annotateMonotonicityBox :: OptionParser (Problem Clause -> IO (Problem Clause))
 annotateMonotonicityBox = (\globals x -> do

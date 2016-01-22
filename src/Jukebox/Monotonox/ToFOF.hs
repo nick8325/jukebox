@@ -3,11 +3,12 @@ module Jukebox.Monotonox.ToFOF where
 
 import Jukebox.Clausify(split, removeEquiv, run, withName)
 import Jukebox.Name
-import qualified Jukebox.NameMap as NameMap
 import Jukebox.Form
 import Jukebox.Options
 import Control.Monad hiding (guard)
 import Data.Monoid
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 
 data Scheme = Scheme {
   makeFunction :: Type -> NameM Function,
@@ -51,10 +52,10 @@ translate1 scheme mono f = close f $ \inps -> do
       mono' | length tys == 1 = const True
             | otherwise = mono
   typeFuncs <- mapM (makeFunction scheme) tys
-  let typeMap = NameMap.fromList (zipWith (:::) tys typeFuncs)
+  let typeMap = Map.fromList (zip tys typeFuncs)
       lookupType ty =
-        case NameMap.lookup (name ty) typeMap of
-          Just (_ ::: f) -> f
+        case Map.lookup ty typeMap of
+          Just f -> f
           Nothing -> error "ToFOF.translate: type not found"
       scheme1' = scheme1 scheme mono' lookupType
   funcAxioms <- mapM (funcAxiom scheme1') funcs
@@ -97,7 +98,7 @@ tags1 :: Bool -> (Type -> Bool) -> (Type -> Function) -> Scheme1
 tags1 moreAxioms mono fs = Scheme1
   { forAll = ForAll,
     exists = \(Bind vs f) ->
-       let bound = foldr (/\) true (map guard (NameMap.toList vs))
+       let bound = foldr (/\) true (map guard (Set.toList vs))
            guard v | mono (typ v) = true
                    | otherwise = Literal (Pos (fs (typ v) :@: [Var v] :=: Var v))
        in Exists (Bind vs (simplify bound /\ f)),
@@ -144,13 +145,13 @@ guards = Scheme
 guards1 :: (Type -> Bool) -> (Type -> Function) -> Scheme1
 guards1 mono ps = Scheme1
   { forAll = \(Bind vs f) ->
-       let bound = foldr (/\) true (map guard (NameMap.toList vs))
+       let bound = foldr (/\) true (map guard (Set.toList vs))
            guard v | mono (typ v) = true
                    | not (naked True v f) = true
                    | otherwise = Literal (Pos (Tru (ps (typ v) :@: [Var v])))
        in ForAll (Bind vs (simplify (Not bound) \/ f)),
     exists = \(Bind vs f) ->
-       let bound = foldr (/\) true (map guard (NameMap.toList vs))
+       let bound = foldr (/\) true (map guard (Set.toList vs))
            guard v | mono (typ v) = true
 --                   | not (naked True v f) = true
                    | otherwise = Literal (Pos (Tru (ps (typ v) :@: [Var v])))
@@ -171,7 +172,7 @@ naked pos v f
     t :=: u <- f,
     pos = t == Var v || u == Var v
   | Bind_ <- typeOf f,
-    Bind vs f' <- f = not (NameMap.member v vs) && naked pos v f'
+    Bind vs f' <- f = not (Set.member v vs) && naked pos v f'
   | otherwise = getAny (collect (Any . naked pos v) f)
 
 guardsAxiom :: (Type -> Bool) -> (Type -> Function) -> Function -> NameM Form

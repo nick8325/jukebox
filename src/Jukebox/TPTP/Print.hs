@@ -8,9 +8,8 @@ import Text.PrettyPrint.HughesPJ
 import qualified Jukebox.TPTP.Lexer as L
 import Jukebox.Form
 import Data.List
-import qualified Data.IntMap.Strict as Map
-import qualified Jukebox.NameMap as NameMap
-import Jukebox.NameMap(NameMap)
+import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import Jukebox.Name
 import Jukebox.Utils
 
@@ -135,7 +134,7 @@ instance Show Atomic where
 
 instance Pretty Clause where
   pPrint p l env c@(Clause (Bind vs ts))
-    | and [ name (typ v) == nameI | v <- NameMap.toList vs ] =
+    | and [ name (typ v) == nameI | v <- Set.toList vs ] =
        prettyConnective l p env "$false" "|" (map Literal ts)
     | otherwise =
        pPrint p l env (toForm c)
@@ -180,9 +179,9 @@ prettyConnective l p env ident op (x:xs) =
 prettyParen False = id
 prettyParen True = parens
 
-prettyQuant l env q vs f | Map.null vs = pPrint 1 l env f
+prettyQuant l env q vs f | Set.null vs = pPrint 1 l env f
 prettyQuant l env q vs f =
-  sep [text q <> brackets (sep (punctuate comma (map (pPrintBinding 0 l env) (Map.elems vs)))) <> colon,
+  sep [text q <> brackets (sep (punctuate comma (map (pPrintBinding 0 l env) (Set.toList vs)))) <> colon,
        nest 2 (pPrint 1 l env f)]
 
 instance Show Kind where
