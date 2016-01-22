@@ -5,7 +5,6 @@ import Jukebox.Name
 import Jukebox.Map(Map)
 import qualified Jukebox.Map as Map
 import Data.Int
-import qualified Jukebox.Seq as S
 
 type NameMap a = Map Int64 a
 
@@ -36,8 +35,8 @@ deleteKey x m = Map.delete (uniqueId x) m
 (!) :: NameMap a -> Name -> a
 m ! x = m Map.! uniqueId (name x)
 
-fromList :: (S.List f, Named a) => f a -> NameMap a
-fromList xs = Map.fromList [ (uniqueId (name x), x) | x <- S.toList xs ]
+fromList :: Named a => [a] -> NameMap a
+fromList xs = Map.fromList [ (uniqueId (name x), x) | x <- xs ]
 
 toList :: NameMap a -> [a]
 toList = Map.elems

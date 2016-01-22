@@ -9,8 +9,6 @@ import Control.Applicative
 import Control.Monad
 import qualified Jukebox.Map as Map
 import Jukebox.Map(Map)
-import qualified Jukebox.Seq as S
-import Jukebox.Seq(Seq)
 import Data.List
 import Jukebox.TPTP.Print
 import Jukebox.Name hiding (name)
@@ -365,9 +363,9 @@ literal, unitary, quantified, formula ::
 {-# INLINE literal #-}
 literal = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
-        true = do { defined DTrue; return (fromFormula (And S.Nil)) }
+        true = do { defined DTrue; return (fromFormula (And [])) }
         {-# INLINE false #-}
-        false = do { defined DFalse; return (fromFormula (Or S.Nil)) }
+        false = do { defined DFalse; return (fromFormula (Or [])) }
         binary = do
           x <- term :: Parser Thing
           let {-# INLINE f #-}
@@ -407,7 +405,7 @@ quantified = do
 {-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Thing #-}
 formula = do
   x <- unitary :: Parser Thing
-  let binop op t u = op (S.Unit t `S.append` S.Unit u)
+  let binop op t u = op [t, u]
       {-# INLINE connective #-}
       connective p op = do
         punct p

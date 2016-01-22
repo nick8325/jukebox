@@ -3,8 +3,6 @@ module Jukebox.HighSat where
 
 import MiniSat hiding (neg)
 import qualified MiniSat
-import qualified Jukebox.Seq as Seq
-import Jukebox.Seq(Seq, List)
 import Jukebox.Form(Signed(..), neg)
 import qualified Jukebox.Map as Map
 import Jukebox.Map(Map)
@@ -25,27 +23,23 @@ type Watch a = a -> Sat1 a ()
 
 data Form a
   = Lit (Signed a)
-  | And (Seq (Form a))
-  | Or (Seq (Form a))
+  | And [Form a]
+  | Or [Form a]
 
 nt :: Form a -> Form a
 nt (Lit x) = Lit (neg x)
 nt (And xs) = Or (fmap nt xs)
 nt (Or xs) = And (fmap nt xs)
 
-conj, disj :: List f => f (Form a) -> Form a
-conj = And . Seq.fromList
-disj = Or . Seq.fromList
-
 true, false :: Form a
-true = And Seq.Nil
-false = Or Seq.Nil
+true = And []
+false = Or []
 
-unique :: List f => f (Form a) -> Form a
-unique = u . Seq.toList
+unique :: [Form a] -> Form a
+unique = u
   where u [x] = true
-        u (x:xs) = conj [disj [nt x, conj (map nt xs)],
-                         u xs]
+        u (x:xs) = And [Or [nt x, And (map nt xs)],
+                        u xs]
 
 runSat :: (Hashable b, Ord b) => Watch a -> [b] -> Sat a b c -> IO c
 runSat w idxs x = go idxs Map.empty
@@ -88,13 +82,13 @@ addForm :: (Ord a, Hashable a) => Form a -> Sat1 a ()
 addForm f = do
   s <- Sat1 ask
   cs <- flatten f
-  liftIO (Seq.mapM (MiniSat.addClause s . Seq.toList) cs)
+  liftIO (mapM (MiniSat.addClause s) cs)
   return ()
 
-flatten :: (Ord a, Hashable a) => Form a -> Sat1 a (Seq (Seq Lit))
-flatten (Lit l) = fmap (Seq.Unit . Seq.Unit) (lit l)
-flatten (And fs) = fmap Seq.concat (Seq.mapM flatten fs)
-flatten (Or fs) = fmap (fmap Seq.concat . Seq.sequence) (Seq.mapM flatten fs)
+flatten :: (Ord a, Hashable a) => Form a -> Sat1 a [[Lit]]
+flatten (Lit l) = fmap (return . return) (lit l)
+flatten (And fs) = fmap concat (mapM flatten fs)
+flatten (Or fs) = fmap (fmap concat . sequence) (mapM flatten fs)
 
 lit :: (Ord a, Hashable a) => Signed a -> Sat1 a Lit
 lit (Pos x) = var x

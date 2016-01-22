@@ -79,7 +79,7 @@ function constructors f expansive answerP = fmap concat $ do
       pred <- newFunction (concat (lines (prettyFormula rhs))) [] O
       return (Literal (Pos (Tru (pred :@: []))))
     return $
-      disj alts:
+      foldr (\/) false alts:
       [ closeForm (Connective Implies alt rhs)
       | (alt, rhs) <- zip alts theRhss ]
 

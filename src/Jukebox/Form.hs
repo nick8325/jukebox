@@ -6,8 +6,6 @@
 module Jukebox.Form where
 
 import Prelude hiding (sequence, mapM)
-import qualified Jukebox.Seq as S
-import Jukebox.Seq(Seq)
 import Data.Hashable
 import qualified Jukebox.Map as Map
 import Jukebox.NameMap(NameMap)
@@ -20,6 +18,8 @@ import Jukebox.Utils
 import Data.Typeable(Typeable)
 import Data.Monoid
 import Data.Traversable
+import qualified Data.DList as DList
+import Data.DList(DList)
 
 -- Set to True to switch on some sanity checks
 debugging :: Bool
@@ -173,8 +173,8 @@ signForm (Neg _) f = Not f
 data Form
   = Literal Literal
   | Not Form
-  | And (Seq Form)
-  | Or (Seq Form)
+  | And [Form]
+  | Or [Form]
   | Equiv Form Form
   | ForAll {-# UNPACK #-} !(Bind Form)
   | Exists {-# UNPACK #-} !(Bind Form)
@@ -195,13 +195,13 @@ connective Nand t u = nt (t /\ u)
 data Bind a = Bind (NameMap Variable) a
 
 true, false :: Form
-true = And S.Nil
-false = Or S.Nil
+true = And []
+false = Or []
 
 isTrue, isFalse :: Form -> Bool
-isTrue (And S.Nil) = True
+isTrue (And []) = True
 isTrue _ = False
-isFalse (Or S.Nil) = True
+isFalse (Or []) = True
 isFalse _ = False
 
 nt :: Form -> Form
@@ -216,26 +216,22 @@ t .=. u | typ t == O = Literal (Pos (Tru t)) `Equiv` Literal (Pos (Tru u))
         | otherwise = Literal (Pos (t :=: u))
 
 (/\), (\/) :: Form -> Form -> Form
-And as /\ And bs = And (as `S.append` bs)
+And as /\ And bs = And (as ++ bs)
 a      /\ b | isFalse a || isFalse b = false
-And as /\ b      = And (b `S.cons` as)
-a      /\ And bs = And (a `S.cons` bs)
-a      /\ b      = And (S.Unit a `S.append` S.Unit b)
+And as /\ b      = And (b:as)
+a      /\ And bs = And (a:bs)
+a      /\ b      = And [a, b]
 
-Or as \/ Or bs = Or (as `S.append` bs)
+Or as \/ Or bs = Or (as ++ bs)
 a     \/ b | isTrue a || isTrue b = true
-Or as \/ b     = Or (b `S.cons` as)
-a     \/ Or bs = Or (a `S.cons` bs)
-a     \/ b     = Or (S.Unit a `S.append` S.Unit b)
+Or as \/ b     = Or (b:as)
+a     \/ Or bs = Or (a:bs)
+a     \/ b     = Or [a, b]
 
 closeForm :: Form -> Form
 closeForm f | Map.null vars = f
             | otherwise = ForAll (Bind vars f)
   where vars = free f
-
-conj, disj :: S.List f => f Form -> Form
-conj = And . S.fromList
-disj = Or . S.fromList
 
 -- remove Not from the root of a problem
 positive :: Form -> Form
@@ -265,8 +261,8 @@ simple a                    = a
 simplify t@Literal{} = t
 simplify (Connective c t u) = simplify (connective c t u)
 simplify (Not t) = simplify (notInwards t)
-simplify (And ts) = S.fold (/\) id true (fmap simplify ts)
-simplify (Or ts) = S.fold (\/) id false (fmap simplify ts)
+simplify (And ts) = foldr (/\) true (fmap simplify ts)
+simplify (Or ts) = foldr (\/) false (fmap simplify ts)
 simplify (Equiv t u) = equiv (simplify t) (simplify u)
   where equiv t u | isTrue t = u
                   | isTrue u = t
@@ -301,11 +297,11 @@ toObligs axioms conjectures = Obligs axioms conjectures "GaveUp" "Theorem"
 
 newtype Clause = Clause (Bind [Literal])
 
-clause :: S.List f => f (Signed Atomic) -> Clause
-clause xs = Clause (bind (S.toList xs))
+clause :: [Signed Atomic] -> Clause
+clause xs = Clause (bind xs)
 
 toForm :: Clause -> Form
-toForm (Clause (Bind vs ls)) = ForAll (Bind vs (Or (S.fromList (map Literal ls))))
+toForm (Clause (Bind vs ls)) = ForAll (Bind vs (Or (map Literal ls)))
 
 toLiterals :: Clause -> [Literal]
 toLiterals (Clause (Bind _ ls)) = ls
@@ -349,7 +345,6 @@ data TypeOf a where
   Signed :: (Symbolic a, Symbolic (Signed a)) => TypeOf (Signed a)
   Bind_ :: (Symbolic a, Symbolic (Bind a)) => TypeOf (Bind a)
   List :: (Symbolic a, Symbolic [a]) => TypeOf [a]
-  Seq :: (Symbolic a, Symbolic (Seq a)) => TypeOf (Seq a)
   Input_ :: (Symbolic a, Symbolic (Input a)) => TypeOf (Input a)
   Obligs_ :: TypeOf Obligs
 
@@ -363,7 +358,6 @@ instance Symbolic Atomic where typeOf _ = Atomic
 instance Symbolic a => Symbolic (Signed a) where typeOf _ = Signed
 instance Symbolic a => Symbolic (Bind a) where typeOf _ = Bind_
 instance Symbolic a => Symbolic [a] where typeOf _ = List
-instance Symbolic a => Symbolic (Seq a) where typeOf _ = Seq
 instance Symbolic a => Symbolic (Input a) where typeOf _ = Input_
 instance Symbolic Obligs where typeOf _ = Obligs_
 
@@ -386,7 +380,6 @@ rep x =
     Signed -> rep' x
     Bind_ -> rep' x
     List -> rep' x
-    Seq -> rep' x
     Input_ -> rep' x
     Obligs_ -> rep' x
 
@@ -425,11 +418,6 @@ instance Symbolic a => Unpack (Bind a) where
 instance Symbolic a => Unpack [a] where
   rep' [] = Const []
   rep' (x:xs) = Binary (:) x xs
-
-instance Symbolic a => Unpack (Seq a) where
-  rep' S.Nil = Const S.Nil
-  rep' (S.Unit x) = Unary S.Unit x
-  rep' (S.Append x y) = Binary S.Append x y
 
 instance Symbolic a => Unpack (Input a) where
   rep' (Input tag kind what) = Unary (Input tag kind) what
@@ -521,31 +509,31 @@ bind x = Bind (free x) x
 -- Helper function for collecting information from terms and binders.
 termsAndBinders :: forall a b.
                    Symbolic a =>
-                   (Term -> Seq b) ->
-                   (forall a. Symbolic a => Bind a -> Seq b) ->
-                   a -> Seq b
-termsAndBinders term bind = aux where
-  aux :: Symbolic c => c -> Seq b
+                   (Term -> DList b) ->
+                   (forall a. Symbolic a => Bind a -> [b]) ->
+                   a -> [b]
+termsAndBinders term bind = DList.toList . aux where
+  aux :: Symbolic c => c -> DList b
   aux t =
-    collect aux t `S.append`
+    collect aux t `mplus`
     case typeOf t of
       Term -> term t
-      Bind_ -> bind t
-      _ -> S.Nil
+      Bind_ -> DList.fromList (bind t)
+      _ -> mzero
 
 names :: Symbolic a => a -> [Name]
 names = nub . termsAndBinders term bind where
   term t = return (name t) `mappend` return (name (typ t))
 
-  bind :: Symbolic a => Bind a -> Seq Name
-  bind (Bind vs _) = S.fromList (map name (NameMap.toList vs))
+  bind :: Symbolic a => Bind a -> [Name]
+  bind (Bind vs _) = map name (NameMap.toList vs)
 
 types :: Symbolic a => a -> [Type]
 types = nub . termsAndBinders term bind where
   term t = return (typ t)
 
-  bind :: Symbolic a => Bind a -> Seq Type
-  bind (Bind vs _) = S.fromList (map typ (NameMap.toList vs))
+  bind :: Symbolic a => Bind a -> [Type]
+  bind (Bind vs _) = map typ (NameMap.toList vs)
 
 types' :: Symbolic a => a -> [Type]
 types' = filter (/= O) . types
@@ -559,8 +547,8 @@ vars = nub . termsAndBinders term bind where
   term (Var x) = return x
   term _ = mempty
 
-  bind :: Symbolic a => Bind a -> Seq Variable
-  bind (Bind vs _) = S.fromList (NameMap.toList vs)
+  bind :: Symbolic a => Bind a -> [Variable]
+  bind (Bind vs _) = NameMap.toList vs
 
 functions :: Symbolic a => a -> [Function]
 functions = nub . termsAndBinders term mempty where

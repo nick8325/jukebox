@@ -2,7 +2,6 @@
 module Jukebox.Utils where
 
 import Data.List
-import qualified Jukebox.Seq as Seq
 import qualified Data.HashSet as Set
 import Data.Hashable
 import System.Process
@@ -23,8 +22,8 @@ merge (x:xs) (y:ys) =
     EQ -> x:merge xs ys
     GT -> y:merge (x:xs) ys
 
-nub :: (Seq.List f, Ord a, Hashable a) => f a -> [a]
-nub = Set.toList . Set.fromList . Seq.toList
+nub :: (Ord a, Hashable a) => [a] -> [a]
+nub = Set.toList . Set.fromList
 
 popen :: FilePath -> [String] -> String -> IO (ExitCode, String)
 popen prog args inp = do

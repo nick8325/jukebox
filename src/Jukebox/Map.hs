@@ -1,15 +1,15 @@
 {-# LANGUAGE NoMonomorphismRestriction #-}
 module Jukebox.Map where
 
-import qualified Data.HashMap.Lazy as H
+import qualified Data.Map.Lazy as H
 
-type Map a b = H.HashMap a b
+type Map a b = H.Map a b
 
 fromList = H.fromList
 toList = H.toList
 insertWith = H.insertWith
 empty = H.empty
-findWithDefault = H.lookupDefault
+findWithDefault = H.findWithDefault
 lookup = H.lookup
 insert = H.insert
 delete = H.delete
@@ -17,7 +17,7 @@ elems = H.elems
 union = H.union
 intersection = H.intersection
 null = H.null
-m ! x = H.lookupDefault (error "Map.!: key not found") x m
+m ! x = findWithDefault (error "Map.!: key not found") x m
 
 member x m =
   case H.lookup x m of

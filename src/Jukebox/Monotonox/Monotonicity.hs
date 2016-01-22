@@ -3,7 +3,7 @@ module Jukebox.Monotonox.Monotonicity where
 
 import Prelude hiding (lookup)
 import Jukebox.Name
-import Jukebox.Form hiding (Form, clause, true, false, conj, disj)
+import Jukebox.Form hiding (Form, clause, true, false, And, Or)
 import Jukebox.HighSat
 import Jukebox.NameMap as NameMap
 import Jukebox.Utils
@@ -41,8 +41,8 @@ monotone cs = runSat watch tys $ do
         m <- model
         return (ty ::: Just (fromModel fs ty m))
   where watch (FalseExtended f) =
-          addForm (disj [Lit (Neg (FalseExtended f)),
-                         Lit (Neg (TrueExtended f))])
+          addForm (Or [Lit (Neg (FalseExtended f)),
+                       Lit (Neg (TrueExtended f))])
         watch _ = return ()
         tys = types' cs
 
@@ -65,12 +65,12 @@ literal ls (Pos (t :=: u)) = atIndex (typ t) $ do
   addForm (safe ls u)
 literal ls (Neg (_ :=: _)) = return ()
 literal ls (Pos (Tru (p :@: ts))) =
-  forM_ ts $ \t -> atIndex (typ t) $ addForm (disj [safe ls t, Lit (Neg (FalseExtended p))])
+  forM_ ts $ \t -> atIndex (typ t) $ addForm (Or [safe ls t, Lit (Neg (FalseExtended p))])
 literal ls (Neg (Tru (p :@: ts))) =
-  forM_ ts $ \t -> atIndex (typ t) $ addForm (disj [safe ls t, Lit (Neg (TrueExtended p))])
+  forM_ ts $ \t -> atIndex (typ t) $ addForm (Or [safe ls t, Lit (Neg (TrueExtended p))])
 
 safe :: [Literal] -> Term -> Form Var
-safe ls (Var x) = disj [ guards l x | l <- ls ]
+safe ls (Var x) = Or [ guards l x | l <- ls ]
 safe _ _ = true
 
 guards :: Literal -> Variable -> Form Var

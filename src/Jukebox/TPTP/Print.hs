@@ -9,10 +9,10 @@ import qualified Jukebox.TPTP.Lexer as L
 import Jukebox.Form
 import Data.List
 import qualified Jukebox.Map as Map
-import qualified Jukebox.Seq as S
 import qualified Jukebox.NameMap as NameMap
 import Jukebox.NameMap(NameMap)
 import Jukebox.Name
+import Jukebox.Utils
 
 data Level = Normal | Chatty deriving (Eq, Ord)
 
@@ -87,8 +87,8 @@ instance Pretty [Type] where
                   (map (pPrint 0 lev env) args)))
 
 prettyProblem :: (Symbolic a, Pretty a) => String -> Level -> Problem a -> Doc
-prettyProblem family l prob = vcat (map typeDecl (S.unique (types prob')) ++
-                                    map funcDecl (S.unique (functions prob')) ++
+prettyProblem family l prob = vcat (map typeDecl (usort (types prob')) ++
+                                    map funcDecl (usort (functions prob')) ++
                                     map (prettyInput family l env) prob')
     where typeDecl ty | name ty `elem` open stdNames || isFof prob' = empty
                       | otherwise = typeClause ty (text "$tType")
@@ -96,7 +96,7 @@ prettyProblem family l prob = vcat (map typeDecl (S.unique (types prob')) ++
                               | otherwise = typeClause f (pPrint 0 l (escapeAtom . env) ty)
           typeClause name ty = prettyClause "tff" "type" "type"
                                       (pPrint 0 l (escapeAtom . env) name <+> colon <+> ty)
-          env = uniquify (S.unique (names prob'))
+          env = uniquify (usort (names prob'))
           prob' = open prob
 
 prettyClause :: String -> String -> String -> Doc -> Doc
@@ -153,8 +153,8 @@ instance Pretty Form where
   pPrint p l env (Literal (Pos t)) = pPrint p l env t
   pPrint p l env (Literal (Neg t)) = pPrint p l env (Not (Literal (Pos t)))
   pPrint p l env (Not f) = text "~" <> pPrint 1 l env f
-  pPrint p l env (And ts) = prettyConnective l p env "$true" "&" (S.toList ts)
-  pPrint p l env (Or ts) = prettyConnective l p env "$false" "|" (S.toList ts)
+  pPrint p l env (And ts) = prettyConnective l p env "$true" "&" ts
+  pPrint p l env (Or ts) = prettyConnective l p env "$false" "|" ts
   pPrint p l env (Equiv t u) = prettyConnective l p env undefined "<=>" [t, u]
   pPrint p l env (ForAll (Bind vs f)) = prettyQuant l env "!" vs f
   pPrint p l env (Exists (Bind vs f)) = prettyQuant l env "?" vs f
@@ -196,4 +196,4 @@ chattyShow = render . pPrint 0 Chatty show
 
 prettyFormula :: (Pretty a, Symbolic a) => a -> String
 prettyFormula prob = render . pPrint 0 Normal env $ prob
-  where env = uniquify (S.unique (names prob))
+  where env = uniquify (usort (names prob))

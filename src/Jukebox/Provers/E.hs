@@ -13,7 +13,6 @@ import Jukebox.TPTP.Print
 import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, name, Var)
 import Text.PrettyPrint.HughesPJ hiding (parens)
 import Data.Maybe
-import qualified Jukebox.Seq as S
 import qualified Jukebox.Map as Map
 import Jukebox.Map(Map)
 import Data.Hashable
@@ -71,7 +70,7 @@ runE flags prob
 
 extractAnswer :: Symbolic a => a -> String -> Either Answer [Term]
 extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
-  where env = uniquify (S.unique (names prob))
+  where env = uniquify (usort (names prob))
         varMap = Map.fromList [(env (name x), x) | x <- vars prob]
         funMap = Map.fromList [(env (name x), x) | x <- functions prob]
         result = lines str
