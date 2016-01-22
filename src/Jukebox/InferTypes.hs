@@ -9,6 +9,7 @@ import qualified Data.Map.Strict as Map
 import Data.Map(Map)
 import Jukebox.UnionFind hiding (rep)
 import qualified Data.Set as Set
+import Data.MemoUgly
 
 type Function' = ([(Name, Type)], (Name, Type))
 
@@ -41,7 +42,7 @@ inferTypes prob = do
 solve :: Map Name Function' -> Map Name (Name, Type) ->
          [Input Clause] -> ([Input Clause], Name -> Name)
 solve funMap varMap prob = (prob', rep)
-  where prob' = share (aux prob)
+  where prob' = aux prob
         aux :: Symbolic a => a -> a
         aux t =
           case typeOf t of
@@ -55,14 +56,17 @@ solve funMap varMap prob = (prob', rep)
         term (f :@: ts) = fun f :@: map term ts
         term (Var x) = Var (var x)
 
-        fun (f ::: _) =
+        fun = memo fun_
+        fun_ (f ::: _) =
           let (args, res) = Map.findWithDefault __ f funMap
           in f ::: FunType (map type_ args) (type_ res)
 
-        var (x ::: _) = x ::: type_ (Map.findWithDefault __ x varMap)
+        var = memo var_
+        var_ (x ::: _) = x ::: type_ (Map.findWithDefault __ x varMap)
 
-        type_ (_, O) = O
-        type_ (name, _) = Type (rep name) Infinite Infinite
+        type_ = memo type__
+        type__ (_, O) = O
+        type__ (name, _) = Type (rep name) Infinite Infinite
 
         rep = evalUF initial $ do
           generate funMap varMap prob

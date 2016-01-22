@@ -20,6 +20,7 @@ import Data.Monoid
 import Data.Traversable
 import qualified Data.DList as DList
 import Data.DList(DList)
+import Data.MemoUgly
 
 -- Set to True to switch on some sanity checks
 debugging :: Bool
@@ -617,61 +618,9 @@ checkBinder vs s | not debugging = s
                  | Set.null (free (Map.elems s) `Set.intersection` vs) = s
                  | otherwise = error "Form.checkBinder: capturing substitution"
 
--- Reestablish sharing in a formula.
-type ShareState = (Map Name Type, Map Name Variable, Map Name Function)
-
-share :: Symbolic a => a -> a
-share x = evalState (shareM x) initial
-  where initial :: ShareState
-        initial = (Map.empty, Map.empty, Map.empty)
-
-        shareM :: Symbolic a => a -> State ShareState a
-        shareM t =
-          case typeOf t of
-            Term -> term t
-            Bind_ -> bind t
-            _ -> recursivelyM shareM t
-
-        bind :: Symbolic a => Bind a -> State ShareState (Bind a)
-        bind (Bind vs x) =
-          liftM2 Bind (fmap Set.fromList (mapM var (Set.toList vs))) (shareM x)
-
-        term :: Term -> State ShareState Term
-        term (Var x) = fmap Var (var x)
-        term (f :@: ts) = liftM2 (:@:) (fun f) (mapM term ts)
-
-        fun :: Function -> State ShareState Function
-        fun (f ::: FunType args res) = do
-          args' <- mapM type_ args
-          res' <- type_ res
-          memo funAccessor (f ::: FunType args' res')
-
-        var :: Variable -> State ShareState Variable
-        var (x ::: ty) = fmap (x :::) (type_ ty) >>= memo varAccessor
-
-        type_ :: Type -> State ShareState Type
-        type_ = memo typeAccessor
-
-        typeAccessor = (\(x, y, z) -> x, \x (_, y, z) -> (x, y, z))
-        varAccessor = (\(x, y, z) -> y, \y (x, _, z) -> (x, y, z))
-        funAccessor = (\(x, y, z) -> z, \z (x, y, _) -> (x, y, z))
-
-        memo :: Named a =>
-                (ShareState -> Map Name a,
-                 Map Name a -> ShareState -> ShareState) ->
-                a -> State ShareState a
-        memo (get_, put_) x = do
-          m <- gets get_
-          case Map.lookup (name x) m of
-            Nothing -> do
-              modify (put_ (Map.insert (name x) x m))
-              return x
-            Just y ->
-              return y
-
 -- Apply a function to each type, while preserving sharing.
 mapType :: Symbolic a => (Type -> Type) -> a -> a
-mapType f = share . mapType'
+mapType f0 = mapType'
   where mapType' :: Symbolic a => a -> a
         mapType' t =
           case typeOf t of
@@ -687,3 +636,5 @@ mapType f = share . mapType'
 
         var (x ::: ty) = x ::: f ty
         fun (x ::: FunType args res) = x ::: FunType (map f args) (f res)
+
+        f = memo f0
