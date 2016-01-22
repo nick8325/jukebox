@@ -1,6 +1,7 @@
 -- Parse and typecheck TPTP clauses, stopping at include-clauses.
 
 {-# LANGUAGE BangPatterns, MultiParamTypeClasses, ImplicitParams, FlexibleInstances, TypeOperators, TypeFamilies #-}
+{-# OPTIONS_GHC -funfolding-use-threshold=1000 #-}
 module Jukebox.TPTP.ClauseParser where
 
 import Jukebox.TPTP.Parsec

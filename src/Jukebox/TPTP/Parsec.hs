@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances, TypeFamilies #-}
+{-# OPTIONS_GHC -funfolding-creation-threshold=10000 -funfolding-use-threshold=10000 #-}
 module Jukebox.TPTP.Parsec where
 
 import Control.Applicative

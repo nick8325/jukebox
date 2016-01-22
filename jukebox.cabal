@@ -27,7 +27,6 @@ Library
     filepath, pretty, hashable, minisat, symbol,
     binary, unordered-containers, process, containers
   Build-tools: alex
-  Ghc-options: -funfolding-use-threshold=500
   Hs-source-dirs: src
   Exposed-modules:
     Jukebox.Clausify
