@@ -16,6 +16,7 @@ module Jukebox.TPTP.Lexer(
 
 import Data.Word
 import Data.Char
+import Data.Symbol
 }
 
 $alpha = [a-zA-Z0-9_]
@@ -91,10 +92,10 @@ $white+ ;
 
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
-data Token = Atom { keyword :: !Keyword, name :: String }
+data Token = Atom { keyword :: !Keyword, name :: !String }
            | Defined { defined :: !Defined  }
-           | Var { name :: String }
-           | DistinctObject { name :: String }
+           | Var { name :: !String }
+           | DistinctObject { name :: !String }
            | Number { value :: !Integer }
            | Punct { kind :: !Punct }
            | Eof
@@ -158,7 +159,7 @@ k x = Atom x . copy
 d x = const (Defined x)
 
 copy :: String -> String
-copy = id -- could change to a string interning function later
+copy = unintern . intern
 
 unquote :: String -> String
 unquote x
