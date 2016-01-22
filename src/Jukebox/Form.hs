@@ -6,7 +6,7 @@
 module Jukebox.Form where
 
 import Prelude hiding (sequence, mapM)
-import qualified Data.IntMap as Map
+import qualified Data.IntMap.Strict as Map
 import Jukebox.NameMap(NameMap)
 import qualified Jukebox.NameMap as NameMap
 import Data.Ord
