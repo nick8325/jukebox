@@ -28,6 +28,7 @@ Library
     binary, unordered-containers, process, containers
   Build-tools: alex
   Ghc-options: -funfolding-use-threshold=500
+  Hs-source-dirs: src
   Exposed-modules:
     Jukebox.Clausify
     Jukebox.Form
@@ -59,10 +60,5 @@ Library
     Jukebox.Utils
 
 Executable jukebox
-  Main-is: Main.hs
-  Build-depends: base >= 4 && < 5, array, mtl, directory,
-    filepath, pretty, hashable, minisat, symbol,
-    binary, unordered-containers, process, containers,
-    jukebox
-  Build-tools: alex
-  Ghc-options: -funfolding-use-threshold=500
+  Main-is: executable/Main.hs
+  Build-depends: base >= 4 && < 5, jukebox
