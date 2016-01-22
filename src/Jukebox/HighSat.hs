@@ -4,8 +4,8 @@ module Jukebox.HighSat where
 import MiniSat hiding (neg)
 import qualified MiniSat
 import Jukebox.Form(Signed(..), neg)
-import qualified Jukebox.Map as Map
-import Jukebox.Map(Map)
+import qualified Data.Map.Strict as Map
+import Data.Map(Map)
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Control.Monad.Trans

@@ -10,7 +10,7 @@ module Jukebox.Name(
   uniquify) where
 
 import Data.Hashable
-import qualified Jukebox.Map as Map
+import qualified Data.Map.Strict as Map
 import Jukebox.Utils
 import Data.List
 import Data.Ord

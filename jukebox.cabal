@@ -34,7 +34,6 @@ Library
     Jukebox.GuessModel
     Jukebox.HighSat
     Jukebox.InferTypes
-    Jukebox.Map
     Jukebox.Monotonox.Monotonicity
     Jukebox.Monotonox.ToFOF
     Jukebox.Name

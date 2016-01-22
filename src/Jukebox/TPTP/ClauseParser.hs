@@ -7,8 +7,8 @@ module Jukebox.TPTP.ClauseParser where
 import Jukebox.TPTP.Parsec
 import Control.Applicative
 import Control.Monad
-import qualified Jukebox.Map as Map
-import Jukebox.Map(Map)
+import qualified Data.Map.Strict as Map
+import Data.Map(Map)
 import Data.List
 import Jukebox.TPTP.Print
 import Jukebox.Name hiding (name)

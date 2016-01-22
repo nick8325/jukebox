@@ -8,7 +8,7 @@ import Jukebox.TPTP.Lexer
 import Jukebox.Name
 import Jukebox.Form
 import Control.Applicative
-import qualified Jukebox.Map as Map
+import qualified Data.Map.Strict as Map
 import Data.List
 
 tff, cnf :: [(String, Type)] -> [(String, Function)] -> String -> NameM Form

@@ -3,8 +3,8 @@ module Jukebox.UnionFind(UF, Replacement((:>)), (=:=), rep, evalUF, execUF, runU
 import Prelude hiding (min)
 import Control.Monad.State.Strict
 import Data.Hashable
-import Jukebox.Map(Map)
-import qualified Jukebox.Map as Map
+import Data.Map.Strict(Map)
+import qualified Data.Map as Map
 
 type S a = Map a a
 type UF a = State (S a)
