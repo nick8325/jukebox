@@ -15,7 +15,6 @@ import Text.PrettyPrint.HughesPJ hiding (parens)
 import Data.Maybe
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
-import Data.Hashable
 import System.Exit
 
 data SPASSFlags =

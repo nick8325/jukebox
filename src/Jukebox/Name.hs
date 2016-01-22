@@ -9,7 +9,6 @@ module Jukebox.Name(
   unsafeClose, maxIndex, supply,
   uniquify) where
 
-import Data.Hashable
 import qualified Data.Map.Strict as Map
 import Jukebox.Utils
 import Data.List
@@ -31,9 +30,6 @@ instance Eq Name where
 
 instance Ord Name where
   compare = comparing uniqueId
-
-instance Hashable Name where
-  hashWithSalt s = hashWithSalt s . uniqueId
 
 instance Show Name where
   show Name { uniqueId = uniqueId, base = base } =
@@ -65,7 +61,6 @@ rhs (_ ::: y) = y
 
 instance Named a => Eq (a ::: b) where s == t = name s == name t
 instance Named a => Ord (a ::: b) where compare = comparing name
-instance Named a => Hashable (a ::: b) where hashWithSalt s = hashWithSalt s . name
 
 instance Named a => Named (a ::: b) where
   name (a ::: b) = name a

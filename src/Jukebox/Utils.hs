@@ -2,16 +2,16 @@
 module Jukebox.Utils where
 
 import Data.List
-import qualified Data.HashSet as Set
-import Data.Hashable
 import System.Process
 import System.IO
 import System.Exit
 import Control.Applicative
 import Control.Concurrent
+import qualified Data.Set as Set
 
 usort :: Ord a => [a] -> [a]
-usort = map head . group . sort
+--usort = map head . group . sort
+usort = Set.toAscList . Set.fromList
 
 merge :: Ord a => [a] -> [a] -> [a]
 merge [] ys = ys
@@ -21,9 +21,6 @@ merge (x:xs) (y:ys) =
     LT -> x:merge xs (y:ys)
     EQ -> x:merge xs ys
     GT -> y:merge (x:xs) ys
-
-nub :: (Ord a, Hashable a) => [a] -> [a]
-nub = Set.toList . Set.fromList
 
 popen :: FilePath -> [String] -> String -> IO (ExitCode, String)
 popen prog args inp = do

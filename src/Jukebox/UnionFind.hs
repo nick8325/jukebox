@@ -2,7 +2,6 @@ module Jukebox.UnionFind(UF, Replacement((:>)), (=:=), rep, evalUF, execUF, runU
 
 import Prelude hiding (min)
 import Control.Monad.State.Strict
-import Data.Hashable
 import Data.Map.Strict(Map)
 import qualified Data.Map as Map
 
@@ -22,7 +21,7 @@ execUF s m = snd (runUF s m)
 initial :: S a
 initial = Map.empty
 
-(=:=) :: (Hashable a, Ord a) => a -> a -> UF a (Maybe (Replacement a))
+(=:=) :: Ord a => a -> a -> UF a (Maybe (Replacement a))
 s =:= t | s == t = return Nothing
 s =:= t = do
   rs <- rep s
@@ -37,7 +36,7 @@ s =:= t = do
       return (Just (rs :> rt))
 
 {-# INLINE rep #-}
-rep :: (Hashable a, Ord a) => a -> UF a a
+rep :: Ord a => a -> UF a a
 rep s = do
   m <- get
   case Map.lookup s m of
@@ -53,12 +52,12 @@ rep s = do
       --     modify (Map.insert s v)
       --     return v
 
-reps :: (Hashable a, Ord a) => UF a (a -> a)
+reps :: Ord a => UF a (a -> a)
 reps = do
   s <- get
   return (\x -> evalUF s (rep x))
 
--- rep' :: (Hashable a, Ord a) => a -> a -> UF a a
+-- rep' :: Ord a => a -> a -> UF a a
 -- rep' s t = do
 --   m <- get
 --   case Map.lookup t m of
@@ -70,7 +69,7 @@ reps = do
 --       modify (Map.insert s v)
 --       return v
 
-isRep :: (Hashable a, Ord a) => a -> UF a Bool
+isRep :: Ord a => a -> UF a Bool
 isRep t = do
   t' <- rep t
   return (t == t')

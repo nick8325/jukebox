@@ -6,14 +6,13 @@
 module Jukebox.Form where
 
 import Prelude hiding (sequence, mapM)
-import Data.Hashable
 import qualified Data.IntMap as Map
 import Jukebox.NameMap(NameMap)
 import qualified Jukebox.NameMap as NameMap
 import Data.Ord
 import Jukebox.Name
 import Control.Monad.State.Strict hiding (sequence, mapM)
-import Data.List hiding (nub)
+import Data.List
 import Jukebox.Utils
 import Data.Typeable(Typeable)
 import Data.Monoid
@@ -41,7 +40,7 @@ data Type =
 
 data FunType = FunType { args :: [Type], res :: Type } deriving (Eq, Typeable)
 
--- Helper function for defining (Eq, Ord, Hashable) instances
+-- Helper function for defining (Eq, Ord) instances
 typeMaybeName :: Type -> Maybe Name
 typeMaybeName O = Nothing
 typeMaybeName Type{tname = t} = Just t
@@ -51,9 +50,6 @@ instance Eq Type where
 
 instance Ord Type where
   compare = comparing typeMaybeName
-
-instance Hashable Type where
-  hashWithSalt s = hashWithSalt s . typeMaybeName
 
 instance Named Type where
   name O = nameO
@@ -78,11 +74,6 @@ instance Typed b => Typed (a ::: b) where
 type Variable = Name ::: Type
 type Function = Name ::: FunType
 data Term = Var Variable | Function :@: [Term] deriving (Eq, Ord)
-
-instance Hashable Term where
-  hashWithSalt s = hashWithSalt s . convert
-    where convert (Var x) = Left x
-          convert (f :@: ts) = Right (f, ts)
 
 instance Named Term where
   name (Var x) = name x
@@ -119,7 +110,7 @@ size (f :@: xs) = 1 + sum (map size xs)
 infix 8 :=:
 data Atomic = Term :=: Term | Tru Term
 
--- Helper for (Eq Atomic, Ord Atomic, Hashable Atomic) instances
+-- Helper for (Eq Atomic, Ord Atomic) instances
 normAtomic :: Atomic -> Either (Term, Term) Term
 normAtomic (t1 :=: t2) | t1 > t2 = Left (t2, t1)
                        | otherwise = Left (t1, t2)
@@ -131,15 +122,7 @@ instance Eq Atomic where
 instance Ord Atomic where
   compare = comparing normAtomic
 
-instance Hashable Atomic where
-  hashWithSalt s = hashWithSalt s . normAtomic
-
 data Signed a = Pos a | Neg a deriving (Show, Eq, Ord)
-
-instance Hashable a => Hashable (Signed a) where
-  hashWithSalt s = hashWithSalt s . convert
-    where convert (Pos x) = Left x
-          convert (Neg x) = Right x
 
 instance Functor Signed where
   fmap f (Pos x) = Pos (f x)
@@ -522,14 +505,14 @@ termsAndBinders term bind = DList.toList . aux where
       _ -> mzero
 
 names :: Symbolic a => a -> [Name]
-names = nub . termsAndBinders term bind where
+names = usort . termsAndBinders term bind where
   term t = return (name t) `mappend` return (name (typ t))
 
   bind :: Symbolic a => Bind a -> [Name]
   bind (Bind vs _) = map name (NameMap.toList vs)
 
 types :: Symbolic a => a -> [Type]
-types = nub . termsAndBinders term bind where
+types = usort . termsAndBinders term bind where
   term t = return (typ t)
 
   bind :: Symbolic a => Bind a -> [Type]
@@ -539,11 +522,11 @@ types' :: Symbolic a => a -> [Type]
 types' = filter (/= O) . types
 
 terms :: Symbolic a => a -> [Term]
-terms = nub . termsAndBinders term mempty where
+terms = usort . termsAndBinders term mempty where
   term t = return t
 
 vars :: Symbolic a => a -> [Variable]
-vars = nub . termsAndBinders term bind where
+vars = usort . termsAndBinders term bind where
   term (Var x) = return x
   term _ = mempty
 
@@ -551,7 +534,7 @@ vars = nub . termsAndBinders term bind where
   bind (Bind vs _) = NameMap.toList vs
 
 functions :: Symbolic a => a -> [Function]
-functions = nub . termsAndBinders term mempty where
+functions = usort . termsAndBinders term mempty where
   term (f :@: _) = return f
   term _ = mempty
 

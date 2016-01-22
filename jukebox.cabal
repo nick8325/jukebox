@@ -24,7 +24,7 @@ source-repository head
 
 Library
   Build-depends: base >= 4 && < 5, array, mtl, directory,
-    filepath, pretty, hashable, minisat, symbol, dlist,
+    filepath, pretty, minisat, symbol, dlist,
     binary, unordered-containers, process, containers
   Build-tools: alex
   Hs-source-dirs: src

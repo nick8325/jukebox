@@ -15,7 +15,6 @@ import Text.PrettyPrint.HughesPJ hiding (parens)
 import Data.Maybe
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
-import Data.Hashable
 import System.Exit
 
 data EFlags = EFlags {
@@ -106,5 +105,5 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
         terms =
           bracks (term `sepBy1` punct Comma)
           <|> return []
-        lookup :: (Ord a, Hashable a) => Map String a -> String -> a
+        lookup :: Ord a => Map String a -> String -> a
         lookup m x = Map.findWithDefault (error "runE: result from E mentions free names") x m

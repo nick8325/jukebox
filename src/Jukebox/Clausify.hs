@@ -11,7 +11,7 @@ import Control.Monad.State.Strict
 import qualified Jukebox.NameMap as NameMap
 import Jukebox.NameMap(NameMap)
 import qualified Data.IntMap.Strict as Map
-import qualified Data.HashSet as Set
+import qualified Data.Set as Set
 import Jukebox.Utils
 import Jukebox.Options
 import Control.Applicative
@@ -374,8 +374,8 @@ cross (cs:css) = liftM2 (++) cs (cross css)
 
 simplifyCNF :: [[Literal]] -> [[Literal]]
 simplifyCNF =
-  -- nub: don't generate multiple copies of identical clauses
-  nub . concatMap (tautElim . unify [])
+  -- usort: don't generate multiple copies of identical clauses
+  usort . concatMap (tautElim . unify [])
   where -- remove negative variable equalities X != Y by substitution
         unify xs [] = xs
         unify xs (Neg (Var v :=: t@Var{}):ys) =

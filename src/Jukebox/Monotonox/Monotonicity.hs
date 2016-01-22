@@ -7,17 +7,11 @@ import Jukebox.Form hiding (Form, clause, true, false, And, Or)
 import Jukebox.HighSat
 import Jukebox.NameMap as NameMap
 import Jukebox.Utils
-import Data.Hashable
 import Control.Monad
 
 data Extension = TrueExtend | FalseExtend | CopyExtend deriving Show
 
 data Var = FalseExtended Function | TrueExtended Function deriving (Eq, Ord)
-
-instance Hashable Var where
-  hashWithSalt s = hashWithSalt s . convert
-    where convert (FalseExtended x) = Left x
-          convert (TrueExtended x) = Right x
 
 annotateMonotonicity :: Problem Clause -> IO (Problem Clause)
 annotateMonotonicity prob = do
