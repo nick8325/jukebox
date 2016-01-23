@@ -92,10 +92,10 @@ $white+ ;
 
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
-data Token = Atom { keyword :: !Keyword, name :: !String }
+data Token = Atom { keyword :: !Keyword, tokenName :: !String }
            | Defined { defined :: !Defined  }
-           | Var { name :: !String }
-           | DistinctObject { name :: !String }
+           | Var { tokenName :: !String }
+           | DistinctObject { tokenName :: !String }
            | Number { value :: !Integer }
            | Punct { kind :: !Punct }
            | Eof
@@ -159,7 +159,7 @@ k x = Atom x . copy
 d x = const (Defined x)
 
 copy :: String -> String
-copy = unintern . intern
+copy = id
 
 unquote :: String -> String
 unquote x

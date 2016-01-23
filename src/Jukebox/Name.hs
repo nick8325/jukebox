@@ -7,15 +7,16 @@ import Data.List
 import Data.Ord
 import Jukebox.Utils
 import Data.Int
+import Data.Symbol
 
 data Name =
-    Fixed String
+    Fixed {-# UNPACK #-} !Symbol
   | Unique {-# UNPACK #-} !Int64 String
 
 base :: Named a => a -> String
 base x =
   case name x of
-    Fixed xs -> xs
+    Fixed xs -> unintern xs
     Unique _ xs -> xs
 
 instance Eq Name where
@@ -24,19 +25,19 @@ instance Eq Name where
 instance Ord Name where
   compare = comparing compareName
 
-compareName :: Name -> Either String Int64
+compareName :: Name -> Either Symbol Int64
 compareName (Fixed xs) = Left xs
 compareName (Unique n _) = Right n
 
 instance Show Name where
-  show (Fixed xs) = xs
+  show (Fixed xs) = show xs
   show (Unique n xs) = xs ++ show n
 
 class Named a where
   name :: a -> Name
 
 instance Named [Char] where
-  name = Fixed
+  name = Fixed . intern
 
 instance Named Name where
   name = id

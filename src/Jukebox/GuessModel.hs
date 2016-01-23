@@ -24,10 +24,11 @@ peano i = do
               ("succ", succ),
               ("pred", pred)]
   
-  prelude <- mapM (cnf types funs) [
-    "zero != succ(X)",
-    "pred(succ(X)) = X"
-    ]
+  let prelude =
+        map (cnf types funs) [
+          "zero != succ(X)",
+          "pred(succ(X)) = X"
+        ]
   return ([zero, succ], prelude)
 
 trees i = do
@@ -41,11 +42,12 @@ trees i = do
               ("left", left),
               ("right", right)]
   
-  prelude <- mapM (cnf types funs) [
-    "nil != bin(X,Y)",
-    "left(bin(X,Y)) = X",
-    "right(bin(X,Y)) = Y"
-    ]
+  let prelude =
+        map (cnf types funs) [
+          "nil != bin(X,Y)",
+          "left(bin(X,Y)) = X",
+          "right(bin(X,Y)) = Y"
+        ]
   return ([nil, bin], prelude)
 
 guessModel :: [String] -> Universe -> Problem Form -> Problem Form

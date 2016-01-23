@@ -77,4 +77,4 @@ parseProblemWith findFile name = runErrorT (fmap finalise (parseFile name Nothin
         merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
         finalise :: ParseState -> Problem Form
-        finalise (MkState p _ _ _ n) = reverse p
+        finalise (MkState p _) = reverse p

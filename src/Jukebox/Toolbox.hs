@@ -79,7 +79,7 @@ withString kind f x = do
         error $ "At line " ++ show l ++ ", column " ++ show c ++ ": " ++ err
   case run_ (section (const True) <* eof)
             (UserState initialState (scan x)) of
-    Ok (UserState (MkState p _ _ _ n) (At _ (Cons Eof _))) Nothing -> do
+    Ok (UserState (MkState p _) (At _ (Cons Eof _))) Nothing -> do
       let prob = reverse p
       res <- f prob
       return (render (prettyProblem kind Normal res))

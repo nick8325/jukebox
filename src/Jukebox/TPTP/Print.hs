@@ -48,10 +48,10 @@ instance Show Type where
   show = chattyShow
 
 instance Show L.Token where
-  show L.Atom{L.name = x} = escapeAtom x
+  show L.Atom{L.tokenName = x} = escapeAtom x
   show L.Defined{L.defined = x} = show x
-  show L.Var{L.name = x} = x
-  show L.DistinctObject{L.name = x} = quote '"' x
+  show L.Var{L.tokenName = x} = x
+  show L.DistinctObject{L.tokenName = x} = quote '"' x
   show L.Number{L.value = x} = show x
   show L.Punct{L.kind = x} = show x
   show L.Eof = "end of file"

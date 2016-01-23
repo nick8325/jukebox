@@ -11,7 +11,7 @@ import qualified Data.Map.Strict as Map
 import Data.Map(Map)
 import Data.List
 import Jukebox.TPTP.Print
-import Jukebox.Name hiding (name)
+import Jukebox.Name
 import qualified Data.Set as Set
 import Data.Int
 
@@ -28,10 +28,7 @@ import qualified Jukebox.Name as Name
 
 data ParseState =
   MkState ![Input Form]                    -- problem being constructed, inputs are in reverse order
-          !(Map String Type)               -- types
-          !(Map String (Name ::: FunType)) -- functions
-          !(Map String (Name ::: Type))    -- free variables in CNF clause
-          !Int64                           -- name generation
+          !(Map String (Name ::: FunType)) -- functions in scope
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
 
@@ -40,7 +37,7 @@ data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = MkState [] (Map.insert "$i" individual Map.empty) Map.empty Map.empty 0
+initialState = MkState [] Map.empty
 
 instance Stream TokenStream Token where
   primToken (At _ (Cons Eof _)) ok err fatal = err
@@ -55,7 +52,7 @@ testParser p s = snd (run (const []) p (UserState initialState (scan s)))
 
 getProblem :: Parser [Input Form]
 getProblem = do
-  MkState p _ _ _ _ <- getState
+  MkState p _ <- getState
   return (reverse p)
 
 -- Primitive parsers.
@@ -79,7 +76,7 @@ defined' p = fmap L.defined (satisfy p')
 {-# INLINE defined #-}
 defined k = defined' (== k) <?> "'" ++ show k ++ "'"
 {-# INLINE variable #-}
-variable = fmap name (satisfy p) <?> "variable"
+variable = fmap tokenName (satisfy p) <?> "variable"
   where p L.Var{} = True
         p _ = False
 {-# INLINE number #-}
@@ -87,7 +84,7 @@ number = fmap value (satisfy p) <?> "number"
   where p Number{} = True
         p _ = False
 {-# INLINE atom #-}
-atom = fmap name (keyword' (const True)) <?> "atom"
+atom = fmap tokenName (keyword' (const True)) <?> "atom"
 
 -- Combinators.
 
@@ -171,24 +168,9 @@ include = do
 
 newFormula :: Input Form -> Parser ()
 newFormula input = do
-  MkState p t f v n <- getState
-  putState (MkState (input:p) t f Map.empty n)
+  MkState p f <- getState
+  putState (MkState (input:p) f)
   
-newNameFrom :: Named a => Int64 -> a -> (Int64, Name)
-newNameFrom n name = (n+1, Unique n (base name))
-
-{-# INLINE findType #-}
-findType :: String -> Parser Type
-findType name = do
-  MkState p t f v n <- getState
-  case Map.lookup name t of
-    Nothing -> do
-      let (n', name') = newNameFrom n name
-          ty = Type { tname = name', tmonotone = Infinite, tsize = Infinite }
-      putState (MkState p (Map.insert name ty t) f v n')
-      return ty
-    Just x -> return x
-
 newFunction :: String -> FunType -> Parser (Name ::: FunType)
 newFunction name ty' = do
   f@(_ ::: ty) <- lookupFunction ty' name
@@ -222,20 +204,18 @@ typeError f@(x ::: ty) args' = do
 
 {-# INLINE lookupFunction #-}
 lookupFunction :: FunType -> String -> Parser (Name ::: FunType)
-lookupFunction def name = do
-  MkState p t f v n <- getState
-  case Map.lookup name f of
+lookupFunction def x = do
+  MkState p f <- getState
+  case Map.lookup x f of
     Nothing -> do
-      let (n', name') = newNameFrom n name
-          decl = name' ::: def
-      putState (MkState p t (Map.insert name decl f) v n')
+      let decl = name x ::: def
+      putState (MkState p (Map.insert x decl f))
       return decl
     Just f -> return f
 
 -- The type $i (anything whose type is not specified gets this type)
-{-# INLINE individual #-}
 individual :: Type
-individual = Type (Fixed "$i") Infinite Infinite
+individual = Type (name "$i") Infinite Infinite
 
 -- Parsing formulae.
 
@@ -315,15 +295,8 @@ instance TermLike Term where
   var = do
     x <- variable
     case ?ctx of
-      Nothing -> do
-        MkState p t f vs n <- getState
-        case Map.lookup x vs of
-          Just v -> return (Var v)
-          Nothing -> do
-            let (n', name) = newNameFrom n x
-                v = name ::: individual
-            putState (MkState p t f (Map.insert x v vs) n')
-            return (Var v)
+      Nothing ->
+        return (Var (name x ::: individual))
       Just ctx ->
         case Map.lookup x ctx of
           Just v -> return (Var v)
@@ -425,15 +398,12 @@ varDecl typed = do
              when (not typed) $
                fatalError "Used a typed quantification in an untyped formula";
              type_ } <|> return individual
-  MkState p t f v n <- getState
-  let (n', name) = newNameFrom n x
-  putState (MkState p t f v n')
-  return (name ::: ty)
+  return (name x ::: ty)
 
 -- Parse a type
 type_ :: Parser Type
 type_ =
-  do { name <- atom; findType name } <|>
+  do { x <- atom; return (Type (name x) Infinite Infinite) } <|>
   do { defined DI; return individual }
 
 -- A little data type to help with parsing types.
@@ -467,7 +437,7 @@ typeDeclaration = do
     punct Colon
     res <- compoundType
     case res of
-      TType -> do { findType name; return () }
+      TType -> return ()
       Fun args res -> do { newFunction name (FunType args res); return () }
       Prod [res] -> do { newFunction name (FunType [] res); return () }
       _ -> fatalError "invalid type"
