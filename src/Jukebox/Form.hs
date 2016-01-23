@@ -610,7 +610,7 @@ check x | not debugging = x
           check' (vs `Set.union` vars) t
 
         generic :: Symbolic a => Set Variable -> a -> Bool
-        generic vars = getAll . collect (All . generic vars)
+        generic vars = getAll . collect (All . check' vars)
 
 -- Check that a binder doesn't capture variables from a substitution.
 checkBinder :: Set Variable -> Subst -> Subst
