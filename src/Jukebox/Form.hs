@@ -12,7 +12,9 @@ import qualified Data.Map.Strict as Map
 import Data.Map(Map)
 import Data.Ord
 import Jukebox.Name
-import Control.Monad.State.Strict hiding (sequence, mapM)
+import Control.Monad
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.State.Strict hiding (sequence, mapM)
 import Data.List
 import Jukebox.Utils
 import Data.Typeable(Typeable)

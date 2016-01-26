@@ -6,9 +6,12 @@ import qualified MiniSat
 import Jukebox.Form(Signed(..), neg)
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
-import Control.Monad.State.Strict
-import Control.Monad.Reader
-import Control.Monad.Trans
+import Control.Monad
+import Control.Monad.Trans.Class
+import Control.Monad.IO.Class
+import Control.Monad.Trans.State.Strict
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Class
 import Data.Traversable hiding (mapM, sequence)
 import Control.Applicative
 import Data.Maybe
@@ -52,9 +55,9 @@ runSat1 w x = runSat w [()] (atIndex () x)
 atIndex :: (Ord a, Ord b) => b -> Sat1 a c -> Sat a b c
 atIndex !idx m = do
   watch <- Sat ask
-  SatState s ls <- Sat (gets (Map.findWithDefault (error "withSolver: index not found") idx))
+  SatState s ls <- Sat (lift (gets (Map.findWithDefault (error "withSolver: index not found") idx)))
   (x, ls') <- liftIO (runStateT (runReaderT (runReaderT (runSat1_ m) s) watch) ls)
-  Sat (modify (Map.insert idx (SatState s ls')))
+  Sat (lift (modify (Map.insert idx (SatState s ls'))))
   return x
 
 solve :: Ord a => [Signed a] -> Sat1 a Bool
@@ -66,7 +69,7 @@ solve xs = do
 model :: Ord a => Sat1 a (a -> Bool)
 model = do
   s <- Sat1 ask
-  m <- Sat1 (lift get)
+  m <- Sat1 (lift (lift get))
   vals <- liftIO (traverse (MiniSat.modelValue s) m)
   return (\v -> fromMaybe False (Map.findWithDefault Nothing v vals))
 
@@ -96,11 +99,11 @@ lit (Neg x) = liftM MiniSat.neg (var x)
 var :: Ord a => a -> Sat1 a Lit
 var x = do
   s <- Sat1 ask
-  m <- Sat1 get
+  m <- Sat1 (lift (lift get))
   case Map.lookup x m of
     Nothing -> do
       l <- liftIO (MiniSat.newLit s)
-      Sat1 (put (Map.insert x l m))
+      Sat1 (lift (lift (put (Map.insert x l m))))
       w <- Sat1 (lift ask)
       w x
       return l

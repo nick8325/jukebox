@@ -19,7 +19,6 @@ import Jukebox.GuessModel
 import Jukebox.InferTypes
 import Jukebox.TPTP.Parsec hiding (Error, run)
 import qualified Jukebox.TPTP.Parsec as Parser
-import Jukebox.TPTP.ClauseParser
 import Jukebox.TPTP.Lexer hiding (Error, name, Normal)
 import qualified Jukebox.TPTP.Lexer as Lexer
 import qualified Data.Map.Strict as Map
@@ -72,30 +71,6 @@ parseProblemIO dirs f = do
       hPutStrLn stderr err
       exitWith (ExitFailure 1)
     Right x -> return x
-
-withString :: (Symbolic a, Pretty a) => String -> (Problem Form -> IO (Problem a)) -> String -> IO String
-withString kind f x = do
-  let errorAt (UserState _ (At (Lexer.Pos l c) _)) err =
-        error $ "At line " ++ show l ++ ", column " ++ show c ++ ": " ++ err
-  case run_ (section (const True) <* eof)
-            (UserState initialState (scan x)) of
-    Ok (UserState (MkState p _) (At _ (Cons Eof _))) Nothing -> do
-      let prob = reverse p
-      res <- f prob
-      return (render (prettyProblem kind Normal res))
-    Ok s@(UserState _ (At _ (Cons Eof _))) (Just _) ->
-      errorAt s "can't handle include files"
-    Ok s _ ->
-      errorAt s "lexical error"
-    Parser.Error s msg -> errorAt s $ "parse error: " ++ msg
-    Expected s exp -> errorAt s $ "parse error: expected " ++ show exp
-
-encodeString :: String -> IO String
-encodeString = withString "fof" f
-  where
-    f = toFofIO globals (return . clausify clFlags) (tags False)
-    globals = GlobalFlags { quiet = True }
-    clFlags = ClausifyFlags { splitting = False }
 
 clausifyBox :: OptionParser (Problem Form -> IO CNF)
 clausifyBox = clausifyIO <$> globalFlags <*> clausifyFlags

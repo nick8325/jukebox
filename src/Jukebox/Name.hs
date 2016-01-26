@@ -1,7 +1,8 @@
 {-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances #-}
 module Jukebox.Name where
 
-import Control.Monad.State.Strict
+import Control.Monad
+import Control.Monad.Trans.State.Strict
 import qualified Data.Map.Strict as Map
 import Data.List
 import Data.Ord

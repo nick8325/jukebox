@@ -1,9 +1,10 @@
 -- Parse and typecheck TPTP clauses, stopping at include-clauses.
 
-{-# LANGUAGE BangPatterns, MultiParamTypeClasses, ImplicitParams, FlexibleInstances, TypeOperators, TypeFamilies #-}
+{-# LANGUAGE BangPatterns, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeOperators, TypeFamilies, CPP, DeriveFunctor #-}
 {-# OPTIONS_GHC -funfolding-use-threshold=1000 #-}
 module Jukebox.TPTP.ClauseParser where
 
+#include "errors.h"
 import Jukebox.TPTP.Parsec
 import Control.Applicative
 import Control.Monad
@@ -29,6 +30,8 @@ import qualified Jukebox.Name as Name
 data ParseState =
   MkState ![Input Form]                    -- problem being constructed, inputs are in reverse order
           !(Map String (Name ::: FunType)) -- functions in scope
+          !(Map String Variable)           -- variables in scope, for CNF
+          !Int64                           -- unique supply
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
 
@@ -37,7 +40,12 @@ data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = MkState [] Map.empty
+initialState = initialStateFrom []
+
+initialStateFrom :: [Name] -> ParseState
+initialStateFrom xs = MkState [] Map.empty Map.empty n
+  where
+    n = maximum (0:[succ m | Unique m _ <- xs])
 
 instance Stream TokenStream Token where
   primToken (At _ (Cons Eof _)) ok err fatal = err
@@ -46,14 +54,68 @@ instance Stream TokenStream Token where
   type Position TokenStream = TokenStream
   position = id
 
+-- The main parsing function.
+data ParseResult a =
+    ParseFailed FilePath L.Pos [String]
+  | ParseSucceeded a
+  | ParseStalled FilePath L.Pos FilePath (String -> ParseResult a)
+  deriving Functor
+
+instance Applicative ParseResult where
+  pure = return
+  (<*>) = liftM2 ($)
+
+instance Monad ParseResult where
+  return = ParseSucceeded
+  ParseFailed name pos err >>= _ = ParseFailed name pos err
+  ParseSucceeded x >>= f = f x
+  ParseStalled name pos name' k >>= f =
+    ParseStalled name pos name' (\xs -> k xs >>= f)
+
+parseProblem :: FilePath -> String -> ParseResult [Input Form]
+parseProblem name contents = parseProblemFrom initialState name contents
+
+parseProblemFrom :: ParseState -> FilePath -> String -> ParseResult [Input Form]
+parseProblemFrom state name contents =
+  fmap finalise $
+    aux Nothing name (UserState state (scan contents))
+  where
+    aux :: Maybe [Tag] -> FilePath -> ParsecState -> ParseResult ParseState
+    aux tags name state =
+      case run report (section (included tags)) state of
+        (UserState{userStream = At pos _}, Left err) ->
+          ParseFailed name pos err
+        (UserState{userState = state'}, Right Nothing) ->
+          return state'
+        (UserState state (input'@(At pos _)),
+         Right (Just (Include name' tags'))) ->
+          ParseStalled name pos name' $ \input -> do
+            state' <- aux (tags `merge` tags') name' (UserState state (scan input))
+            aux tags name (UserState state' input')
+
+    report :: ParsecState -> [String]
+    report UserState{userStream = At _ (Cons Eof _)} =
+      ["Unexpected end of file"]
+    report UserState{userStream = At _ (Cons L.Error _)} =
+      ["Lexical error"]
+    report UserState{userStream = At _ (Cons t _)} =
+      ["Unexpected " ++ show t]
+
+    included :: Maybe [Tag] -> Tag -> Bool
+    included Nothing _ = True
+    included (Just xs) x = x `elem` xs
+
+    merge :: Maybe [Tag] -> Maybe [Tag] -> Maybe [Tag]
+    merge Nothing x = x
+    merge x Nothing = x
+    merge (Just xs) (Just ys) = Just (xs `intersect` ys)
+
+    finalise :: ParseState -> Problem Form
+    finalise (MkState p _ _ _) = check (reverse p)
+
 -- Wee function for testing.
 testParser :: Parser a -> String -> Either [String] a
 testParser p s = snd (run (const []) p (UserState initialState (scan s)))
-
-getProblem :: Parser [Input Form]
-getProblem = do
-  MkState p _ <- getState
-  return (reverse p)
 
 -- Primitive parsers.
 
@@ -168,8 +230,8 @@ include = do
 
 newFormula :: Input Form -> Parser ()
 newFormula input = do
-  MkState p f <- getState
-  putState (MkState (input:p) f)
+  MkState p f v n <- getState
+  putState (MkState (input:p) f v n)
   
 newFunction :: String -> FunType -> Parser (Name ::: FunType)
 newFunction name ty' = do
@@ -205,11 +267,11 @@ typeError f@(x ::: ty) args' = do
 {-# INLINE lookupFunction #-}
 lookupFunction :: FunType -> String -> Parser (Name ::: FunType)
 lookupFunction def x = do
-  MkState p f <- getState
+  MkState p f v n <- getState
   case Map.lookup x f of
     Nothing -> do
       let decl = name x ::: def
-      putState (MkState p (Map.insert x decl f))
+      putState (MkState p (Map.insert x decl f) v n)
       return decl
     Just f -> return f
 
@@ -220,18 +282,12 @@ individual = Type (name "$i") Infinite Infinite
 -- Parsing formulae.
 
 cnf, tff, fof :: Parser Form
-cnf =
-  let ?binder = fatalError "Can't use quantifiers in CNF"
-      ?ctx = Nothing
-  in fmap (ForAll . bind) formula
-tff =
-  let ?binder = varDecl True
-      ?ctx = Just Map.empty
-  in formula
-fof =
-  let ?binder = varDecl False
-      ?ctx = Just Map.empty
-  in formula
+cnf = do
+  MkState p f _ n <- getState
+  putState (MkState p f Map.empty n)
+  formula NoQuantification __
+tff = formula Typed Map.empty
+fof = formula Untyped Map.empty
 
 -- We cannot always know whether what we are parsing is a formula or a
 -- term, since we don't have lookahead. For example, p(x) might be a
@@ -272,10 +328,11 @@ class TermLike a where
   -- Convert from a Thing.
   fromThing :: Thing -> Parser a
   -- Parse a variable occurrence as a term on its own, if that's allowed.
-  var :: (?ctx :: Maybe (Map String Variable)) => Parser a
+  var :: Mode -> Map String Variable -> Parser a
   -- A parser for this type.
-  parser :: (?binder :: Parser Variable,
-             ?ctx :: Maybe (Map String Variable)) => Parser a
+  parser :: Mode -> Map String Variable -> Parser a
+
+data Mode = Typed | Untyped | NoQuantification
 
 instance TermLike Form where
   {-# INLINE fromThing #-}
@@ -283,7 +340,7 @@ instance TermLike Form where
   fromThing (Term _) = mzero
   fromThing (Formula f) = return f
   -- A variable itself is not a valid formula.
-  var = mzero
+  var _ _ = mzero
   parser = formula
 
 instance TermLike Term where
@@ -292,55 +349,61 @@ instance TermLike Term where
   fromThing (Term t) = return t
   fromThing (Formula _) = mzero
   parser = term
-  var = do
+
+  {-# INLINE var #-}
+  var NoQuantification _ = do
     x <- variable
-    case ?ctx of
-      Nothing ->
-        return (Var (name x ::: individual))
-      Just ctx ->
-        case Map.lookup x ctx of
-          Just v -> return (Var v)
-          Nothing -> fatalError $ "unbound variable " ++ x
+    MkState p f ctx n <- getState
+    case Map.lookup x ctx of
+      Just v -> return (Var v)
+      Nothing -> do
+        let v = Unique (n+1) x ::: individual
+        putState (MkState p f (Map.insert x v ctx) (n+1))
+        return (Var v)
+  var mode ctx = do
+    x <- variable
+    case Map.lookup x ctx of
+      Just v -> return (Var v)
+      Nothing -> fatalError $ "unbound variable " ++ x
 
 instance TermLike Thing where
   fromThing = return
-  var = fmap Term var
+  var mode ctx = fmap Term (var mode ctx)
   parser = formula
 
 -- Types that can represent formulae. These are the types on which
 -- you can use 'formula'.
 class TermLike a => FormulaLike a where
   fromFormula :: Form -> a
+
 instance FormulaLike Form where fromFormula = id
 instance FormulaLike Thing where fromFormula = Formula
 
 -- An atomic expression.
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Term #-}
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Form #-}
-{-# SPECIALISE term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Thing #-}
-term :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable), TermLike a) => Parser a
-term = function <|> var <|> parens parser
+{-# INLINEABLE term #-}
+term :: TermLike a => Mode -> Map String Variable -> Parser a
+term mode ctx = function <|> var mode ctx <|> parens (parser mode ctx)
   where {-# INLINE function #-}
         function = do
           x <- atom
-          args <- parens (sepBy1 term (punct Comma)) <|> return []
+          args <- parens (sepBy1 (term mode ctx) (punct Comma)) <|> return []
           fromThing (Apply x args)
 
 literal, unitary, quantified, formula ::
-  (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable), FormulaLike a) => Parser a
+  FormulaLike a => Mode -> Map String Variable -> Parser a
 {-# INLINE literal #-}
-literal = true <|> false <|> binary <?> "literal"
+literal mode ctx = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
         true = do { defined DTrue; return (fromFormula (And [])) }
         {-# INLINE false #-}
         false = do { defined DFalse; return (fromFormula (Or [])) }
         binary = do
-          x <- term :: Parser Thing
+          x <- term mode ctx :: Parser Thing
           let {-# INLINE f #-}
               f p sign = do
                punct p
                lhs <- fromThing x :: Parser Term
-               rhs <- term :: Parser Term
+               rhs <- term mode ctx :: Parser Term
                let form = Literal . sign $ lhs :=: rhs
                when (typ lhs /= typ rhs) $
                  fatalError $ "Type mismatch in equality '" ++ prettyShow form ++ 
@@ -349,36 +412,33 @@ literal = true <|> false <|> binary <?> "literal"
                return (fromFormula form)
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
-{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Form #-}
-{-# SPECIALISE unitary :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Thing #-}
-unitary = negation <|> quantified <|> literal
+{-# INLINEABLE unitary #-}
+unitary mode ctx = negation <|> quantified mode ctx <|> literal mode ctx
   where {-# INLINE negation #-}
         negation = do
           punct L.Not
-          fmap (fromFormula . Not) (unitary :: Parser Form)
+          fmap (fromFormula . Not) (unitary mode ctx :: Parser Form)
 
 {-# INLINE quantified #-}
-quantified = do
+quantified mode ctx = do
   q <- (punct L.ForAll >> return ForAll) <|>
        (punct L.Exists >> return Exists)
-  vars <- bracks (sepBy1 ?binder (punct Comma))
-  let Just ctx = ?ctx
-      ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ctx vars
+  vars <- bracks (sepBy1 (binder mode) (punct Comma))
+  let ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ctx vars
   punct Colon
-  rest <- let ?ctx = Just ctx' in (unitary :: Parser Form)
+  rest <- unitary mode ctx' :: Parser Form
   return (fromFormula (q (Bind (Set.fromList vars) rest)))
 
 -- A general formula.
-{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Form #-}
-{-# SPECIALISE formula :: (?binder :: Parser Variable, ?ctx :: Maybe (Map String Variable)) => Parser Thing #-}
-formula = do
-  x <- unitary :: Parser Thing
+{-# INLINEABLE formula #-}
+formula mode ctx = do
+  x <- unitary mode ctx :: Parser Thing
   let binop op t u = op [t, u]
       {-# INLINE connective #-}
       connective p op = do
         punct p
         lhs <- fromThing x
-        rhs <- formula :: Parser Form
+        rhs <- formula mode ctx :: Parser Form
         return (fromFormula (op lhs rhs))
   connective L.And (binop And) <|> connective L.Or (binop Or) <|>
    connective Iff Equiv <|>
@@ -389,14 +449,16 @@ formula = do
    connective L.Nand (Connective Nand) <|>
    fromThing x
 
--- varDecl True: parse a typed variable binding X:a or an untyped one X
--- varDecl False: parse an untyped variable binding X
-varDecl :: Bool -> Parser Variable
-varDecl typed = do
+binder :: Mode -> Parser Variable
+binder NoQuantification =
+  fatalError "Used a quantifier in a CNF clause"
+binder mode = do
   x <- variable
   ty <- do { punct Colon;
-             when (not typed) $
-               fatalError "Used a typed quantification in an untyped formula";
+             case mode of {
+               Typed -> return ();
+               Untyped ->
+                 fatalError "Used a typed quantification in an untyped formula" };
              type_ } <|> return individual
   return (name x ::: ty)
 

@@ -1,7 +1,8 @@
 module Jukebox.UnionFind(UF, Replacement((:>)), (=:=), rep, evalUF, execUF, runUF, S, isRep, initial, reps) where
 
 import Prelude hiding (min)
-import Control.Monad.State.Strict
+import Control.Monad
+import Control.Monad.Trans.State.Strict
 import Data.Map.Strict(Map)
 import qualified Data.Map as Map
 

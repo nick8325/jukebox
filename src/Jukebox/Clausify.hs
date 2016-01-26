@@ -6,8 +6,10 @@ import qualified Jukebox.Form as Form
 import Jukebox.Name
 import Data.List( maximumBy, sortBy, partition )
 import Data.Ord
-import Control.Monad.Reader
-import Control.Monad.State.Strict
+import Control.Monad
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.State.Strict
 import Jukebox.Utils
 import Jukebox.Options
 import Control.Applicative
@@ -402,15 +404,15 @@ run x = evalStateT (runReaderT x "") 0
 
 skolemName :: Named a => String -> a -> M Name
 skolemName prefix v = do
-  i <- get
-  put (i+1)
+  i <- lift get
+  lift $ put (i+1)
   s <- getName
   lift . lift . newName $ prefix ++ show i ++ concat [ "_" ++ t | t <- [s, base v], not (null t) ]
 
 nextSk :: M Int
 nextSk = do
-  i <- get
-  put (i+1)
+  i <- lift get
+  lift $ put (i+1)
   return i
 
 withName :: Tag -> M a -> M a
