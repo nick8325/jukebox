@@ -17,6 +17,16 @@ import Data.List
 import Jukebox.Name
 import System.IO
 
+parseString :: String -> IO (Problem Form)
+parseString xs =
+  case Parser.parseProblem "<string>" xs of
+    Parser.ParseFailed loc msg ->
+      error ("Parse error at " ++ show loc ++ ":\n" ++ unlines msg)
+    Parser.ParseSucceeded prob ->
+      return prob
+    Parser.ParseStalled loc _ _ ->
+      error ("Include directive found at " ++ show loc)
+
 parseProblem :: [FilePath] -> FilePath -> IO (Either String (Problem Form))
 parseProblem dirs name = parseProblemWith (findFileTPTP dirs) name
 
