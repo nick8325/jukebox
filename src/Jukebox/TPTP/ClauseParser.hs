@@ -56,9 +56,9 @@ instance Stream TokenStream Token where
 
 -- The main parsing function.
 data ParseResult a =
-    ParseFailed FilePath L.Pos [String]
+    ParseFailed Location [String]
   | ParseSucceeded a
-  | ParseStalled FilePath L.Pos FilePath (String -> ParseResult a)
+  | ParseStalled Location FilePath (String -> ParseResult a)
   deriving Functor
 
 instance Applicative ParseResult where
@@ -67,10 +67,19 @@ instance Applicative ParseResult where
 
 instance Monad ParseResult where
   return = ParseSucceeded
-  ParseFailed name pos err >>= _ = ParseFailed name pos err
+  ParseFailed loc err >>= _ = ParseFailed loc err
   ParseSucceeded x >>= f = f x
-  ParseStalled name pos name' k >>= f =
-    ParseStalled name pos name' (\xs -> k xs >>= f)
+  ParseStalled loc name k >>= f =
+    ParseStalled loc name (\xs -> k xs >>= f)
+
+data Location = Location FilePath Integer Integer
+instance Show Location where
+  show (Location file row col) =
+    file ++ " (line " ++ show row ++ ", column " ++ show col ++ ")"
+
+makeLocation :: FilePath -> L.Pos -> Location
+makeLocation file (L.Pos row col) =
+  Location file (fromIntegral row) (fromIntegral col)
 
 parseProblem :: FilePath -> String -> ParseResult [Input Form]
 parseProblem name contents = parseProblemFrom initialState name contents
@@ -84,12 +93,12 @@ parseProblemFrom state name contents =
     aux tags name state =
       case run report (section (included tags)) state of
         (UserState{userStream = At pos _}, Left err) ->
-          ParseFailed name pos err
+          ParseFailed (makeLocation name pos) err
         (UserState{userState = state'}, Right Nothing) ->
           return state'
         (UserState state (input'@(At pos _)),
          Right (Just (Include name' tags'))) ->
-          ParseStalled name pos name' $ \input -> do
+          ParseStalled (makeLocation name pos) name' $ \input -> do
             state' <- aux (tags `merge` tags') name' (UserState state (scan input))
             aux tags name (UserState state' input')
 

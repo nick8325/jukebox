@@ -23,27 +23,27 @@ parseProblem dirs name = parseProblemWith (findFileTPTP dirs) name
 parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> FilePath -> IO (Either String (Problem Form))
 parseProblemWith findFile name =
   runExceptT $ do
-    file <- readInFile "<command line>" (Pos 0 0) name
+    file <- readInFile (Parser.Location "<command line>" 0 0) name
     process (Parser.parseProblem name file)
 
   where
-    err file (Pos l c) msg = throwE msg'
+    err loc msg = throwE msg'
       where
-        msg' = "Error at " ++ file ++ " (line " ++ show l ++ ", column " ++ show c ++ "):\n" ++ msg
+        msg' = "Error in " ++ show loc ++ ":\n" ++ msg
 
-    readInFile parent pos name = do
+    readInFile pos name = do
       mfile <- liftIO (findFile name)
       case mfile of
         Nothing ->
-          err parent pos ("File '" ++ name ++ "' not found")
+          err pos ("File '" ++ name ++ "' not found")
         Just file ->
           ExceptT $ do
             liftIO $ hPutStrLn stderr $ "Reading " ++ file ++ "..."
             fmap Right (readFile file) `catch`
               \(e :: IOException) -> return (Left (show e))
 
-    process (Parser.ParseFailed name pos msg) = err name pos (intercalate "\n" msg)
+    process (Parser.ParseFailed loc msg) = err loc (intercalate "\n" msg)
     process (Parser.ParseSucceeded prob) = return prob
-    process (Parser.ParseStalled parent pos name cont) = do
-      file <- readInFile parent pos name
+    process (Parser.ParseStalled loc name cont) = do
+      file <- readInFile loc name
       process (cont file)
