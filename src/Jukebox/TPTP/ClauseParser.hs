@@ -28,10 +28,11 @@ import qualified Jukebox.Name as Name
 -- The parser monad
 
 data ParseState =
-  MkState ![Input Form]                    -- problem being constructed, inputs are in reverse order
-          !(Map String (Name ::: FunType)) -- functions in scope
-          !(Map String Variable)           -- variables in scope, for CNF
-          !Int64                           -- unique supply
+  MkState ![Input Form]          -- problem being constructed, inputs are in reverse order
+          !(Map String Type)     -- types in scope
+          !(Map String Function) -- functions in scope
+          !(Map String Variable) -- variables in scope, for CNF
+          !Int64                 -- unique supply
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
 
@@ -40,10 +41,10 @@ data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = initialStateFrom []
+initialState = initialStateFrom [] Map.empty Map.empty
 
-initialStateFrom :: [Name] -> ParseState
-initialStateFrom xs = MkState [] Map.empty Map.empty n
+initialStateFrom :: [Name] -> Map String Type -> Map String (Name ::: FunType) -> ParseState
+initialStateFrom xs tys fs = MkState [] tys fs Map.empty n
   where
     n = maximum (0:[succ m | Unique m _ <- xs])
 
@@ -120,7 +121,7 @@ parseProblemFrom state name contents =
     merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
     finalise :: ParseState -> Problem Form
-    finalise (MkState p _ _ _) = check (reverse p)
+    finalise (MkState p _ _ _ _) = check (reverse p)
 
 -- Wee function for testing.
 testParser :: Parser a -> String -> Either [String] a
@@ -239,8 +240,8 @@ include = do
 
 newFormula :: Input Form -> Parser ()
 newFormula input = do
-  MkState p f v n <- getState
-  putState (MkState (input:p) f v n)
+  MkState p t f v n <- getState
+  putState (MkState (input:p) t f v n)
   
 newFunction :: String -> FunType -> Parser (Name ::: FunType)
 newFunction name ty' = do
@@ -273,14 +274,25 @@ typeError f@(x ::: ty) args' = do
                    " but was applied to " ++ show (length (args ty)) ++
                    plural (length (args ty)) " argument" " arguments"
 
+{-# INLINE lookupType #-}
+lookupType :: String -> Parser Type
+lookupType xs = do
+  MkState p t f v n <- getState
+  case Map.lookup xs t of
+    Nothing -> do
+      let ty = Type (name xs) Infinite Infinite
+      putState (MkState p (Map.insert xs ty t) f v n)
+      return ty
+    Just ty -> return ty
+
 {-# INLINE lookupFunction #-}
 lookupFunction :: FunType -> String -> Parser (Name ::: FunType)
 lookupFunction def x = do
-  MkState p f v n <- getState
+  MkState p t f v n <- getState
   case Map.lookup x f of
     Nothing -> do
       let decl = name x ::: def
-      putState (MkState p (Map.insert x decl f) v n)
+      putState (MkState p t (Map.insert x decl f) v n)
       return decl
     Just f -> return f
 
@@ -292,8 +304,8 @@ individual = Type (name "$i") Infinite Infinite
 
 cnf, tff, fof :: Parser Form
 cnf = do
-  MkState p f _ n <- getState
-  putState (MkState p f Map.empty n)
+  MkState p t f _ n <- getState
+  putState (MkState p t f Map.empty n)
   formula NoQuantification __
 tff = formula Typed Map.empty
 fof = formula Untyped Map.empty
@@ -362,12 +374,12 @@ instance TermLike Term where
   {-# INLINE var #-}
   var NoQuantification _ = do
     x <- variable
-    MkState p f ctx n <- getState
+    MkState p t f ctx n <- getState
     case Map.lookup x ctx of
       Just v -> return (Var v)
       Nothing -> do
         let v = Unique (n+1) x ::: individual
-        putState (MkState p f (Map.insert x v ctx) (n+1))
+        putState (MkState p t f (Map.insert x v ctx) (n+1))
         return (Var v)
   var mode ctx = do
     x <- variable
@@ -474,7 +486,7 @@ binder mode = do
 -- Parse a type
 type_ :: Parser Type
 type_ =
-  do { x <- atom; return (Type (name x) Infinite Infinite) } <|>
+  do { x <- atom; lookupType x } <|>
   do { defined DI; return individual }
 
 -- A little data type to help with parsing types.
