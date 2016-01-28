@@ -636,7 +636,8 @@ mapType f0 = mapType'
         term (f :@: ts) = fun f :@: map term ts
         term (Var x) = Var (var x)
 
-        var (x ::: ty) = x ::: f ty
-        fun (x ::: FunType args res) = x ::: FunType (map f args) (f res)
+        var = memo $ \(x ::: ty) -> x ::: f ty
+        fun = memo $ \(x ::: FunType args res) ->
+                       x ::: FunType (map f args) (f res)
 
         f = memo f0
