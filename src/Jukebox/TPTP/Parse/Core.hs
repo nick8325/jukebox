@@ -2,7 +2,7 @@
 
 {-# LANGUAGE BangPatterns, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeOperators, TypeFamilies, CPP, DeriveFunctor #-}
 {-# OPTIONS_GHC -funfolding-use-threshold=1000 #-}
-module Jukebox.TPTP.ClauseParser where
+module Jukebox.TPTP.Parse.Core where
 
 #include "errors.h"
 import Jukebox.TPTP.Parsec

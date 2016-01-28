@@ -1,8 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
-module Jukebox.TPTP.ParseProblem where
+module Jukebox.TPTP.Parse where
 
 import Jukebox.TPTP.FindFile
-import qualified Jukebox.TPTP.ClauseParser as Parser
+import qualified Jukebox.TPTP.Parse.Core as Parser
 import Jukebox.TPTP.Lexer hiding (Include, Error)
 import Jukebox.TPTP.Parsec
 import Jukebox.TPTP.Print

@@ -8,7 +8,7 @@ import Control.Applicative hiding (Const)
 import Control.Monad
 import Jukebox.Utils
 import Jukebox.TPTP.Parsec hiding (run)
-import Jukebox.TPTP.ClauseParser hiding (newFunction, Term)
+import Jukebox.TPTP.Parse.Core hiding (newFunction, Term)
 import Jukebox.TPTP.Print
 import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, name, Var)
 import Text.PrettyPrint.HughesPJ hiding (parens)

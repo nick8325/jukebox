@@ -2,7 +2,7 @@
 
 module Jukebox.TPTP.ParseSnippet where
 
-import Jukebox.TPTP.ClauseParser as TPTP.ClauseParser
+import Jukebox.TPTP.Parse.Core as TPTP.Parse.Core
 import Jukebox.TPTP.Parsec as TPTP.Parsec
 import Jukebox.TPTP.Lexer
 import Jukebox.Name
@@ -13,8 +13,8 @@ import Data.List
 import Control.Monad.Trans.State.Strict
 
 tff, cnf :: [(String, Type)] -> [(String, Function)] -> String -> Form
-tff = form TPTP.ClauseParser.tff
-cnf = form TPTP.ClauseParser.cnf
+tff = form TPTP.Parse.Core.tff
+cnf = form TPTP.Parse.Core.cnf
 
 form :: Symbolic a => Parser a -> [(String, Type)] -> [(String, Function)] -> String -> a
 form parser types funs0 str =

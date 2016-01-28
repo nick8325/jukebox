@@ -8,7 +8,7 @@ import Jukebox.TPTP.Print
 import Control.Monad
 import Control.Applicative
 import Jukebox.Clausify hiding (run)
-import Jukebox.TPTP.ParseProblem
+import Jukebox.TPTP.Parse
 import Jukebox.Monotonox.Monotonicity hiding (guards)
 import Jukebox.Monotonox.ToFOF
 import System.Exit

@@ -46,11 +46,11 @@ Library
     Jukebox.Sat
     Jukebox.SatMin
     Jukebox.Toolbox
-    Jukebox.TPTP.ClauseParser
+    Jukebox.TPTP.Parse.Core
     Jukebox.TPTP.FindFile
     Jukebox.TPTP.Lexer
     Jukebox.TPTP.Parsec
-    Jukebox.TPTP.ParseProblem
+    Jukebox.TPTP.Parse
     Jukebox.TPTP.ParseSnippet
     Jukebox.TPTP.Print
     Jukebox.UnionFind
