@@ -200,6 +200,3 @@ printInferredBox = pure $ \(prob, rep) -> do
   forM_ (types prob) $ \ty ->
     putStrLn $ show ty ++ " => " ++ show (rep ty)
   return prob
-
-equinoxBox :: OptionParser (Problem Clause -> IO Answer)
-equinoxBox = pure (const (return (NoAnswer GaveUp))) -- A highly sophisticated proof method. We are sure to win CASC! :)

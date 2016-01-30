@@ -42,21 +42,6 @@ cnf = tool info pipeline
          oneConjectureBox =>>=
          prettyPrintClausesBox)
 
-justparser = tool info pipeline
-  where
-    info = Tool "parser" "Parser" "1"
-                "Just parse the problem"
-    pipeline =
-      greetingBox info =>>
-      allFilesBox <*>
-        (parseProblemBox =>>=
-         clausifyBox =>>=
-         oneConjectureBox =>>=
-         inferBox =>>=
-         printInferredBox =>>=
-         annotateMonotonicityBox =>>=
-         prettyPrintClausesBox)
-
 guessmodel = tool info pipeline
   where
     info = Tool "guessmodel" "Infinite model guesser" "1"
@@ -67,17 +52,6 @@ guessmodel = tool info pipeline
         (parseProblemBox =>>=
          guessModelBox =>>=
          prettyPrintProblemBox)
-
-equinox = tool info pipeline
-  where
-    info = Tool "equinox" "Equinox" "7"
-                "Prove a first-order problem"
-    pipeline =
-      greetingBox info =>>
-      allFilesBox <*>
-        (parseProblemBox =>>=
-         clausifyBox =>>=
-         allObligsBox <*> equinoxBox)
 
 jukebox = Tool "jukebox" "Jukebox" "1"
                "A first-order logic toolbox"
