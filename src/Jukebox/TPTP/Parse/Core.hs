@@ -46,7 +46,7 @@ initialState = initialStateFrom [] Map.empty Map.empty
 initialStateFrom :: [Name] -> Map String Type -> Map String (Name ::: FunType) -> ParseState
 initialStateFrom xs tys fs = MkState [] tys fs Map.empty n
   where
-    n = maximum (0:[succ m | Unique m _ <- xs])
+    n = maximum (0:[succ m | Unique m _ _ <- xs])
 
 instance Stream TokenStream Token where
   primToken (At _ (Cons Eof _)) ok err fatal = err
@@ -378,7 +378,7 @@ instance TermLike Term where
     case Map.lookup x ctx of
       Just v -> return (Var v)
       Nothing -> do
-        let v = Unique (n+1) x ::: individual
+        let v = Unique (n+1) x defaultRenamer ::: individual
         putState (MkState p t f (Map.insert x v ctx) (n+1))
         return (Var v)
   var mode ctx = do
@@ -483,7 +483,7 @@ binder mode = do
              type_ } <|> return individual
   MkState p t f v n <- getState
   putState (MkState p t f v (n+1))
-  return (Unique n x ::: ty)
+  return (Unique n x defaultRenamer ::: ty)
 
 -- Parse a type
 type_ :: Parser Type

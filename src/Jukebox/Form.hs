@@ -620,6 +620,33 @@ checkBinder vs s | not debugging = s
                  | Set.null (free (Map.elems s) `Set.intersection` vs) = s
                  | otherwise = error "Form.checkBinder: capturing substitution"
 
+-- Apply a function to each name, while preserving sharing.
+mapName :: Symbolic a => (Name -> Name) -> a -> a
+mapName f0 = rename
+  where
+    rename :: Symbolic a => a -> a
+    rename t =
+      case typeOf t of
+        Term -> term t
+        Bind_ -> bind t
+        _ -> recursively rename t
+
+    bind :: Symbolic a => Bind a -> Bind a
+    bind (Bind vs t) =  Bind (Set.map var vs) (rename t)
+    term (f :@: ts) = fun f :@: map term ts
+    term (Var x) = Var (var x)
+
+    var = memo $ \(x ::: ty) -> f x ::: type_ ty
+    fun = memo $ \(x ::: FunType args res) ->
+                   f x ::: FunType (map type_ args) (type_ res)
+    type_ =
+      memo $ \ty ->
+        case ty of
+          O -> O
+          Type name x y -> Type (f name) x y
+
+    f = memo f0
+
 -- Apply a function to each type, while preserving sharing.
 mapType :: Symbolic a => (Type -> Type) -> a -> a
 mapType f0 = mapType'

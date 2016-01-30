@@ -1,23 +1,27 @@
 -- Pretty-printing of formulae. WARNING: icky code inside!
-{-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances, CPP, GADTs #-}
 module Jukebox.TPTP.Print(prettyShow, showClauses, pPrintClauses, showProblem, pPrintProblem)
        where
 
+#include "errors.h"
 import Data.Char
 import Text.PrettyPrint.HughesPJ
 import qualified Jukebox.TPTP.Lexer as L
 import Jukebox.Form
 import Data.List
 import qualified Data.Map.Strict as Map
+import Data.Map(Map)
 import qualified Data.Set as Set
+import Data.Set(Set)
 import Jukebox.Name
 import Jukebox.Utils
 import Text.PrettyPrint.HughesPJClass
+import Data.Symbol
 
 pPrintClauses :: Problem Clause -> Doc
 pPrintClauses prob0
   | isFof prob = vcat (map (pPrintInput "cnf" pPrint) prob)
-  | otherwise  = pPrintProblem (map (fmap toForm) prob)
+  | otherwise  = pPrintProblem (map (fmap toForm) prob0)
   where
     prob = prettyNames prob0
 
@@ -197,4 +201,43 @@ instance Show Kind where
   show Question = "question"
 
 prettyNames :: Symbolic a => a -> a
-prettyNames = id
+prettyNames x0 = mapName replace x
+  where
+    replace name@Fixed{}  = name
+    replace name@Unique{} = Map.findWithDefault __ name sub
+
+    sub = globalsScope `Map.union` pretty globalsUsed x
+
+    pretty :: Symbolic a => Set String -> a -> Map Name Name
+    pretty used x =
+      case typeOf x of
+        Bind_ -> bind used x
+        _ -> collect (pretty used) x
+
+    bind :: Symbolic a => Set String -> Bind a -> Map Name Name
+    bind used (Bind vs x) =
+      scope `Map.union` pretty used' x
+      where
+        (scope, used') = add used (map name (Set.toList vs))
+
+    add used names =
+      foldr add1 (Map.empty, used) names
+
+    add1 (Fixed xs) (scope, used) =
+      (scope, Set.insert (unintern xs) used)
+    add1 name@(Unique _ base f) (scope, used) =
+      (Map.insert name (Fixed (intern winner)) scope,
+       Set.insert winner used)
+      where
+        cands  = [f base n | n <- [0..]]
+        winner = head [c | c <- cands, not (Set.member c used)]
+
+    globals =
+      usort $
+        [ f | f ::: _ <- functions x ] ++
+        [ ty | Type ty _ _ <- types x ]
+    (globalsScope, globalsUsed) = add fixed globals
+
+    fixed = Set.fromList [ unintern xs | Fixed xs <- names x ]
+
+    x = run x0 uniqueNames

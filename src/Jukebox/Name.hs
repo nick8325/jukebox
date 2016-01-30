@@ -9,16 +9,37 @@ import Data.Ord
 import Jukebox.Utils
 import Data.Int
 import Data.Symbol
+import Data.Char
 
 data Name =
     Fixed {-# UNPACK #-} !Symbol
-  | Unique {-# UNPACK #-} !Int64 String
+  | Unique {-# UNPACK #-} !Int64 String Renamer
+
+type Renamer = String -> Int -> String
 
 base :: Named a => a -> String
 base x =
   case name x of
     Fixed xs -> unintern xs
-    Unique _ xs -> xs
+    Unique _ xs _ -> xs
+
+renamer :: Named a => a -> Renamer
+renamer x =
+  case name x of
+    Fixed _ -> defaultRenamer
+    Unique _ _ f -> f
+
+defaultRenamer :: Renamer
+defaultRenamer xs 0 = xs
+defaultRenamer xs n = xs ++ sep ++ show (n+1)
+  where
+    sep
+      | not (null xs) && isDigit (last xs) = "_"
+      | otherwise = ""
+
+withRenamer :: Name -> Renamer -> Name
+Fixed x `withRenamer` _ = Fixed x
+Unique n xs _ `withRenamer` f = Unique n xs f
 
 instance Eq Name where
   x == y = compareName x == compareName y
@@ -28,11 +49,11 @@ instance Ord Name where
 
 compareName :: Name -> Either Symbol Int64
 compareName (Fixed xs) = Left xs
-compareName (Unique n _) = Right n
+compareName (Unique n _ _) = Right n
 
 instance Show Name where
   show (Fixed xs) = unintern xs
-  show (Unique n xs) = xs ++ "@" ++ show n
+  show (Unique n xs f) = f xs 0 ++ "@" ++ show n
 
 class Named a where
   name :: a -> Name
@@ -63,7 +84,7 @@ newtype NameM a =
 
 runNameM :: [Name] -> NameM a -> a
 runNameM xs m =
-  evalState (unNameM m) (maximum (0:[ succ n | Unique n _ <- xs ]))
+  evalState (unNameM m) (maximum (0:[ succ n | Unique n _ _ <- xs ]))
 
 newName :: Named a => a -> NameM Name
 newName x = NameM $ do
@@ -71,4 +92,4 @@ newName x = NameM $ do
   let idx' = idx+1
   when (idx' < 0) $ error "Name.newName: too many names"
   put $! idx'
-  return $! Unique idx' (base x)
+  return $! Unique idx' (base x) (renamer x)
