@@ -1,10 +1,10 @@
 Name: jukebox
-Version: 0.1.6
+Version: 0.2
 Cabal-version: >= 1.8
 Build-type: Simple
 Author: Nick Smallbone
 Maintainer: nicsma@chalmers.se
-Copyright: 2009-2014 Nick Smallbone, Koen Claessen, Ann Lillieström
+Copyright: 2009-2016 Nick Smallbone, Koen Claessen, Ann Lillieström
 
 Category:            Logic
 
