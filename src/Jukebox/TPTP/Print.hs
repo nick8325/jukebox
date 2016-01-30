@@ -17,7 +17,7 @@ import Text.PrettyPrint.HughesPJClass
 pPrintClauses :: Problem Clause -> Doc
 pPrintClauses prob0
   | isFof prob = vcat (map (pPrintInput "cnf" pPrint) prob)
-  | otherwise  = pPrint (map (fmap toForm) prob)
+  | otherwise  = pPrintProblem (map (fmap toForm) prob)
   where
     prob = prettyNames prob0
 
@@ -78,7 +78,8 @@ instance Show Clause where
   show = prettyShow
 
 instance Pretty Type where
-  pPrint = text . escapeAtom . show . tname
+  pPrint O = text "$o"
+  pPrint ty = text . escapeAtom . show . tname $ ty
 
 instance Show Type where
   show = prettyShow
