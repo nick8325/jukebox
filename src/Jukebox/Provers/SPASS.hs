@@ -42,12 +42,11 @@ spassFlags =
       False
       (pure True)
 
-runSPASS :: (Pretty a, Symbolic a) => SPASSFlags -> Problem a -> IO Answer
+runSPASS :: SPASSFlags -> Problem Form -> IO Answer
 runSPASS flags prob
   | not (isFof prob) = error "runSPASS: SPASS doesn't support many-typed problems"
   | otherwise = do
-    (code, str) <- popen (spass flags) spassFlags
-                   (render (prettyProblem "cnf" Normal prob))
+    (code, str) <- popen (spass flags) spassFlags (show prob)
     return (extractAnswer str)
   where
     spassFlags =

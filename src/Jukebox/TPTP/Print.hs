@@ -1,6 +1,6 @@
 -- Pretty-printing of formulae. WARNING: icky code inside!
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances #-}
-module Jukebox.TPTP.Print(prettyShow, chattyShow, prettyFormula, prettyProblem, Level(..), Pretty)
+module Jukebox.TPTP.Print(prettyShow, showClauses, pPrintClauses, showProblem, pPrintProblem)
        where
 
 import Data.Char
@@ -12,40 +12,93 @@ import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
 import Jukebox.Name
 import Jukebox.Utils
+import Text.PrettyPrint.HughesPJClass
 
-data Level = Normal | Chatty deriving (Eq, Ord)
+pPrintClauses :: Problem Clause -> Doc
+pPrintClauses prob0
+  | isFof prob = vcat (map (pPrintInput "cnf" pPrint) prob)
+  | otherwise  = pPrint (map (fmap toForm) prob)
+  where
+    prob = prettyNames prob0
 
-class Pretty a where
-  pPrint :: Int -> Level -> (Name -> String) -> a -> Doc
+showClauses :: Problem Clause -> String
+showClauses = show . pPrintClauses
 
-instance Pretty Name where
-  pPrint _ _ env x = text (env x)
+pPrintProblem :: Problem Form -> Doc
+pPrintProblem prob0
+  | isReallyFof prob = vcat (map (pPrintInput "fof" (pPrintFof 0)) prob)
+  | otherwise = vcat (pPrintDecls prob ++ map (pPrintInput "tff" (pPrintTff 0)) prob)
+  where
+    prob = prettyNames prob0
 
-pPrintSymbol :: Bool -> Int -> Level -> (Name -> String) -> Name ::: Type -> Doc
-pPrintSymbol full prec lev env (x ::: t)
-  | full || lev >= Chatty = pPrint prec lev env x <> colon <> pPrint prec lev env t
-  | otherwise = pPrint prec lev env x
+showProblem :: Problem Form -> String
+showProblem = show . pPrintProblem
 
-pPrintBinding prec lev env (x ::: t) =
-  pPrintSymbol True prec lev env (x ::: typ t)
+isReallyFof :: Symbolic a => a -> Bool
+isReallyFof = all p . types
+  where
+    p O = True
+    p (Type ty _ _) | ty == i = True
+    p _ = False
+    i = name "$i"
 
-pPrintUse prec lev env (x ::: t) =
-  pPrintSymbol False prec lev env (x ::: typ t)
+pPrintDecls :: Problem Form -> [Doc]
+pPrintDecls prob =
+  map typeDecl (usort (types prob)) ++
+  map funcDecl (usort (functions prob))
+  where
+    typeDecl O = empty
+    typeDecl (Type ty _ _) | ty == i = empty
+    typeDecl ty = typeClause ty (text "$tType")
+    i = name "$i"
+
+    funcDecl (f ::: ty) = typeClause f (pPrint ty)
+    typeClause name ty =
+      pPrintClause "tff" "type" "type"
+        (pPrint name <> colon <+> ty)
+
+instance Pretty a => Pretty (Input a) where
+  pPrint = pPrintInput "tff" pPrint
+instance Pretty a => Show (Input a) where
+  show = prettyShow
+
+pPrintInput :: String -> (a -> Doc) -> Input a -> Doc
+pPrintInput family pp i =
+  pPrintClause family (tag i) (show (kind i)) (pp (what i))
+
+pPrintClause :: String -> String -> String -> Doc -> Doc
+pPrintClause family name kind rest =
+  text family <> parens (sep [text name <> comma <+> text kind <> comma, rest]) <> text "."
+
+instance Pretty Clause where
+  pPrint c@(Clause (Bind vs ts)) =
+    pPrintConnective undefined 0 "$false" "|" (map Literal ts)
+
+instance Show Clause where
+  show = prettyShow
 
 instance Pretty Type where
-  pPrint prec lev env O = text "$o"
-  pPrint prec lev env t
-    | lev >= Chatty = 
-      hcat . punctuate (text "/") $
-        [text (escapeAtom (env (tname t)))] ++
-        [size (tmonotone t) | tmonotone t /= Infinite || tsize t /= Infinite] ++
-        [size (tsize t) | tsize t /= Infinite]
-    | otherwise = text (escapeAtom (env (tname t)))
-    where size Infinite = empty
-          size (Finite n) = int n
+  pPrint = text . escapeAtom . show . tname
 
 instance Show Type where
-  show = chattyShow
+  show = prettyShow
+
+instance Pretty FunType where
+  pPrint FunType{args = args, res = res} =
+    case args of
+      [] -> pPrint res
+      args -> pPrintTypes args <+> text ">" <+>
+              pPrint res
+    where
+      pPrintTypes [arg] = pPrint arg
+      pPrintTypes args =
+        parens . hsep . punctuate (text " *") . map pPrint $ args
+
+instance Show FunType where
+  show = prettyShow
+
+instance Pretty Name where
+  pPrint = text . show
 
 instance Show L.Token where
   show L.Atom{L.tokenName = x} = escapeAtom x
@@ -69,97 +122,51 @@ quote c s = [c] ++ concatMap escape s ++ [c]
         escape '\\' = "\\\\"
         escape c = [c]
 
-instance Pretty FunType where
-  pPrint prec lev env FunType{args = args, res = res} =
-    case args of
-      [] -> pPrint prec lev env res
-      args -> pPrint prec lev env args <+> text ">" <+>
-              pPrint prec lev env res
-
-instance Show FunType where
-  show = chattyShow
-
-instance Pretty [Type] where
-  pPrint prec lev env [arg] = pPrint prec lev env arg
-  pPrint prec lev env args =
-    parens (hsep (intersperse (text "*")
-                  (map (pPrint 0 lev env) args)))
-
-prettyProblem :: (Symbolic a, Pretty a) => String -> Level -> Problem a -> Doc
-prettyProblem family l prob = vcat (map typeDecl (usort (types prob)) ++
-                                    map funcDecl (usort (functions prob)) ++
-                                    map (prettyInput family l env) prob)
-    where typeDecl ty -- XXX | name ty `elem` open stdNames || isFof prob = empty
-                      | otherwise = typeClause ty (text "$tType")
-          funcDecl (f ::: ty) | isFof prob = empty
-                              | otherwise = typeClause f (pPrint 0 l (escapeAtom . env) ty)
-          typeClause name ty = prettyClause "tff" "type" "type"
-                                      (pPrint 0 l (escapeAtom . env) name <+> colon <+> ty)
-          env = uniquify (usort (names prob))
-
-prettyClause :: String -> String -> String -> Doc -> Doc
-prettyClause family name kind rest =
-  text family <> parens (sep [text name <> comma <+> text kind <> comma, rest]) <> text "."
-
-instance (Symbolic a, Pretty a) => Show (Problem a) where
-  show = render . prettyProblem "tff" Chatty
-
-prettyInput :: Pretty a => String -> Level -> (Name -> String) -> Input a -> Doc
-prettyInput family l env i = prettyClause family (tag i) (show (kind i)) (pPrint 0 l env (what i))
-
-instance Pretty a => Pretty (Input a) where
-  pPrint _ l env = prettyInput "tff" l env
-
-instance Pretty a => Show (Input a) where
-  show = chattyShow
-
 instance Pretty Term where
-  pPrint _ l env (Var v) = pPrintUse 0 l env v
-  pPrint _ l env (f :@: []) = pPrintUse 0 l (escapeAtom . env) f
-  pPrint _ l env (f :@: ts) = pPrintUse 0 l (escapeAtom . env) f <> pPrint 0 l env ts
-  
-instance Pretty [Term] where
-  pPrint _ l env ts = parens (sep (punctuate comma (map (pPrint 0 l env) ts)))
+  pPrint (Var (v ::: _)) =
+    pPrint v
+  pPrint ((f ::: _) :@: []) =
+    text (escapeAtom (show f))
+  pPrint ((f ::: _) :@: ts) =
+    text (escapeAtom (show f)) <>
+    parens (sep (punctuate comma (map pPrint ts)))
 
 instance Show Term where
-  show = chattyShow
+  show = prettyShow
 
 instance Pretty Atomic where
-  pPrint _ l env (t :=: u) = pPrint 0 l env t <> text "=" <> pPrint 0 l env u
-  pPrint _ l env (Tru t) = pPrint 0 l env t
+  pPrint (t :=: u) = pPrint t <> text "=" <> pPrint u
+  pPrint (Tru t) = pPrint t
 
 instance Show Atomic where
-  show = chattyShow
-
-instance Pretty Clause where
-  pPrint p l env c@(Clause (Bind vs ts))
-    -- xxx | and [ name (typ v) == nameI | v <- Set.toList vs ] =
-    --   prettyConnective l p env "$false" "|" (map Literal ts)
-    | otherwise =
-       pPrint p l env (toForm c)
-
-instance Show Clause where
-  show = chattyShow
+  show = prettyShow
 
 instance Pretty Form where
-  -- We use two precedences, the lowest for binary connectives
-  -- and the highest for everything else.
-  pPrint p l env (Literal (Pos (t :=: u))) =
-    pPrint 0 l env t <> text "=" <> pPrint 0 l env u
-  pPrint p l env (Literal (Neg (t :=: u))) =
-    pPrint 0 l env t <> text "!=" <> pPrint 0 l env u
-  pPrint p l env (Literal (Pos t)) = pPrint p l env t
-  pPrint p l env (Literal (Neg t)) = pPrint p l env (Not (Literal (Pos t)))
-  pPrint p l env (Not f) = text "~" <> pPrint 1 l env f
-  pPrint p l env (And ts) = prettyConnective l p env "$true" "&" ts
-  pPrint p l env (Or ts) = prettyConnective l p env "$false" "|" ts
-  pPrint p l env (Equiv t u) = prettyConnective l p env undefined "<=>" [t, u]
-  pPrint p l env (ForAll (Bind vs f)) = prettyQuant l env "!" vs f
-  pPrint p l env (Exists (Bind vs f)) = prettyQuant l env "?" vs f
-  pPrint p l env (Connective c t u) = prettyConnective l p env (error "pPrint: Connective") (show c) [t, u]
+  pPrintPrec _ = pPrintTff
 
 instance Show Form where
-  show = chattyShow
+  show = prettyShow
+
+pPrintFof, pPrintTff :: Rational -> Form -> Doc
+pPrintFof = pPrintForm (\(x ::: _) -> pPrint x)
+pPrintTff = pPrintForm (\(x ::: ty) -> pPrint x <> colon <+> pPrint ty)
+
+pPrintForm :: (Variable -> Doc) -> Rational -> Form -> Doc
+-- We use two precedences, the lowest for binary connectives
+-- and the highest for everything else.
+pPrintForm bind p (Literal (Pos (t :=: u))) =
+  pPrint t <> text "=" <> pPrint u
+pPrintForm bind p (Literal (Neg (t :=: u))) =
+  pPrint t <> text "!=" <> pPrint u
+pPrintForm bind p (Literal (Pos t)) = pPrintPrec prettyNormal p t
+pPrintForm bind p (Literal (Neg t)) = pPrintForm bind p (Not (Literal (Pos t)))
+pPrintForm bind p (Not f) = text "~" <> pPrintForm bind 1 f
+pPrintForm bind p (And ts) = pPrintConnective bind p "$true" "&" ts
+pPrintForm bind p (Or ts) = pPrintConnective bind p "$false" "|" ts
+pPrintForm bind p (Equiv t u) = pPrintConnective bind p undefined "<=>" [t, u]
+pPrintForm bind p (ForAll (Bind vs f)) = pPrintQuant bind "!" vs f
+pPrintForm bind p (Exists (Bind vs f)) = pPrintQuant bind "?" vs f
+pPrintForm bind p (Connective c t u) = pPrintConnective bind p (error "pPrint: Connective") (show c) [t, u]
 
 instance Show Connective where
   show Implies = "=>"
@@ -168,30 +175,25 @@ instance Show Connective where
   show Nor = "~|"
   show Nand = "~&"
 
-prettyConnective l p env ident op [] = text ident
-prettyConnective l p env ident op [x] = pPrint p l env x
-prettyConnective l p env ident op (x:xs) =
-  prettyParen (p > 0) $
+pPrintConnective bind p ident op [] = text ident
+pPrintConnective bind p ident op [x] = pPrintForm bind p x
+pPrintConnective bind p ident op (x:xs) =
+  maybeParens (p > 0) $
     sep (ppr x:[ nest 2 (text op <+> ppr x) | x <- xs ])
-      where ppr = pPrint 1 l env
+      where ppr = pPrintForm bind 1
             
-prettyParen False = id
-prettyParen True = parens
-
-prettyQuant l env q vs f | Set.null vs = pPrint 1 l env f
-prettyQuant l env q vs f =
-  sep [text q <> brackets (sep (punctuate comma (map (pPrintBinding 0 l env) (Set.toList vs)))) <> colon,
-       nest 2 (pPrint 1 l env f)]
+pPrintQuant :: (Variable -> Doc) -> String -> Set.Set Variable -> Form -> Doc
+pPrintQuant bind q vs f
+  | Set.null vs = pPrintForm bind 1 f
+  | otherwise =
+    sep [
+      text q <> brackets (sep (punctuate comma (map bind (Set.toList vs)))) <> colon,
+      nest 2 (pPrintForm bind 1 f)]
 
 instance Show Kind where
   show Axiom = "axiom"
   show Conjecture = "conjecture"
   show Question = "question"
 
-prettyShow, chattyShow :: Pretty a => a -> String
-prettyShow = render . pPrint 0 Normal base
-chattyShow = render . pPrint 0 Chatty show
-
-prettyFormula :: (Pretty a, Symbolic a) => a -> String
-prettyFormula prob = render . pPrint 0 Normal env $ prob
-  where env = uniquify (usort (names prob))
+prettyNames :: Symbolic a => a -> a
+prettyNames = id

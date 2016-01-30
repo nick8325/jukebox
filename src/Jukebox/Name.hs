@@ -31,8 +31,8 @@ compareName (Fixed xs) = Left xs
 compareName (Unique n _) = Right n
 
 instance Show Name where
-  show (Fixed xs) = show xs
-  show (Unique n xs) = xs ++ show n
+  show (Fixed xs) = unintern xs
+  show (Unique n xs) = xs ++ "@" ++ show n
 
 class Named a where
   name :: a -> Name
@@ -72,30 +72,3 @@ newName x = NameM $ do
   when (idx' < 0) $ error "Name.newName: too many names"
   put $! idx'
   return $! Unique idx' (base x)
-
-uniquify :: [Name] -> (Name -> String)
-uniquify xs = f
-  -- Note to self: nameO should always be mapped to "$o".
-  -- Therefore we make sure that smaller names have priority
-  -- over bigger names here.
-  where
-    baseMap =
-      -- Assign numbers to each baseName
-      fmap (\xs -> Map.fromList (zip (usort xs) [0 :: Int ..])) .
-      -- Partition by baseName
-      foldl' (\m x -> Map.insertWith (++) (base x) [x] m) Map.empty $
-      xs
-    f x = combine (base x) b
-      where
-        b = Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") x
-            (Map.findWithDefault (error $ "Name.uniquify: name " ++ show x ++ " not found") (base x) baseMap)
-    combine s 0 = s
-    combine s n = disambiguate (s ++ show n)
-    disambiguate s
-      | not (Map.member s baseMap) = s
-      | otherwise =
-        -- Odd situation: we have e.g. a name with baseName "f1",
-        -- and two names with baseName "f", which would normally
-        -- become "f" and "f1", but the "f1" conflicts.
-        -- Try appending some suffix.
-        disambiguate (s ++ "_")

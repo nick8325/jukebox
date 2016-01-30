@@ -53,14 +53,12 @@ mangleAnswer t =
           return (f :@: [wrap :@: [t]])
         term t = recursivelyM mangleAnswer t
 
-runE :: (Pretty a, Symbolic a) => EFlags -> Problem a -> IO (Either Answer [Term])
+runE :: EFlags -> Problem Form -> IO (Either Answer [Term])
 runE flags prob
   | not (isFof prob) = error "runE: E doesn't support many-typed problems"
   | otherwise = do
     (code, str) <- popen (eprover flags) eflags
-                   (render (prettyProblem "fof" Normal (run prob mangleAnswer)))
-    --case code of
-    --  ExitFailure code -> error $ "runE: E failed with exit code " ++ show code ++ ":\n" ++ str
+                   (showProblem (run prob mangleAnswer))
     return (extractAnswer prob str)
   where eflags = [ "--soft-cpu-limit=" ++ show n | Just n <- [timeout flags] ] ++
                  ["--memory-limit=" ++ show n | Just n <- [memory flags] ] ++
@@ -69,9 +67,8 @@ runE flags prob
 
 extractAnswer :: Symbolic a => a -> String -> Either Answer [Term]
 extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
-  where env = uniquify (usort (names prob))
-        varMap = Map.fromList [(env (name x), x) | x <- vars prob]
-        funMap = Map.fromList [(env (name x), x) | x <- functions prob]
+  where varMap = Map.fromList [(show (name x), x) | x <- vars prob]
+        funMap = Map.fromList [(show (name x), x) | x <- functions prob]
         result = lines str
         status = head $
           [Satisfiable | "# SZS status Satisfiable" <- result] ++

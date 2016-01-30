@@ -78,7 +78,7 @@ function constructors f expansive answerP = fmap concat $ do
     let answer = Literal (Pos (Tru (answerP :@: [fname :@: []])))
     let theRhss = rhss constructors args f expansive answer
     alts <- forM theRhss $ \rhs -> do
-      pred <- newFunction (concat (lines (prettyFormula rhs))) [] O
+      pred <- newFunction (concat (lines (prettyShow rhs))) [] O
       return (Literal (Pos (Tru (pred :@: []))))
     return $
       foldr (\/) false alts:

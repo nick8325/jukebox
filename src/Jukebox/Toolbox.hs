@@ -141,25 +141,16 @@ annotateMonotonicityBox = (\globals x -> do
   unless (quiet globals) $ putStrLn "Monotonicity analysis..."
   annotateMonotonicity x) <$> globalFlags
 
-prettyPrintBox :: (Symbolic a, Pretty a) => OptionParser (Problem a -> IO ())
-prettyPrintBox = prettyFormIO <$> globalFlags <*> writeFileBox
+prettyPrintProblemBox :: OptionParser (Problem Form -> IO ())
+prettyPrintProblemBox = prettyPrintIO showProblem <$> globalFlags <*> writeFileBox
 
-prettyFormIO :: (Symbolic a, Pretty a) => GlobalFlags -> (String -> IO ()) -> Problem a -> IO ()
-prettyFormIO globals write prob
-  | isFof prob = prettyPrintIO globals "fof" write prob
-  | otherwise = prettyPrintIO globals "tff" write prob
+prettyPrintClausesBox :: OptionParser (Problem Clause -> IO ())
+prettyPrintClausesBox = prettyPrintIO showClauses <$> globalFlags <*> writeFileBox
 
-prettyClauseBox :: OptionParser (Problem Clause -> IO ())
-prettyClauseBox = f <$> globalFlags <*> writeFileBox
-  where
-    f globals write cs
-      | isFof cs = prettyPrintIO globals "cnf" write cs
-      | otherwise = prettyPrintIO globals "tff" write (map (fmap toForm) cs)
-
-prettyPrintIO :: (Symbolic a, Pretty a) => GlobalFlags -> String -> (String -> IO ()) -> Problem a -> IO ()
-prettyPrintIO globals kind write prob = do
+prettyPrintIO :: (a -> String) -> GlobalFlags -> (String -> IO ()) -> a -> IO ()
+prettyPrintIO shw globals write prob = do
   unless (quiet globals) $ hPutStrLn stderr "Writing output..."
-  write (render (prettyProblem kind Normal prob) ++ "\n")
+  write (shw prob ++ "\n")
 
 writeFileBox :: OptionParser (String -> IO ())
 writeFileBox =

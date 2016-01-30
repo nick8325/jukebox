@@ -17,7 +17,7 @@ fof = tool info pipeline
       allFilesBox <*>
         (parseProblemBox =>>=
          toFofBox =>>=
-         prettyPrintBox)
+         prettyPrintProblemBox)
 
 monotonox = tool info pipeline
   where
@@ -42,7 +42,7 @@ cnf = tool info pipeline
         (parseProblemBox =>>=
          clausifyBox =>>=
          oneConjectureBox =>>=
-         prettyClauseBox)
+         prettyPrintClausesBox)
 
 justparser = tool info pipeline
   where
@@ -57,7 +57,7 @@ justparser = tool info pipeline
          inferBox =>>=
          printInferredBox =>>=
          annotateMonotonicityBox =>>=
-         prettyPrintBox)
+         prettyPrintClausesBox)
 
 guessmodel = tool info pipeline
   where
@@ -68,7 +68,7 @@ guessmodel = tool info pipeline
       allFilesBox <*>
         (parseProblemBox =>>=
          guessModelBox =>>=
-         prettyPrintBox)
+         prettyPrintProblemBox)
 
 equinox = tool info pipeline
   where
