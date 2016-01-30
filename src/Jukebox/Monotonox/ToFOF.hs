@@ -47,7 +47,7 @@ guard scheme mono (Input t k f) = Input t k (aux (pos k) f)
 
 translate, translate1 :: Scheme -> (Type -> Bool) -> Problem Form -> Problem Form
 translate1 scheme mono f = Form.run f $ \inps -> do
-  let tys = types inps
+  let tys = types' inps
       funcs = functions inps
       -- Hardly any use adding guards if there's only one type.
       mono' | length tys == 1 = const True
