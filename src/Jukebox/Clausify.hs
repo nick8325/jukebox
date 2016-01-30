@@ -9,7 +9,6 @@ import Data.Ord
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
-import Control.Monad.Trans.State.Strict
 import Jukebox.Utils
 import Jukebox.Options
 import Control.Applicative
@@ -108,7 +107,7 @@ clausForm s p =
        noEquivPs       <- removeEquiv                          . check $ miniscoped
        noExistsPs      <- mapM removeExists                    . check $ noEquivPs
        noExpensiveOrPs <- fmap concat . mapM removeExpensiveOr . check $ noExistsPs
-       noForAllPs      <- lift . lift . mapM uniqueNames       . check $ noExpensiveOrPs
+       noForAllPs      <- lift . mapM uniqueNames              . check $ noExpensiveOrPs
        let !cnf_        = concatMap cnf                        . check $ noForAllPs
            !simp        = simplifyCNF                          . check $ cnf_
            cs           = fmap clause                                  $ simp
@@ -397,23 +396,18 @@ simplifyCNF =
 ----------------------------------------------------------------------
 -- monad
 
-type M = ReaderT Tag (StateT Int NameM)
+type M = ReaderT Tag NameM
 
 run :: M a -> NameM a
-run x = evalStateT (runReaderT x "") 0
+run x = runReaderT x ""
 
 skolemName :: Named a => String -> a -> M Name
 skolemName prefix v = do
-  i <- lift get
-  lift $ put (i+1)
   s <- getName
-  lift . lift . newName $ prefix ++ show i ++ concat [ "_" ++ t | t <- [s, base v], not (null t) ]
-
-nextSk :: M Int
-nextSk = do
-  i <- lift get
-  lift $ put (i+1)
-  return i
+  name <- lift (newName v)
+  return $ withRenamer name $ \str i ->
+    Renaming [prefix ++ show (i+1)] $
+      prefix ++ show (i+1) ++ concat [ "_" ++ t | t <- [s, str], not (null t) ]
 
 withName :: Tag -> M a -> M a
 withName s m = lift (runReaderT m s)

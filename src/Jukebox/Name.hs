@@ -15,7 +15,8 @@ data Name =
     Fixed {-# UNPACK #-} !Symbol
   | Unique {-# UNPACK #-} !Int64 String Renamer
 
-type Renamer = String -> Int -> String
+type Renamer = String -> Int -> Renaming
+data Renaming = Renaming [String] String
 
 base :: Named a => a -> String
 base x =
@@ -30,8 +31,8 @@ renamer x =
     Unique _ _ f -> f
 
 defaultRenamer :: Renamer
-defaultRenamer xs 0 = xs
-defaultRenamer xs n = xs ++ sep ++ show (n+1)
+defaultRenamer xs 0 = Renaming [] xs
+defaultRenamer xs n = Renaming [] $ xs ++ sep ++ show (n+1)
   where
     sep
       | not (null xs) && isDigit (last xs) = "_"
@@ -53,7 +54,9 @@ compareName (Unique n _ _) = Right n
 
 instance Show Name where
   show (Fixed xs) = unintern xs
-  show (Unique n xs f) = f xs 0 ++ "@" ++ show n
+  show (Unique n xs f) = ys ++ "@" ++ show n
+    where
+      Renaming _ ys = f xs 0
 
 class Named a where
   name :: a -> Name

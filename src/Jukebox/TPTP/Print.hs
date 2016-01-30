@@ -227,10 +227,12 @@ prettyNames x0 = mapName replace x
       (scope, Set.insert (unintern xs) used)
     add1 name@(Unique _ base f) (scope, used) =
       (Map.insert name (Fixed (intern winner)) scope,
-       Set.insert winner used)
+       Set.insert winner (Set.fromList taken `Set.union` used))
       where
-        cands  = [f base n | n <- [0..]]
-        winner = head [c | c <- cands, not (Set.member c used)]
+        cands = [f base n | n <- [0..]]
+        Renaming taken winner =
+          head [c | c@(Renaming xs x) <- cands,
+                not (or [Set.member y used | y <- x:xs ])]
 
     globals =
       usort $
