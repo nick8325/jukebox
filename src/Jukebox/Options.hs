@@ -2,11 +2,9 @@
 module Jukebox.Options where
 
 import Control.Arrow((***))
-import Control.Applicative
 import Control.Monad(mplus)
 import Data.Char
 import Data.List
-import Data.Monoid
 import System.Environment
 import System.Exit
 import System.IO
@@ -218,7 +216,7 @@ filenames :: OptionParser [String]
 filenames = Annotated [] (from [])
   where from xs = awaitP p xs (f xs)
         p x = not ("--" `isPrefixOf` x)
-        f xs y ys = Yes 0 (from (xs ++ [y]))
+        f xs y _ = Yes 0 (from (xs ++ [y]))
 
 -- Take a value from the environment.
 io :: IO a -> OptionParser a

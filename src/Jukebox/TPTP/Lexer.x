@@ -16,7 +16,6 @@ module Jukebox.TPTP.Lexer(
 
 import Data.Word
 import Data.Char
-import Data.Symbol
 }
 
 $alpha = [a-zA-Z0-9_]
@@ -152,7 +151,8 @@ instance Show Punct where
       Exists -> "?"; Let -> ":="; Colon -> ":"; Times -> "*"; Plus -> "+";
       FunArrow -> ">"; Lambda -> "^"; Apply -> "@"; ForAllLam -> "!!";
       ExistsLam -> "??"; Some -> "@+"; The -> "@-"; Subtype -> "<<";
-      SequentArrow -> "-->"; DependentProduct -> "!>"; DependentSum -> "?*" }
+      SequentArrow -> "-->"; DependentProduct -> "!>"; DependentSum -> "?*";
+      LetTerm -> ":-" }
 
 p x = const (Punct x)
 k x = Atom x . copy
@@ -177,14 +177,14 @@ scan xs = go (Input (Pos 1 1) '\n' xs)
           case alexScan inp 0 of
                 AlexEOF -> let t = At pos (Cons Eof t) in t
                 AlexError _ -> let t = At pos (Cons Error t) in t
-                AlexSkip  inp' len -> go inp'
+                AlexSkip  inp' _ -> go inp'
                 AlexToken inp' len act ->
                   At pos (act (take len xs) `Cons` go inp')
 
 data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char String
 
 alexInputPrevChar :: AlexInput -> Char
-alexInputPrevChar (Input p c xs) = c
+alexInputPrevChar (Input _ c _) = c
 
 {-# INLINE alexGetByte #-}
 alexGetByte :: AlexInput -> Maybe (Word8,AlexInput)
@@ -199,6 +199,6 @@ alexGetChar _ = Nothing
 {-# INLINE advance #-}
 advance :: Pos -> Char -> Pos
 advance (Pos l c) '\t' = Pos  l    (c+8 - (c-1) `mod` 8)
-advance (Pos l c) '\n' = Pos (l+1) 1
+advance (Pos l _) '\n' = Pos (l+1) 1
 advance (Pos l c) _    = Pos  l    (c+1)
 }

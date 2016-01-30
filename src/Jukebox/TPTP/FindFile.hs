@@ -3,15 +3,12 @@ module Jukebox.TPTP.FindFile where
 import System.FilePath
 import System.Directory(doesFileExist)
 import System.Environment
-import Control.Applicative
 import Control.Exception
 import Control.Monad
-import Prelude hiding (catch)
 import Jukebox.Options
-import Data.Traversable(sequenceA)
 
 findFile :: [FilePath] -> FilePath -> IO (Maybe FilePath)
-findFile [] file = return Nothing
+findFile [] _file = return Nothing
 findFile (path:paths) file = do
   let candidate = path </> file
   exists <- doesFileExist candidate

@@ -7,10 +7,8 @@ import Jukebox.TPTP.Parsec as TPTP.Parsec
 import Jukebox.TPTP.Lexer
 import Jukebox.Name
 import Jukebox.Form
-import Control.Applicative
 import qualified Data.Map.Strict as Map
 import Data.List
-import Control.Monad.Trans.State.Strict
 
 tff, cnf :: [(String, Type)] -> [(String, Function)] -> String -> Form
 tff = form TPTP.Parse.Core.tff

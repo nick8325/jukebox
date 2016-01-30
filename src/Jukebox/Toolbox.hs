@@ -6,7 +6,6 @@ import Jukebox.Form
 import Jukebox.Name
 import Jukebox.TPTP.Print
 import Control.Monad
-import Control.Applicative
 import Jukebox.Clausify hiding (run)
 import Jukebox.TPTP.Parse
 import Jukebox.Monotonox.Monotonicity hiding (guards)
@@ -14,13 +13,8 @@ import Jukebox.Monotonox.ToFOF
 import System.Exit
 import System.IO
 import Jukebox.TPTP.FindFile
-import Text.PrettyPrint.HughesPJ
 import Jukebox.GuessModel
 import Jukebox.InferTypes
-import Jukebox.TPTP.Parsec hiding (Error, run)
-import qualified Jukebox.TPTP.Parsec as Parser
-import Jukebox.TPTP.Lexer hiding (Error, name, Normal)
-import qualified Jukebox.TPTP.Lexer as Lexer
 import qualified Data.Map.Strict as Map
 
 data GlobalFlags =
@@ -114,7 +108,7 @@ schemeBox =
     "guards"
     (argOption ["guards", "tags"])
   <*> tagsFlags
-  where choose "guards" flags = guards
+  where choose "guards" _flags = guards
         choose "tags" flags = tags flags
 
 monotonicityBox :: OptionParser (Problem Clause -> IO String)
@@ -208,4 +202,4 @@ printInferredBox = pure $ \(prob, rep) -> do
   return prob
 
 equinoxBox :: OptionParser (Problem Clause -> IO Answer)
-equinoxBox = pure (\f -> return (NoAnswer GaveUp)) -- A highly sophisticated proof method. We are sure to win CASC! :)
+equinoxBox = pure (const (return (NoAnswer GaveUp))) -- A highly sophisticated proof method. We are sure to win CASC! :)

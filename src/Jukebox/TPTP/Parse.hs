@@ -3,18 +3,11 @@ module Jukebox.TPTP.Parse where
 
 import Jukebox.TPTP.FindFile
 import qualified Jukebox.TPTP.Parse.Core as Parser
-import Jukebox.TPTP.Lexer hiding (Include, Error)
-import Jukebox.TPTP.Parsec
-import Jukebox.TPTP.Print
-import qualified Jukebox.TPTP.Lexer as L
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Except
 import Jukebox.Form hiding (Pos, run)
-import Control.Monad.Trans.Identity
 import Control.Exception
-import Prelude hiding (catch)
 import Data.List
-import Jukebox.Name
 import System.IO
 
 parseString :: String -> IO (Problem Form)

@@ -11,12 +11,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Class
-import Data.Traversable hiding (mapM, sequence)
-import Control.Applicative
 import Data.Maybe
-import Data.List(partition)
-import Control.Applicative
 
 newtype Sat1 a b = Sat1 { runSat1_ :: ReaderT Solver (ReaderT (Watch a) (StateT (Map a Lit) IO)) b } deriving (Functor, Applicative, Monad, MonadIO)
 newtype Sat a b c = Sat { runSat_ :: ReaderT (Watch a) (StateT (Map b (SatState a)) IO) c } deriving (Functor, Applicative, Monad, MonadIO)
@@ -39,7 +34,8 @@ false = Or []
 
 unique :: [Form a] -> Form a
 unique = u
-  where u [x] = true
+  where u [] = true
+        u [_] = true
         u (x:xs) = And [Or [nt x, And (map nt xs)],
                         u xs]
 

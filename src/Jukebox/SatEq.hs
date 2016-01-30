@@ -2,7 +2,6 @@ module Jukebox.SatEq where
 
 import Jukebox.Sat
 import Jukebox.Sat3
-import Jukebox.SatMin
 
 import Data.IORef
 import Data.Map as M

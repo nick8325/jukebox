@@ -2,8 +2,6 @@ module Main where
 
 import Control.Monad
 import Jukebox.Options
-import Control.Applicative
-import Data.Monoid
 import Jukebox.Toolbox
 
 tools = mconcat [fof, cnf, monotonox, guessmodel]

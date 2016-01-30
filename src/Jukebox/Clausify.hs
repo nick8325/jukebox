@@ -11,7 +11,6 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
 import Jukebox.Utils
 import Jukebox.Options
-import Control.Applicative
 import qualified Data.Set as Set
 import Data.Set(Set)
 
@@ -40,7 +39,7 @@ clausify flags inps = Form.run inps (run . clausifyInputs [] [])
   clausifyInputs theory obligs (inp:inps) | kind inp `elem` [Conjecture, Question] =
     do clausifyObligs theory obligs (tag inp) (split' (what inp)) inps
 
-  clausifyObligs theory obligs s [] inps =
+  clausifyObligs theory obligs _ [] inps =
     do clausifyInputs theory obligs inps
   
   clausifyObligs theory obligs s (a:as) inps =
@@ -64,7 +63,7 @@ split p =
 
     Or ps ->
       snd $
-      maximumBy first
+      maximumBy (comparing fst)
       [ (siz q, [ Or (q':qs) | q' <- sq ])
       | (q,qs) <- select ps
       , let sq = split q
@@ -75,8 +74,6 @@ split p =
  where
   select []     = []
   select (x:xs) = (x,xs) : [ (y,x:ys) | (y,ys) <- select xs ]
-  
-  first (n,x) (m,y) = n `compare` m
   
   siz (And ps)            = length ps
   siz (ForAll (Bind _ p)) = siz p

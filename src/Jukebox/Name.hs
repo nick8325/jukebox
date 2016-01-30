@@ -3,10 +3,7 @@ module Jukebox.Name where
 
 import Control.Monad
 import Control.Monad.Trans.State.Strict
-import qualified Data.Map.Strict as Map
-import Data.List
 import Data.Ord
-import Jukebox.Utils
 import Data.Int
 import Data.Symbol
 import Data.Char
@@ -79,7 +76,7 @@ instance Named a => Eq (a ::: b) where s == t = name s == name t
 instance Named a => Ord (a ::: b) where compare = comparing name
 
 instance Named a => Named (a ::: b) where
-  name (a ::: b) = name a
+  name (a ::: _) = name a
 
 newtype NameM a =
   NameM { unNameM :: State Int64 a }

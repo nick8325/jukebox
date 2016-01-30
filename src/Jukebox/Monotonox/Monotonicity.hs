@@ -5,7 +5,6 @@ import Prelude hiding (lookup)
 import Jukebox.Name
 import Jukebox.Form hiding (Form, clause, true, false, And, Or)
 import Jukebox.HighSat
-import Jukebox.Utils
 import Control.Monad
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
@@ -58,7 +57,7 @@ literal :: [Literal] -> Literal -> Sat Var Type ()
 literal ls (Pos (t :=: u)) = atIndex (typ t) $ do
   addForm (safe ls t)
   addForm (safe ls u)
-literal ls (Neg (_ :=: _)) = return ()
+literal _ls (Neg (_ :=: _)) = return ()
 literal ls (Pos (Tru (p :@: ts))) =
   forM_ ts $ \t -> atIndex (typ t) $ addForm (Or [safe ls t, Lit (Neg (FalseExtended p))])
 literal ls (Neg (Tru (p :@: ts))) =

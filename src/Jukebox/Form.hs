@@ -14,12 +14,11 @@ import Data.Ord
 import Jukebox.Name
 import Control.Monad
 import Control.Monad.Trans.Class
-import Control.Monad.Trans.State.Strict hiding (sequence, mapM)
+import Control.Monad.Trans.State.Strict
 import Data.List
 import Jukebox.Utils
 import Data.Typeable(Typeable)
 import Data.Monoid
-import Data.Traversable
 import qualified Data.DList as DList
 import Data.DList(DList)
 import Data.MemoUgly
@@ -106,7 +105,7 @@ arity = length . funArgs
 
 size :: Term -> Int
 size Var{} = 1
-size (f :@: xs) = 1 + sum (map size xs)
+size (_f :@: xs) = 1 + sum (map size xs)
 
 ----------------------------------------------------------------------
 -- Literals
@@ -433,9 +432,9 @@ recursivelyM h t =
 collect :: (Symbolic a, Monoid b) => (forall a. Symbolic a => a -> b) -> a -> b
 collect h t =
   case rep t of
-    Const x -> mempty
-    Unary f x -> h x
-    Binary f x y -> h x `mappend` h y
+    Const _x -> mempty
+    Unary _f x -> h x
+    Binary _f x y -> h x `mappend` h y
 
 ----------------------------------------------------------------------
 -- Substitutions

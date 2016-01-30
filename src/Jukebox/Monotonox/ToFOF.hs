@@ -32,16 +32,16 @@ guard scheme mono (Input t k f) = Input t k (aux (pos k) f)
         aux pos (Exists (Bind vs f))
           | pos = exists scheme (Bind vs (aux pos f))
           | otherwise = Not (forAll scheme (Bind vs (Not (aux pos f))))
-        aux pos (Literal (Pos (t :=: u)))
+        aux _pos (Literal (Pos (t :=: u)))
           | not (mono (typ t)) = equals scheme t u
-        aux pos (Literal (Neg (t :=: u)))
+        aux _pos (Literal (Neg (t :=: u)))
           | not (mono (typ t)) = Not (equals scheme t u)
-        aux pos l@Literal{} = l
+        aux _pos l@Literal{} = l
         aux pos (Not f) = Not (aux (not pos) f)
         aux pos (And fs) = And (fmap (aux pos) fs)
         aux pos (Or fs) = Or (fmap (aux pos) fs)
-        aux pos (Equiv _ _) = error "ToFOF.guard: equiv should have been eliminated"
-        aux pos (Connective _ _ _) = error "ToFOF.guard: connective should have been eliminated"
+        aux _pos (Equiv _ _) = error "ToFOF.guard: equiv should have been eliminated"
+        aux _pos (Connective _ _ _) = error "ToFOF.guard: connective should have been eliminated"
         pos Axiom = True
         pos Conjecture = False
 
@@ -112,7 +112,7 @@ tags1 moreAxioms mono fs = Scheme1
     typeAxiom = \ty -> if moreAxioms then tagsAxiom False mono fs (fs ty) else tagsExists mono ty (fs ty) }
 
 tagsAxiom :: Bool -> (Type -> Bool) -> (Type -> Function) -> Function -> NameM Form
-tagsAxiom moreAxioms mono fs f@(_ ::: FunType args res) = do
+tagsAxiom moreAxioms mono fs f@(_ ::: FunType args _res) = do
   vs <- forM args $ \ty ->
     fmap Var (newSymbol "X" ty)
   let t = f :@: vs

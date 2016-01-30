@@ -1,11 +1,9 @@
 {-# LANGUAGE TupleSections #-}
 module Jukebox.Utils where
 
-import Data.List
 import System.Process
 import System.IO
 import System.Exit
-import Control.Applicative
 import Control.Concurrent
 import qualified Data.Set as Set
 

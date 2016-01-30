@@ -49,9 +49,9 @@ initialStateFrom xs tys fs = MkState [] tys fs Map.empty n
     n = maximum (0:[succ m | Unique m _ _ <- xs])
 
 instance Stream TokenStream Token where
-  primToken (At _ (Cons Eof _)) ok err fatal = err
-  primToken (At _ (Cons L.Error _)) ok err fatal = fatal "Lexical error"
-  primToken (At _ (Cons t ts)) ok err fatal = ok ts t
+  primToken (At _ (Cons Eof _)) _ok err _fatal = err
+  primToken (At _ (Cons L.Error _)) _ok _err fatal = fatal "Lexical error"
+  primToken (At _ (Cons t ts)) ok _err _fatal = ok ts t
   type Position TokenStream = TokenStream
   position = id
 
@@ -261,8 +261,8 @@ applyFunction name args' res = do
 
 {-# NOINLINE typeError #-}
 typeError f@(x ::: ty) args' = do
-    let plural 1 x y = x 
-        plural _ x y = y
+    let plural 1 x _ = x 
+        plural _ _ y = y
     fatalError $ "Type mismatch in term '" ++ prettyShow (f :@: args') ++ "': " ++
                  "Constant " ++ prettyShow x ++
                  if length (args ty) == length args' then
@@ -357,7 +357,7 @@ data Mode = Typed | Untyped | NoQuantification
 
 instance TermLike Form where
   {-# INLINE fromThing #-}
-  fromThing t@(Apply x xs) = fmap (Literal . Pos . Tru) (applyFunction x xs O)
+  fromThing (Apply x xs) = fmap (Literal . Pos . Tru) (applyFunction x xs O)
   fromThing (Term _) = mzero
   fromThing (Formula f) = return f
   -- A variable itself is not a valid formula.
@@ -366,7 +366,7 @@ instance TermLike Form where
 
 instance TermLike Term where
   {-# INLINE fromThing #-}
-  fromThing t@(Apply x xs) = applyFunction x xs individual
+  fromThing (Apply x xs) = applyFunction x xs individual
   fromThing (Term t) = return t
   fromThing (Formula _) = mzero
   parser = term
@@ -381,7 +381,7 @@ instance TermLike Term where
         let v = Unique (n+1) x defaultRenamer ::: individual
         putState (MkState p t f (Map.insert x v ctx) (n+1))
         return (Var v)
-  var mode ctx = do
+  var _ ctx = do
     x <- variable
     case Map.lookup x ctx of
       Just v -> return (Var v)

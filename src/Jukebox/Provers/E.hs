@@ -10,12 +10,10 @@ import Jukebox.Utils
 import Jukebox.TPTP.Parsec hiding (run)
 import Jukebox.TPTP.Parse.Core hiding (newFunction, Term)
 import Jukebox.TPTP.Print
-import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, name, Var)
-import Text.PrettyPrint.HughesPJ hiding (parens)
+import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, Var)
 import Data.Maybe
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
-import System.Exit
 
 data EFlags = EFlags {
   eprover :: String,
@@ -57,7 +55,7 @@ runE :: EFlags -> Problem Form -> IO (Either Answer [Term])
 runE flags prob
   | not (isFof prob) = error "runE: E doesn't support many-typed problems"
   | otherwise = do
-    (code, str) <- popen (eprover flags) eflags
+    (_code, str) <- popen (eprover flags) eflags
                    (showProblem (run prob mangleAnswer))
     return (extractAnswer prob str)
   where eflags = [ "--soft-cpu-limit=" ++ show n | Just n <- [timeout flags] ] ++

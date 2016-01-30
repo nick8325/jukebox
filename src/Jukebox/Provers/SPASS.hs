@@ -2,20 +2,9 @@
 module Jukebox.Provers.SPASS where
 
 import Jukebox.Form hiding (tag, Or)
-import Jukebox.Name
 import Jukebox.Options
-import Control.Applicative hiding (Const)
-import Control.Monad
 import Jukebox.Utils
-import Jukebox.TPTP.Parsec
-import Jukebox.TPTP.Parse.Core hiding (newFunction, Term)
 import Jukebox.TPTP.Print
-import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, name, Var)
-import Text.PrettyPrint.HughesPJ hiding (parens)
-import Data.Maybe
-import qualified Data.Map.Strict as Map
-import Data.Map(Map)
-import System.Exit
 
 data SPASSFlags =
   SPASSFlags {
@@ -46,7 +35,7 @@ runSPASS :: SPASSFlags -> Problem Form -> IO Answer
 runSPASS flags prob
   | not (isFof prob) = error "runSPASS: SPASS doesn't support many-typed problems"
   | otherwise = do
-    (code, str) <- popen (spass flags) spassFlags (show prob)
+    (_code, str) <- popen (spass flags) spassFlags (showProblem prob)
     return (extractAnswer str)
   where
     spassFlags =

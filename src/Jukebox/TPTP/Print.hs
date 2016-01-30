@@ -8,7 +8,6 @@ import Data.Char
 import Text.PrettyPrint.HughesPJ
 import qualified Jukebox.TPTP.Lexer as L
 import Jukebox.Form
-import Data.List
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
 import qualified Data.Set as Set
@@ -75,7 +74,7 @@ pPrintClause family name kind rest =
   text family <> parens (sep [text name <> comma <+> text kind <> comma, rest]) <> text "."
 
 instance Pretty Clause where
-  pPrint c@(Clause (Bind vs ts)) =
+  pPrint (Clause (Bind _ ts)) =
     pPrintConnective undefined 0 "$false" "|" (map Literal ts)
 
 instance Show Clause where
@@ -159,18 +158,18 @@ pPrintTff = pPrintForm (\(x ::: ty) -> pPrint x <> colon <+> pPrint ty)
 pPrintForm :: (Variable -> Doc) -> Rational -> Form -> Doc
 -- We use two precedences, the lowest for binary connectives
 -- and the highest for everything else.
-pPrintForm bind p (Literal (Pos (t :=: u))) =
+pPrintForm _bind _p (Literal (Pos (t :=: u))) =
   pPrint t <> text "=" <> pPrint u
-pPrintForm bind p (Literal (Neg (t :=: u))) =
+pPrintForm _bind _p (Literal (Neg (t :=: u))) =
   pPrint t <> text "!=" <> pPrint u
-pPrintForm bind p (Literal (Pos t)) = pPrintPrec prettyNormal p t
+pPrintForm _bind p (Literal (Pos t)) = pPrintPrec prettyNormal p t
 pPrintForm bind p (Literal (Neg t)) = pPrintForm bind p (Not (Literal (Pos t)))
-pPrintForm bind p (Not f) = text "~" <> pPrintForm bind 1 f
+pPrintForm bind _p (Not f) = text "~" <> pPrintForm bind 1 f
 pPrintForm bind p (And ts) = pPrintConnective bind p "$true" "&" ts
 pPrintForm bind p (Or ts) = pPrintConnective bind p "$false" "|" ts
 pPrintForm bind p (Equiv t u) = pPrintConnective bind p undefined "<=>" [t, u]
-pPrintForm bind p (ForAll (Bind vs f)) = pPrintQuant bind "!" vs f
-pPrintForm bind p (Exists (Bind vs f)) = pPrintQuant bind "?" vs f
+pPrintForm bind _p (ForAll (Bind vs f)) = pPrintQuant bind "!" vs f
+pPrintForm bind _p (Exists (Bind vs f)) = pPrintQuant bind "?" vs f
 pPrintForm bind p (Connective c t u) = pPrintConnective bind p (error "pPrint: Connective") (show c) [t, u]
 
 instance Show Connective where
@@ -180,9 +179,9 @@ instance Show Connective where
   show Nor = "~|"
   show Nand = "~&"
 
-pPrintConnective bind p ident op [] = text ident
-pPrintConnective bind p ident op [x] = pPrintForm bind p x
-pPrintConnective bind p ident op (x:xs) =
+pPrintConnective _bind _p ident _op [] = text ident
+pPrintConnective bind p _ident _op [x] = pPrintForm bind p x
+pPrintConnective bind p _ident op (x:xs) =
   maybeParens (p > 0) $
     sep (ppr x:[ nest 2 (text op <+> ppr x) | x <- xs ])
       where ppr = pPrintForm bind 1

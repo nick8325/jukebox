@@ -20,11 +20,11 @@ data Result a b = Ok a b | Error a String | Expected a [String]
 
 {-# INLINE parseError #-}
 parseError :: [String] -> Parsec a b
-parseError e = Parsec (\ok err inp exp -> err (e ++ exp))
+parseError e = Parsec (\_ok err _inp exp -> err (e ++ exp))
 
 {-# INLINE fatalError #-}
 fatalError :: Stream a c => String -> Parsec a b
-fatalError e = Parsec (\ok err inp _ -> Error (position inp) e)
+fatalError e = Parsec (\_ok _err inp _ -> Error (position inp) e)
 
 instance Functor (Parsec a) where
   {-# INLINE fmap #-}
@@ -40,7 +40,7 @@ instance Monad (Parsec a) where
 
 instance MonadPlus (Parsec a) where
   {-# INLINE mzero #-}
-  mzero = Parsec (\ok err inp exp -> err exp)
+  mzero = Parsec (\_ok err _inp exp -> err exp)
   {-# INLINE mplus #-}
   m1 `mplus` m2 = Parsec (\ok err inp exp ->
     runParsec m1 ok (\exp -> runParsec m2 ok err inp exp) inp exp)
@@ -136,7 +136,7 @@ next = Parsec (\ok err inp exp ->
 
 {-# INLINE cut #-}
 cut :: Stream a b => Parsec a ()
-cut = Parsec (\ok err inp exp -> ok () (Expected (position inp)) inp [])
+cut = Parsec (\ok _err inp _exp -> ok () (Expected (position inp)) inp [])
 
 {-# INLINE cut' #-}
 cut' :: Stream a b => Parsec a c -> Parsec a c
@@ -172,4 +172,4 @@ getState = Parsec (\ok err inp@UserState{userState = state} exp -> ok state err 
 
 {-# INLINE putState #-}
 putState :: state -> Parsec (UserState state a) ()
-putState state = Parsec (\ok err inp@UserState{userStream = stream} exp -> ok () err (UserState state stream) exp)
+putState state = Parsec (\ok err UserState{userStream = stream} exp -> ok () err (UserState state stream) exp)

@@ -4,7 +4,6 @@ module Jukebox.GuessModel where
 import Control.Monad
 import Jukebox.Name
 import Jukebox.Form
-import Jukebox.Clausify hiding (cnf, run)
 import Jukebox.TPTP.Print
 import Jukebox.TPTP.ParseSnippet
 import Jukebox.Utils
@@ -96,7 +95,7 @@ rhss constructors args f expansive answer =
       | otherwise -> map its (usort unconditional) ++ [answer]
   where recursive [] = []
         recursive (a:as) = reduce a ++ map (a:) (recursive as)
-          where reduce (f :@: xs) = [ x:as' | x <- xs, as' <- as:recursive as ]
+          where reduce (_f :@: xs) = [ x:as' | x <- xs, as' <- as:recursive as ]
                 reduce _ = []
         constructor = [ c :@: xs
                       | c <- constructors,
@@ -107,7 +106,7 @@ rhss constructors args f expansive answer =
         unconditional = map (f :@:) (recursive args) ++ subterm
 
 cases :: [Function] -> [Type] -> NameM [[Term]]
-cases constructors [] = return [[]]
+cases _constructors [] = return [[]]
 cases constructors (ty:tys) = do
   ts <- cases1 constructors ty
   tss <- cases constructors tys
