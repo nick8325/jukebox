@@ -481,7 +481,9 @@ binder mode = do
                Untyped ->
                  fatalError "Used a typed quantification in an untyped formula" };
              type_ } <|> return individual
-  return (name x ::: ty)
+  MkState p t f v n <- getState
+  putState (MkState p t f v (n+1))
+  return (Unique n x ::: ty)
 
 -- Parse a type
 type_ :: Parser Type
