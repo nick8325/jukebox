@@ -89,9 +89,11 @@ oneConjecture cnf = run cnf f
 
 toFofIO :: GlobalFlags -> (Problem Form -> IO CNF) -> Scheme -> Problem Form -> IO (Problem Form)
 toFofIO globals clausify scheme f = do
-  cs <- clausify f >>= oneConjecture
+  CNF{..} <- clausify f
   unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
-  m <- monotone (map what cs)
+  -- In some cases we might get better results by considering each
+  -- problem (axioms + conjecture) separately, but no big deal.
+  m <- monotone (map what (axioms ++ concat conjectures))
   let isMonotone ty =
         case Map.lookup ty m of
           Just Nothing -> False
