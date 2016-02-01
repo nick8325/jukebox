@@ -306,7 +306,9 @@ cnf, tff, fof :: Parser Form
 cnf = do
   MkState p t f _ n <- getState
   putState (MkState p t f Map.empty n)
-  formula NoQuantification __
+  form <- formula NoQuantification __
+  MkState _ _ _ vs _ <- getState
+  return (ForAll (Bind (Set.fromList (Map.elems vs)) form))
 tff = formula Typed Map.empty
 fof = formula Untyped Map.empty
 
