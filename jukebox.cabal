@@ -1,5 +1,5 @@
 Name: jukebox
-Version: 0.2.2
+Version: 0.2.3
 Cabal-version: >= 1.8
 Build-type: Simple
 Author: Nick Smallbone
@@ -17,6 +17,7 @@ Description:
   encoding types) and clausify problems (both typed and untyped).
 License: BSD3
 License-file: LICENSE
+extra-source-files: src/errors.h
 
 source-repository head
   type:     git
