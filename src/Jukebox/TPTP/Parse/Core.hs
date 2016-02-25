@@ -432,6 +432,9 @@ literal mode ctx = true <|> false <|> binary <?> "literal"
                  fatalError $ "Type mismatch in equality '" ++ prettyShow form ++ 
                               "': left hand side has type " ++ prettyShow (typ lhs) ++
                               " but right hand side has type " ++ prettyShow (typ rhs)
+               when (typ lhs == O) $
+                 fatalError $ "Type error in equality '" ++ prettyShow form ++
+                 "': can't use equality on predicate (use <=> or <~> instead)"
                return (fromFormula form)
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
