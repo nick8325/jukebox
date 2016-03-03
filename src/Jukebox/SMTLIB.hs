@@ -6,17 +6,13 @@ module Jukebox.SMTLIB where
 #include "errors.h"
 import Data.Char
 import Text.PrettyPrint.HughesPJ
-import qualified Jukebox.TPTP.Lexer as L
 import Jukebox.Form
 import qualified Data.Map.Strict as Map
-import Data.Map(Map)
 import qualified Data.Set as Set
-import Data.Set(Set)
 import Jukebox.Name
 import Jukebox.Utils
 import Jukebox.TPTP.Print(prettyNames)
 import Text.PrettyPrint.HughesPJClass
-import Data.Symbol
 import Data.Maybe
 import Data.Ratio
 
