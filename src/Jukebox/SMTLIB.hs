@@ -165,7 +165,7 @@ pPrintName x = text . escape . show $ x
       | otherwise = "|" ++ concatMap escapeSym xs ++ "|"
 
     isOk c
-      | isAlpha c = True
+      | isAlphaNum c = True
       | c `elem` ("~!@$%^&*_-+=<>.?/" :: String) = True
       | otherwise = False
 
