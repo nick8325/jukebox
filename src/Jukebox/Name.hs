@@ -7,10 +7,19 @@ import Data.Ord
 import Data.Int
 import Data.Symbol
 import Data.Char
+import Data.Ratio
 
 data Name =
-    Fixed {-# UNPACK #-} !Symbol
+    Fixed !FixedName
   | Unique {-# UNPACK #-} !Int64 String Renamer
+
+data FixedName =
+    Basic {-# UNPACK #-} !Symbol
+  | Overloaded {-# UNPACK #-} !Symbol {-# UNPACK #-} !Symbol
+  | Integer !Integer
+  | Rational !Rational
+  | Real !Rational
+  deriving (Eq, Ord)
 
 type Renamer = String -> Int -> Renaming
 data Renaming = Renaming [String] String
@@ -18,8 +27,15 @@ data Renaming = Renaming [String] String
 base :: Named a => a -> String
 base x =
   case name x of
-    Fixed xs -> unintern xs
+    Fixed x -> show x
     Unique _ xs _ -> xs
+
+instance Show FixedName where
+  show (Basic xs) = unintern xs
+  show (Overloaded xs _) = unintern xs
+  show (Integer n) = show n
+  show (Rational x) = show (numerator x) ++ "/" ++ show (denominator x)
+  show (Real x) = "$to_real(" ++ show (numerator x) ++ "/" ++ show (denominator x) ++ ")"
 
 renamer :: Named a => a -> Renamer
 renamer x =
@@ -45,12 +61,12 @@ instance Eq Name where
 instance Ord Name where
   compare = comparing compareName
 
-compareName :: Name -> Either Symbol Int64
+compareName :: Name -> Either FixedName Int64
 compareName (Fixed xs) = Left xs
 compareName (Unique n _ _) = Right n
 
 instance Show Name where
-  show (Fixed xs) = unintern xs
+  show (Fixed x) = show x
   show (Unique n xs f) = ys ++ "@" ++ show n
     where
       Renaming _ ys = f xs 0
@@ -59,7 +75,7 @@ class Named a where
   name :: a -> Name
 
 instance Named [Char] where
-  name = Fixed . intern
+  name = Fixed . Basic . intern
 
 instance Named Name where
   name = id

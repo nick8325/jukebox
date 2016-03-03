@@ -28,14 +28,14 @@ form parser types funs0 str =
                 show (map snd (Map.toList funs' \\ funs))
       | otherwise -> mapType elimI res
     Ok{} -> error "ParseSnippet: lexical error"
-    TPTP.Parsec.Error _ msg -> error $ "ParseSnippet: arse error: " ++ msg
+    TPTP.Parsec.Error _ msg -> error $ "ParseSnippet: parse error: " ++ msg
     Expected _ exp -> error $ "ParseSnippet: parse error: expected " ++ show exp
 
   where
     funs = map (mapFunType introI) funs0
 
     mapFunType f (xs, name ::: FunType args res) =
-      (xs, name ::: FunType (map f args) (f res))
+      (xs, [name ::: FunType (map f args) (f res)])
 
     elimI =
       case lookup "$i" types of

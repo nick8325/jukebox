@@ -1,6 +1,6 @@
 -- Pretty-printing of formulae. WARNING: icky code inside!
 {-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances, CPP, GADTs #-}
-module Jukebox.TPTP.Print(prettyShow, showClauses, pPrintClauses, showProblem, pPrintProblem)
+module Jukebox.TPTP.Print(prettyShow, prettyNames, showClauses, pPrintClauses, showProblem, pPrintProblem)
        where
 
 #include "errors.h"
@@ -15,7 +15,6 @@ import Data.Set(Set)
 import Jukebox.Name
 import Jukebox.Utils
 import Text.PrettyPrint.HughesPJClass
-import Data.Symbol
 
 pPrintClauses :: Problem Clause -> Doc
 pPrintClauses prob0
@@ -130,7 +129,11 @@ instance Pretty Term where
   pPrint (Var (v ::: _)) =
     pPrint v
   pPrint ((f ::: _) :@: []) =
-    text (escapeAtom (show f))
+    case f of
+      Fixed Integer{} -> text (show f)
+      Fixed Rational{} -> text (show f)
+      Fixed Real{} -> text (show f)
+      _ -> text (escapeAtom (show f))
   pPrint ((f ::: _) :@: ts) =
     text (escapeAtom (show f)) <>
     parens (sep (punctuate comma (map pPrint ts)))
@@ -203,7 +206,7 @@ prettyNames :: Symbolic a => a -> a
 prettyNames x0 = mapName replace x
   where
     replace name@Fixed{}  = name
-    replace name@Unique{} = Map.findWithDefault __ name sub
+    replace x@Unique{} = Map.findWithDefault (name (base x)) x sub
 
     sub = globalsScope `Map.union` pretty globalsUsed x
 
@@ -223,9 +226,9 @@ prettyNames x0 = mapName replace x
       foldr add1 (Map.empty, used) names
 
     add1 (Fixed xs) (scope, used) =
-      (scope, Set.insert (unintern xs) used)
-    add1 name@(Unique _ base f) (scope, used) =
-      (Map.insert name (Fixed (intern winner)) scope,
+      (scope, Set.insert (show xs) used)
+    add1 x@(Unique _ base f) (scope, used) =
+      (Map.insert x (name winner) scope,
        Set.insert winner (Set.fromList taken `Set.union` used))
       where
         cands = [f base n | n <- [0..]]
@@ -239,6 +242,6 @@ prettyNames x0 = mapName replace x
         [ ty | Type ty _ _ <- types x ]
     (globalsScope, globalsUsed) = add fixed globals
 
-    fixed = Set.fromList [ unintern xs | Fixed xs <- names x ]
+    fixed = Set.fromList [ show xs | Fixed xs <- names x ]
 
     x = run x0 uniqueNames

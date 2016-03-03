@@ -15,10 +15,13 @@ import Jukebox.TPTP.Print
 import Jukebox.Name
 import qualified Data.Set as Set
 import Data.Int
+import Jukebox.Utils
+import Data.Symbol
 
 import Jukebox.TPTP.Lexer hiding
   (Pos, Error, Include, Var, Type, Not, ForAll,
    Exists, And, Or, Type, Apply, Implies, Follows, Xor, Nand, Nor,
+   Rational, Real,
    keyword, defined, kind)
 import qualified Jukebox.TPTP.Lexer as L
 import qualified Jukebox.Form as Form
@@ -28,11 +31,11 @@ import qualified Jukebox.Name as Name
 -- The parser monad
 
 data ParseState =
-  MkState ![Input Form]          -- problem being constructed, inputs are in reverse order
-          !(Map String Type)     -- types in scope
-          !(Map String Function) -- functions in scope
-          !(Map String Variable) -- variables in scope, for CNF
-          !Int64                 -- unique supply
+  MkState ![Input Form]            -- problem being constructed, inputs are in reverse order
+          !(Map String Type)       -- types in scope
+          !(Map String [Function]) -- functions in scope
+          !(Map String Variable)   -- variables in scope, for CNF
+          !Int64                   -- unique supply
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
 
@@ -41,9 +44,40 @@ data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
 initialState :: ParseState
-initialState = initialStateFrom [] Map.empty Map.empty
+initialState =
+  initialStateFrom []
+    (Map.fromList [(show (name ty), ty) | ty <- [int, rat, real]])
+    (Map.fromList
+       [ (fun,
+          [Fixed (Overloaded (intern fun) (intern (show (name kind)))) ::: ty
+          | (kind, ty) <- tys ])
+       | (fun, tys) <- funs ])
+   where
+     int  = Type (name "$int")  (Finite 0) Infinite
+     rat  = Type (name "$rat")  (Finite 0) Infinite
+     real = Type (name "$real") (Finite 0) Infinite
 
-initialStateFrom :: [Name] -> Map String Type -> Map String (Name ::: FunType) -> ParseState
+     overloads f = [(ty, f ty) | ty <- [int, rat, real]]
+     fun xs f = [(x, overloads f) | x <- xs]
+
+     funs =
+       fun ["$less", "$lesseq", "$greater", "$greatereq"]
+         (\ty -> FunType [ty, ty] O) ++
+       fun ["$is_int", "$is_rat"]
+         (\ty -> FunType [ty] O) ++
+       fun ["$uminus", "$floor", "$ceiling", "$truncate", "$round"]
+         (\ty -> FunType [ty] ty) ++
+       fun ["$sum", "$difference", "$product",
+            "$quotient_e", "$quotient_t", "$quotient_f",
+            "$remainder_e", "$remainder_t", "$remainder_f"]
+         (\ty -> FunType [ty, ty] ty) ++
+       [("$quotient",
+         [(ty, FunType [ty, ty] ty) | ty <- [rat, real]])] ++
+       fun ["$to_int"]  (\ty -> FunType [ty] int) ++
+       fun ["$to_rat"]  (\ty -> FunType [ty] rat) ++
+       fun ["$to_real"] (\ty -> FunType [ty] real)
+
+initialStateFrom :: [Name] -> Map String Type -> Map String [Function] -> ParseState
 initialStateFrom xs tys fs = MkState [] tys fs Map.empty n
   where
     n = maximum (0:[succ m | Unique m _ _ <- xs])
@@ -155,6 +189,14 @@ variable = fmap tokenName (satisfy p) <?> "variable"
 number = fmap value (satisfy p) <?> "number"
   where p Number{} = True
         p _ = False
+{-# INLINE ratNumber #-}
+ratNumber = fmap ratValue (satisfy p)
+  where p L.Rational{} = True
+        p _ = False
+{-# INLINE realNumber #-}
+realNumber = fmap ratValue (satisfy p)
+  where p L.Real{} = True
+        p _ = False
 {-# INLINE atom #-}
 atom = fmap tokenName (keyword' (const True)) <?> "atom"
 
@@ -243,36 +285,42 @@ newFormula input = do
   MkState p t f v n <- getState
   putState (MkState (input:p) t f v n)
   
-newFunction :: String -> FunType -> Parser (Name ::: FunType)
-newFunction name ty' = do
-  f@(_ ::: ty) <- lookupFunction ty' name
-  unless (ty == ty') $ do
-    fatalError $ "Constant " ++ name ++
-                 " was declared to have type " ++ prettyShow ty' ++
-                 " but already has type " ++ prettyShow ty
-  return f
+newFunction :: String -> FunType -> Parser Function
+newFunction name ty = do
+  fs <- lookupFunction ty name
+  case [ f | f <- fs, rhs f == ty ] of
+    [] ->
+      fatalError $ "Constant " ++ name ++
+                   " was declared to have type " ++ prettyShow ty ++
+                   " but already has type " ++ showTypes (map rhs fs)
+    (f:_) -> return f
+
+showTypes :: [FunType] -> String
+showTypes = intercalate " and " . map prettyShow
 
 {-# INLINE applyFunction #-}
 applyFunction :: String -> [Term] -> Type -> Parser Term
-applyFunction name args' res = do
-  f@(_ ::: ty) <- lookupFunction (FunType (replicate (length args') individual) res) name
-  unless (map typ args' == args ty) $ typeError f args'
-  return (f :@: args')
+applyFunction name args res = do
+  fs <- lookupFunction (FunType (replicate (length args) individual) res) name
+  case [ f | f <- fs, funArgs f == map typ args ] of
+    [] -> typeError fs args
+    (f:_) -> return (f :@: args)
 
 {-# NOINLINE typeError #-}
-typeError f@(x ::: ty) args' = do
+typeError fs@(f@(x ::: _):_) args' = do
     let plural 1 x _ = x 
         plural _ _ y = y
-    fatalError $ "Type mismatch in term '" ++ prettyShow (f :@: args') ++ "': " ++
+        lengths = usort (map (length . funArgs) fs)
+    fatalError $ "Type mismatch in term '" ++ prettyShow (prettyNames (f :@: args')) ++ "': " ++
                  "Constant " ++ prettyShow x ++
-                 if length (args ty) == length args' then
-                   " has type " ++ prettyShow ty ++
+                 if length lengths == 1 && length args' `notElem` lengths then
+                   " has arity " ++ show (head lengths) ++
+                   " but was applied to " ++ show (length args') ++
+                   plural (length args') " argument" " arguments"
+                 else
+                   " has type " ++ showTypes (map rhs fs) ++
                    " but was applied to " ++ plural (length args') "an argument" "arguments" ++
                    " of type " ++ prettyShow (map typ args')
-                 else
-                   " has arity " ++ show (length args') ++
-                   " but was applied to " ++ show (length (args ty)) ++
-                   plural (length (args ty)) " argument" " arguments"
 
 {-# INLINE lookupType #-}
 lookupType :: String -> Parser Type
@@ -286,15 +334,15 @@ lookupType xs = do
     Just ty -> return ty
 
 {-# INLINE lookupFunction #-}
-lookupFunction :: FunType -> String -> Parser (Name ::: FunType)
+lookupFunction :: FunType -> String -> Parser [Name ::: FunType]
 lookupFunction def x = do
   MkState p t f v n <- getState
   case Map.lookup x f of
     Nothing -> do
       let decl = name x ::: def
-      putState (MkState p t (Map.insert x decl f) v n)
-      return decl
-    Just f -> return f
+      putState (MkState p t (Map.insert x [decl] f) v n)
+      return [decl]
+    Just fs -> return fs
 
 -- The type $i (anything whose type is not specified gets this type)
 individual :: Type
@@ -405,12 +453,40 @@ instance FormulaLike Thing where fromFormula = Formula
 -- An atomic expression.
 {-# INLINEABLE term #-}
 term :: TermLike a => Mode -> Map String Variable -> Parser a
-term mode ctx = function <|> var mode ctx <|> parens (parser mode ctx)
-  where {-# INLINE function #-}
-        function = do
-          x <- atom
-          args <- parens (sepBy1 (term mode ctx) (punct Comma)) <|> return []
-          fromThing (Apply x args)
+term mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
+  where
+    {-# INLINE function #-}
+    function = do
+      x <- atom
+      args <- parens (sepBy1 (term mode ctx) (punct Comma)) <|> return []
+      fromThing (Apply x args)
+
+    {-# INLINE num #-}
+    num = (int <|> rat <|> real)
+
+    {-# INLINE int #-}
+    int = do
+      n <- number
+      constant (Integer n) intType
+
+    {-# INLINE rat #-}
+    rat = do
+      x <- ratNumber
+      constant (Rational x) ratType
+
+    {-# INLINE real #-}
+    real = do
+      x <- realNumber
+      constant (Real x) realType
+
+    {-# INLINE constant #-}
+    constant x ty =
+      fromThing (Term ((Fixed x ::: FunType [] ty) :@: []))
+
+intType, ratType, realType :: Type
+intType = Type (name "$int") (Finite 0) Infinite
+ratType = Type (name "$rat") (Finite 0) Infinite
+realType = Type (name "$real") (Finite 0) Infinite
 
 literal, unitary, quantified, formula ::
   FormulaLike a => Mode -> Map String Variable -> Parser a
@@ -429,11 +505,11 @@ literal mode ctx = true <|> false <|> binary <?> "literal"
                rhs <- term mode ctx :: Parser Term
                let form = Literal . sign $ lhs :=: rhs
                when (typ lhs /= typ rhs) $
-                 fatalError $ "Type mismatch in equality '" ++ prettyShow form ++ 
+                 fatalError $ "Type mismatch in equality '" ++ prettyShow (prettyNames form) ++
                               "': left hand side has type " ++ prettyShow (typ lhs) ++
                               " but right hand side has type " ++ prettyShow (typ rhs)
                when (typ lhs == O) $
-                 fatalError $ "Type error in equality '" ++ prettyShow form ++
+                 fatalError $ "Type error in equality '" ++ prettyShow (prettyNames form) ++
                  "': can't use equality on predicate (use <=> or <~> instead)"
                return (fromFormula form)
           f Eq Pos <|> f Neq Neg <|> fromThing x

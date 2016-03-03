@@ -16,12 +16,15 @@ module Jukebox.TPTP.Lexer(
 
 import Data.Word
 import Data.Char
+import Data.Ratio
 }
 
 $alpha = [a-zA-Z0-9_]
 $anything = [. \n]
 @quoted = ($printable # [\\']) | \\ $printable
 @dquoted = ($printable # [\\\"]) | \\ $printable
+@pnum = [1-9][0-9]*
+@num  = 0 | @pnum
 
 tokens :-
 -- Comments and whitespace
@@ -55,7 +58,6 @@ $white+ ;
 -- Defined symbols.
 "$true" { d DTrue }
 "$false" { d DFalse }
-"$equal" { d DEqual }
 "$distinct" { d DDistinct }
 "$itef" { d DItef }
 "$itett" | "$itetf" { d DItet }
@@ -72,8 +74,11 @@ $white+ ;
 [A-Z][$alpha]* { Var . copy }
 -- Distinct objects, which are double-quoted
 \" @dquoted+  \" { DistinctObject . unquote }
--- Integers
-[\+\-]? (0 | [1-9][0-9]*)/($anything # $alpha) { Number . read }
+-- Numbers
+[\+\-]? @num/($anything # $alpha) { Number . read }
+[\+\-]? @num\/@pnum { Rational . readRational }
+[\+\-]? @num\.@num { Real . readReal }
+[\+\-]? @num(\.@num)?[eE]@num { Real . readReal }
 
 -- Operators (FOF)
 "("  { p LParen }  ")"   { p RParen }  "["  { p LBrack }   "]"  { p RBrack }
@@ -96,6 +101,8 @@ data Token = Atom { keyword :: !Keyword, tokenName :: !String }
            | Var { tokenName :: !String }
            | DistinctObject { tokenName :: !String }
            | Number { value :: !Integer }
+           | Rational { ratValue :: !Rational }
+           | Real { ratValue :: !Rational }
            | Punct { kind :: !Punct }
            | Eof
            | Error
@@ -122,13 +129,15 @@ instance Show Keyword where
 -- We only include defined names that need special treatment from the
 -- parser here: you can freely make up any other names starting with a
 -- '$' and they get turned into Atoms.
-data Defined = DTrue | DFalse | DEqual | DDistinct | DItef | DItet
-             | DO | DI | DTType deriving (Eq, Ord)
+data Defined =
+    DTrue | DFalse | DDistinct | DItef | DItet
+  | DO | DI | DTType
+  deriving (Eq, Ord)
 
 instance Show Defined where
   show x =
     case x of {
-      DTrue -> "$true"; DFalse -> "$false"; DEqual -> "$equal";
+      DTrue -> "$true"; DFalse -> "$false";
       DDistinct -> "$distinct"; DItef -> "$itef"; DItet -> "$itet";
       DO -> "$o"; DI -> "$i"; DTType -> "$tType" }
 
@@ -166,7 +175,41 @@ unquote (_:x)
   | null z = init y
   | otherwise = y ++ [z !! 1] ++ unquote (drop 2 z)
   where (y, z) = break (== '\\') x
-    
+
+readRational :: String -> Rational
+readRational = readSigned (readNum (\m ('/':xs) -> readNum (\n [] -> m % n) xs))
+
+readReal :: String -> Rational
+readReal = readSigned $ readNum $ \m xs ->
+  case xs of
+    '.':ys -> readDigits (readExp m) ys
+    _ -> readExp m [] xs
+  where
+    readExp n ds ('e':xs) =
+      readSign (\f -> readNum (result n ds . f)) xs
+    readExp n ds ('E':xs) =
+      readSign (\f -> readNum (result n ds . f)) xs
+    readExp n ds xs = result n ds 0 xs
+    result n ds e [] =
+      (fromInteger n +
+       fromInteger (read ds) / (10^length ds)) * (10^^e)
+
+readSigned :: (String -> Rational) -> String -> Rational
+readSigned f xs = readSign (\g -> g . f) xs
+
+readSign :: Num a => ((a -> a) -> String -> Rational) -> String -> Rational
+readSign f ('+':xs) = f id xs
+readSign f ('-':xs) = f negate xs
+readSign f xs = f id xs
+
+readNum :: (Integer -> String -> Rational) -> String -> Rational
+readNum f xs = readDigits (f . read) xs
+
+readDigits :: (String -> String -> Rational) -> String -> Rational
+readDigits f xs = f ys zs
+  where
+    (ys, zs) = span isDigit xs
+
 -- The main scanner function, heavily modified from Alex's posn-bytestring wrapper.
 
 data TokenStream = At {-# UNPACK #-} !Pos !Contents
