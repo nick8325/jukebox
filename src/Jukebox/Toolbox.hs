@@ -16,6 +16,7 @@ import Jukebox.TPTP.FindFile
 import Jukebox.GuessModel
 import Jukebox.InferTypes
 import qualified Data.Map.Strict as Map
+import qualified Jukebox.SMTLIB as SMT
 
 data GlobalFlags =
   GlobalFlags {
@@ -139,6 +140,9 @@ annotateMonotonicityBox = (\globals x -> do
 
 prettyPrintProblemBox :: OptionParser (Problem Form -> IO ())
 prettyPrintProblemBox = prettyPrintIO showProblem <$> globalFlags <*> writeFileBox
+
+prettyPrintProblemSMTBox :: OptionParser (Problem Form -> IO ())
+prettyPrintProblemSMTBox = prettyPrintIO SMT.showProblem <$> globalFlags <*> writeFileBox
 
 prettyPrintClausesBox :: OptionParser (Problem Clause -> IO ())
 prettyPrintClausesBox = prettyPrintIO showClauses <$> globalFlags <*> writeFileBox

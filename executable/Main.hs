@@ -4,7 +4,7 @@ import Control.Monad
 import Jukebox.Options
 import Jukebox.Toolbox
 
-tools = mconcat [fof, cnf, monotonox, guessmodel]
+tools = mconcat [fof, cnf, smt, monotonox, guessmodel]
 
 fof = tool info pipeline
   where
@@ -29,6 +29,16 @@ monotonox = tool info pipeline
          oneConjectureBox =>>=
          monotonicityBox =>>=
          writeFileBox)
+
+smt = tool info pipeline
+  where
+    info = Tool "smt" "Jukebox TFF-to-SMTLIB translator" "1"
+                "Translate from TFF to SMTLIB"
+    pipeline =
+      greetingBox info =>>
+      allFilesBox <*>
+        (parseProblemBox =>>=
+         prettyPrintProblemSMTBox)
 
 cnf = tool info pipeline
   where

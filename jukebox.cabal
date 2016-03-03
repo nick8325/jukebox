@@ -46,6 +46,7 @@ Library
     Jukebox.SatEq
     Jukebox.Sat
     Jukebox.SatMin
+    Jukebox.SMTLIB
     Jukebox.Toolbox
     Jukebox.TPTP.Parse.Core
     Jukebox.TPTP.FindFile
