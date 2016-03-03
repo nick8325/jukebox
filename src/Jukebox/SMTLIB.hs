@@ -130,7 +130,7 @@ pPrintProblem :: Problem Form -> Doc
 pPrintProblem prob0 =
   vcat (pPrintDecls prob ++ map pPrintInput prob ++ [sexp ["check-sat"]])
   where
-    prob = renameTPTP (run (prettyNames prob0) renameAvoidingKeywords)
+    prob = renameTPTP (prettyNames (run (prettyNames prob0) renameAvoidingKeywords))
 
 pPrintDecls :: Problem Form -> [Doc]
 pPrintDecls prob =
