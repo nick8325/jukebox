@@ -1,10 +1,13 @@
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE GADTs, CPP #-}
 module Jukebox.Provers.SPASS where
 
 import Jukebox.Form hiding (tag, Or)
 import Jukebox.Options
 import Jukebox.Utils
 import Jukebox.TPTP.Print
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+#endif
 
 data SPASSFlags =
   SPASSFlags {

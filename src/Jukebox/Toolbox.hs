@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, CPP #-}
 module Jukebox.Toolbox where
 
 import Jukebox.Options
@@ -17,6 +17,9 @@ import Jukebox.GuessModel
 import Jukebox.InferTypes
 import qualified Data.Map.Strict as Map
 import qualified Jukebox.SMTLIB as SMT
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+#endif
 
 data GlobalFlags =
   GlobalFlags {

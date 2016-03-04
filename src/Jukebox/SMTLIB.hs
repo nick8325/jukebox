@@ -15,6 +15,9 @@ import Jukebox.TPTP.Print(prettyNames)
 import Text.PrettyPrint.HughesPJClass
 import Data.Maybe
 import Data.Ratio
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative hiding (empty)
+#endif
 
 keywords :: [String]
 keywords =

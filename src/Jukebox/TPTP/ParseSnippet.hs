@@ -1,5 +1,6 @@
 -- Parse little bits of TPTP, e.g. a prelude for a particular tool.
 
+{-# LANGUAGE CPP #-}
 module Jukebox.TPTP.ParseSnippet where
 
 import Jukebox.TPTP.Parse.Core as TPTP.Parse.Core
@@ -9,6 +10,9 @@ import Jukebox.Name
 import Jukebox.Form
 import qualified Data.Map.Strict as Map
 import Data.List
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+#endif
 
 tff, cnf :: [(String, Type)] -> [(String, Function)] -> String -> Form
 tff = form TPTP.Parse.Core.tff

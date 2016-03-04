@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving, CPP #-}
 module Jukebox.HighSat where
 
 import MiniSat hiding (neg)
@@ -12,6 +12,10 @@ import Control.Monad.IO.Class
 import Control.Monad.Trans.State.Strict
 import Control.Monad.Trans.Reader
 import Data.Maybe
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+import Data.Traversable(traverse)
+#endif
 
 newtype Sat1 a b = Sat1 { runSat1_ :: ReaderT Solver (ReaderT (Watch a) (StateT (Map a Lit) IO)) b } deriving (Functor, Applicative, Monad, MonadIO)
 newtype Sat a b c = Sat { runSat_ :: ReaderT (Watch a) (StateT (Map b (SatState a)) IO) c } deriving (Functor, Applicative, Monad, MonadIO)

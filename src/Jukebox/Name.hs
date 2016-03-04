@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances #-}
+{-# LANGUAGE TypeOperators, GeneralizedNewtypeDeriving, FlexibleInstances, CPP #-}
 module Jukebox.Name where
 
 import Control.Monad
@@ -8,6 +8,9 @@ import Data.Int
 import Data.Symbol
 import Data.Char
 import Data.Ratio
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+#endif
 
 data Name =
     Fixed !FixedName

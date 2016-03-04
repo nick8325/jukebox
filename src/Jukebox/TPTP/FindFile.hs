@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Jukebox.TPTP.FindFile where
 
 import System.FilePath
@@ -6,6 +7,10 @@ import System.Environment
 import Control.Exception
 import Control.Monad
 import Jukebox.Options
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+import Data.Traversable(sequenceA)
+#endif
 
 findFile :: [FilePath] -> FilePath -> IO (Maybe FilePath)
 findFile [] _file = return Nothing

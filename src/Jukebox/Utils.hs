@@ -1,4 +1,4 @@
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TupleSections, CPP #-}
 module Jukebox.Utils where
 
 import System.Process
@@ -6,6 +6,9 @@ import System.IO
 import System.Exit
 import Control.Concurrent
 import qualified Data.Set as Set
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+#endif
 
 usort :: Ord a => [a] -> [a]
 --usort = map head . group . sort

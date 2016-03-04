@@ -1,8 +1,13 @@
+{-# LANGUAGE CPP #-}
 module Main where
 
 import Control.Monad
 import Jukebox.Options
 import Jukebox.Toolbox
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+import Data.Monoid
+#endif
 
 tools = mconcat [fof, cnf, smt, monotonox, guessmodel]
 

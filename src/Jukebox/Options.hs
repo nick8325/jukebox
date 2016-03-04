@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, CPP #-}
 module Jukebox.Options where
 
 import Control.Arrow((***))
@@ -8,6 +8,10 @@ import Data.List
 import System.Environment
 import System.Exit
 import System.IO
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+import Data.Monoid
+#endif
 
 ----------------------------------------------------------------------
 -- A parser of some kind annotated with a help text of some kind

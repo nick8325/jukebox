@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeOperators, BangPatterns #-}
+{-# LANGUAGE TypeOperators, BangPatterns, CPP #-}
 module Jukebox.Clausify where
 
 import Jukebox.Form hiding (run)
@@ -13,6 +13,9 @@ import Jukebox.Utils
 import Jukebox.Options
 import qualified Data.Set as Set
 import Data.Set(Set)
+#if __GLASGOW_HASKELL__ < 710
+import Control.Applicative
+#endif
 
 newtype ClausifyFlags = ClausifyFlags { splitting :: Bool } deriving Show
 
