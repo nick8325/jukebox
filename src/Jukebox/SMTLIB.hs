@@ -25,6 +25,8 @@ keywords =
     , "and"
     , "axiom"
     , "inversion"
+    , "bit0"
+    , "bit1"
     , "bitv"
     , "bool"
     , "check"
