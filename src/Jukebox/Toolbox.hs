@@ -59,11 +59,12 @@ allFiles _ [] = do
 allFiles f xs = mapM_ f xs
 
 parseProblemBox :: OptionParser (FilePath -> IO (Problem Form))
-parseProblemBox = parseProblemIO <$> findFileFlags
+parseProblemBox = parseProblemIO <$> globalFlags <*> findFileFlags
 
-parseProblemIO :: [FilePath] -> FilePath -> IO (Problem Form)
-parseProblemIO dirs f = do
-  r <- parseProblem dirs f
+parseProblemIO :: GlobalFlags -> [FilePath] -> FilePath -> IO (Problem Form)
+parseProblemIO flags dirs f = do
+  let found file = unless (quiet flags) $ hPutStrLn stderr $ "Reading " ++ file ++ "..."
+  r <- parseProblem found dirs f
   case r of
     Left err -> do
       hPutStrLn stderr err
@@ -197,7 +198,7 @@ allObligsIO solve CNF{..} = loop 1 conjectures
             NoAnswer x -> result (show x)
         multi = length conjectures > 1
         part i = show i ++ "/" ++ show (length conjectures)
-        result x = putStrLn ("+++ RESULT: " ++ x)
+        result x = putStrLn ("% SZS status " ++ x)
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
 inferBox = (\globals prob -> do
