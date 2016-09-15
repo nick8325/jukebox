@@ -78,7 +78,9 @@ translate scheme mono f =
                 Axiom -> prepare f
                 Conjecture -> fmap notInwards (prepare (nt f))
       typeI = Type (name "$i") (Finite 0) Infinite
-  in Form.run (translate1 scheme mono f') (return . mapType (const typeI))
+      trType O = O
+      trType ty = typeI
+  in Form.run (translate1 scheme mono f') (return . mapType trType)
 
 -- Typing functions.
 
