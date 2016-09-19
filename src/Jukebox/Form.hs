@@ -463,7 +463,9 @@ subst s t =
 
     bind :: Symbolic a => Bind a -> Bind a
     bind (Bind vs t) =
-      Bind vs (subst (checkBinder vs (Map.filterWithKey (\x _ -> x `Set.member` vs) s)) t)
+      Bind vs (subst (checkBinder vs (s Map.\\ vs')) t)
+      where
+        vs' = Map.fromSet (const ()) vs
 
     generic :: Symbolic a => a -> a
     generic t = recursively (subst s) t
