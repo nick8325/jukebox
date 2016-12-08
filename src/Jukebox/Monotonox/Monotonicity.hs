@@ -1,13 +1,15 @@
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE TypeOperators, CPP #-}
 module Jukebox.Monotonox.Monotonicity where
 
 import Prelude hiding (lookup)
 import Jukebox.Name
 import Jukebox.Form hiding (Form, clause, true, false, And, Or)
-import Jukebox.HighSat
 import Control.Monad
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
+#ifndef NO_MINISAT
+import Jukebox.HighSat
+#endif
 
 data Extension = TrueExtend | FalseExtend | CopyExtend deriving Show
 
@@ -24,6 +26,9 @@ annotateMonotonicity prob = do
   return (fmap (mapType f) prob)
 
 monotone :: [Clause] -> IO (Map Type (Maybe (Map Function Extension)))
+#ifdef NO_MINISAT
+monotone _ = return Map.empty
+#else
 monotone cs = runSat watch tys $ do
   let fs = functions cs
   mapM_ (clause . toLiterals) cs
@@ -74,3 +79,4 @@ guards (Neg (_ :=: Var x)) y | x == y = true
 guards (Pos (Tru (p :@: ts))) x | Var x `elem` ts = Lit (Pos (TrueExtended p))
 guards (Neg (Tru (p :@: ts))) x | Var x `elem` ts = Lit (Pos (FalseExtended p))
 guards _ _ = false
+#endif

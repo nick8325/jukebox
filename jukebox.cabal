@@ -19,13 +19,27 @@ License: BSD3
 License-file: LICENSE
 extra-source-files: src/errors.h
 
+flag minisat
+  Description: Use minisat. Required for monotonicity inference.
+  Default: True
+
 source-repository head
   type:     git
   location: https://github.com/nick8325/jukebox
 
 Library
   Build-depends: base >= 4 && < 5, array, transformers >= 0.4.0.0, directory,
-    filepath, pretty >= 1.1.2.0, minisat, symbol, dlist, process, containers, uglymemo
+    filepath, pretty >= 1.1.2.0, symbol, dlist, process, containers, uglymemo
+  if flag(minisat)
+    Build-depends: minisat
+    Exposed-modules:
+      Jukebox.Sat3
+      Jukebox.SatEq
+      Jukebox.Sat
+      Jukebox.SatMin
+      Jukebox.HighSat
+  else
+    cpp-options: -DNO_MINISAT
   ghc-options: -W -fno-warn-incomplete-patterns
   Build-tools: alex
   Hs-source-dirs: src
@@ -34,7 +48,6 @@ Library
     Jukebox.Clausify
     Jukebox.Form
     Jukebox.GuessModel
-    Jukebox.HighSat
     Jukebox.InferTypes
     Jukebox.Monotonox.Monotonicity
     Jukebox.Monotonox.ToFOF
@@ -42,10 +55,6 @@ Library
     Jukebox.Options
     Jukebox.Provers.E
     Jukebox.Provers.SPASS
-    Jukebox.Sat3
-    Jukebox.SatEq
-    Jukebox.Sat
-    Jukebox.SatMin
     Jukebox.SMTLIB
     Jukebox.Toolbox
     Jukebox.TPTP.Parse.Core
