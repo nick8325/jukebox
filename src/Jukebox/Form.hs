@@ -41,7 +41,7 @@ data Type =
       -- if there is a model of size >= tsize then there is a model of size tsize
       tsize :: DomainSize } deriving Typeable
 
-data FunType = FunType { args :: [Type], res :: Type } deriving (Eq, Typeable)
+data FunType = FunType { args :: [Type], res :: Type } deriving (Eq, Ord, Typeable)
 
 -- Helper function for defining (Eq, Ord) instances
 typeMaybeName :: Type -> Maybe Name

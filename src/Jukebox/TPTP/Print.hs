@@ -57,7 +57,7 @@ pPrintDecls prob =
     funcDecl (f ::: ty) = typeClause f (pPrint ty)
     typeClause name ty =
       pPrintClause "tff" "type" "type"
-        (pPrint name <> colon <+> ty)
+        (text (escapeAtom (show name)) <> colon <+> ty)
 
 instance Pretty a => Pretty (Input a) where
   pPrint = pPrintInput "tff" pPrint
