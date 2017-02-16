@@ -76,7 +76,6 @@ clausifyBox = clausifyIO <$> globalFlags <*> clausifyFlags
 
 clausifyIO :: GlobalFlags -> ClausifyFlags -> Problem Form -> IO CNF
 clausifyIO globals flags prob = do
-  unless (quiet globals) $ hPutStrLn stderr "Clausifying problem..."
   return $! clausify flags prob
 
 toFofBox :: OptionParser (Problem Form -> IO (Problem Form))
@@ -95,7 +94,6 @@ oneConjecture cnf = run cnf f
 toFofIO :: GlobalFlags -> (Problem Form -> IO CNF) -> Scheme -> Problem Form -> IO (Problem Form)
 toFofIO globals clausify scheme f = do
   CNF{..} <- clausify f
-  unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
   -- In some cases we might get better results by considering each
   -- problem (axioms + conjecture) separately, but no big deal.
   m <- monotone (map what (axioms ++ concat conjectures))
@@ -123,7 +121,6 @@ monotonicityBox = monotonicity <$> globalFlags
 
 monotonicity :: GlobalFlags -> Problem Clause -> IO String
 monotonicity globals cs = do
-  unless (quiet globals) $ hPutStrLn stderr "Monotonicity analysis..."
   m <- monotone (map what cs)
   let info (ty, Nothing) = [base ty ++ ": not monotone"]
       info (ty, Just m) =
@@ -139,7 +136,6 @@ monotonicity globals cs = do
 
 annotateMonotonicityBox :: OptionParser (Problem Clause -> IO (Problem Clause))
 annotateMonotonicityBox = (\globals x -> do
-  unless (quiet globals) $ putStrLn "Monotonicity analysis..."
   annotateMonotonicity x) <$> globalFlags
 
 prettyPrintProblemBox :: OptionParser (Problem Form -> IO ())
@@ -153,7 +149,6 @@ prettyPrintClausesBox = prettyPrintIO showClauses <$> globalFlags <*> writeFileB
 
 prettyPrintIO :: (a -> String) -> GlobalFlags -> (String -> IO ()) -> a -> IO ()
 prettyPrintIO shw globals write prob = do
-  unless (quiet globals) $ hPutStrLn stderr "Writing output..."
   write (shw prob ++ "\n")
 
 writeFileBox :: OptionParser (String -> IO ())
@@ -202,7 +197,6 @@ allObligsIO solve CNF{..} = loop 1 conjectures
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
 inferBox = (\globals prob -> do
-  unless (quiet globals) $ putStrLn "Inferring types..."
   return (run prob inferTypes)) <$> globalFlags
 
 printInferredBox :: OptionParser ((Problem Clause, Type -> Type) -> IO (Problem Clause))
