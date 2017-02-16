@@ -23,8 +23,7 @@ import Control.Applicative
 
 data GlobalFlags =
   GlobalFlags {
-    quiet :: Bool,
-    tstp  :: Bool }
+    quiet :: Bool }
   deriving Show
 
 globalFlags :: OptionParser GlobalFlags
@@ -32,9 +31,7 @@ globalFlags =
   inGroup "Output options" $
   GlobalFlags <$>
     bool "quiet"
-      ["Do not print any informational output."] <*>
-    bool "tstp"
-      ["Print output in a more TSTP-friendly way."]
+      ["Do not print any informational output."]
 
 (=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
 f =>>= g = (>=>) <$> f <*> g
@@ -52,14 +49,13 @@ greetingBoxIO t globals = message globals (greeting t)
 
 message :: GlobalFlags -> String -> IO ()
 message globals msg =
-  unless (quiet globals) $
-    hPutStr stderr (comment globals msg)
+  putStr (comment globals msg)
 
 comment :: GlobalFlags -> String -> String
-comment globals msg =
-  if tstp globals then
+comment globals msg
+  | quiet globals = ""
+  | otherwise =
     unlines ["% " ++ line | line <- lines msg]
-  else unlines (lines msg)
 
 allFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
 allFilesBox = flip allFiles <$> filenames
@@ -198,7 +194,7 @@ allObligsBox = allObligsIO <$> globalFlags
 allObligsIO globals solve CNF{..} = loop 1 conjectures
   where loop _ [] =
           result unsatisfiable
-            "the conjecture was true or the axioms were contradictory"
+            "the conjecture is true or the axioms are contradictory"
         loop i (c:cs) = do
           when multi $ putStr $ comment globals $ "Part " ++ part i
           answer <- solve (axioms ++ c)
@@ -206,18 +202,16 @@ allObligsIO globals solve CNF{..} = loop 1 conjectures
           case answer of
             Satisfiable ->
               result satisfiable
-                "the conjecture is false and the axioms are consistent"
+                "the conjecture is not true and the axioms are consistent"
             Unsatisfiable -> loop (i+1) cs
             NoAnswer x ->
               result (show x)
-                "don't know if the conjecture is true or false"
+                "couldn't prove or disprove the conjecture"
         multi = length conjectures > 1
         part i = show i ++ "/" ++ show (length conjectures)
-        result x hint =
-          if tstp globals then
-            putStrLn ("% SZS status " ++ x)
-          else
-            putStrLn ("Result: " ++ x ++ " (" ++ hint ++ ")")
+        result x hint = do
+          message globals ("% SZS status " ++ x)
+          message globals ("(" ++ hint ++ ")")
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
 inferBox = (\globals prob -> do
