@@ -337,12 +337,20 @@ helpTool t0 p = usageTool t0 "help" help "help for"
           ]
 
 help :: Tool -> OptionParser a -> [String]
-help t p = concat [
-  [greeting t],
-  usage t "",
-  ["<option> can be any of the following:"],
-  concat [ justify ("--" ++ flagName f ++ " " ++ flagArgs f) (flagHelp f) | f <- nub (descr p) ]
-  ]
+help t p =
+  intercalate [""]
+    [[greeting t],
+     usage t "",
+     intercalate [""] [
+       [flagGroup f0 ++ ":"] ++
+       concat [justify ("--" ++ flagName f ++ " " ++ flagArgs f) (flagHelp f) | f <- fs]
+       | fs@(f0:_) <- groups (nub (descr p)) ]]
+
+  where
+    groups [] = []
+    groups (f:fs) =
+      (f:[f' | f' <- fs, flagGroup f == flagGroup f']):
+      groups [f' | f' <- fs, flagGroup f /= flagGroup f']
 
 greeting :: Tool -> String
 greeting t = toolName t ++ ", version " ++ toolVersion t ++ "."
@@ -352,9 +360,8 @@ usage t opts = [
   "Usage: " ++ toolProgName t ++ " " ++ opts ++ "<option>* <file>*",
   toolHelp t ++ ".",
   "",
-  "<file> should be in TPTP format.",
-  ""
+  "<file> should be in TPTP format."
   ]
 
 justify :: String -> [String] -> [String]
-justify name help = ["", "  " ++ name] ++ map ("    " ++) help
+justify name help = ["  " ++ name] ++ map ("    " ++) help

@@ -23,7 +23,8 @@ import Control.Applicative
 
 data GlobalFlags =
   GlobalFlags {
-    quiet :: Bool }
+    quiet :: Bool,
+    tstp  :: Bool }
   deriving Show
 
 globalFlags :: OptionParser GlobalFlags
@@ -32,6 +33,9 @@ globalFlags =
   GlobalFlags <$>
     bool "quiet"
       ["Do not print any informational output.",
+       "Default: (off)"] <*>
+    bool "tstp"
+      ["Print output in TSTP style.",
        "Default: (off)"]
 
 (=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
@@ -46,8 +50,16 @@ greetingBox :: Tool -> OptionParser (IO ())
 greetingBox t = greetingBoxIO t <$> globalFlags
 
 greetingBoxIO :: Tool -> GlobalFlags -> IO ()
-greetingBoxIO t GlobalFlags{quiet = quiet} =
-  unless quiet $ hPutStrLn stderr (greeting t)
+greetingBoxIO t globals = message globals (greeting t)
+
+message :: GlobalFlags -> String -> IO ()
+message globals msg =
+  unless (quiet globals) $
+    hPutStrLn stderr (comment globals msg)
+
+comment :: GlobalFlags -> String -> String
+comment globals msg =
+  if tstp globals then "% " ++ msg else msg
 
 allFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
 allFilesBox = flip allFiles <$> filenames
@@ -63,7 +75,7 @@ parseProblemBox = parseProblemIO <$> globalFlags <*> findFileFlags
 
 parseProblemIO :: GlobalFlags -> [FilePath] -> FilePath -> IO (Problem Form)
 parseProblemIO flags dirs f = do
-  let found file = unless (quiet flags) $ hPutStrLn stderr $ "Reading " ++ file ++ "..."
+  let found file = message flags $ "Reading " ++ file ++ "..."
   r <- parseProblem found dirs f
   case r of
     Left err -> do
@@ -179,21 +191,31 @@ guessModelIO :: [String] -> Universe -> Problem Form -> IO (Problem Form)
 guessModelIO expansive univ prob = return (guessModel expansive univ prob)
 
 allObligsBox :: OptionParser ((Problem Clause -> IO Answer) -> CNF -> IO ())
-allObligsBox = pure allObligsIO
+allObligsBox = allObligsIO <$> globalFlags
 
-allObligsIO solve CNF{..} = loop 1 conjectures
-  where loop _ [] = result unsatisfiable
+allObligsIO globals solve CNF{..} = loop 1 conjectures
+  where loop _ [] =
+          result unsatisfiable
+            "the conjecture was true or the axioms were contradictory"
         loop i (c:cs) = do
-          when multi $ putStrLn $ "Part " ++ part i
+          when multi $ putStrLn $ comment globals $ "Part " ++ part i
           answer <- solve (axioms ++ c)
-          when multi $ putStrLn $ "+++ PARTIAL (" ++ part i ++ "): " ++ show answer
+          when multi $ putStrLn $ comment globals $ "Partial result (" ++ part i ++ "): " ++ show answer
           case answer of
-            Satisfiable -> result satisfiable
+            Satisfiable ->
+              result satisfiable
+                "the conjecture is false and the axioms are consistent"
             Unsatisfiable -> loop (i+1) cs
-            NoAnswer x -> result (show x)
+            NoAnswer x ->
+              result (show x)
+                "don't know if the conjecture is true or false"
         multi = length conjectures > 1
         part i = show i ++ "/" ++ show (length conjectures)
-        result x = putStrLn ("% SZS status " ++ x)
+        result x hint =
+          if tstp globals then
+            putStrLn ("% SZS status " ++ x)
+          else
+            putStrLn ("Result: " ++ x ++ " (" ++ hint ++ ")")
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
 inferBox = (\globals prob -> do
