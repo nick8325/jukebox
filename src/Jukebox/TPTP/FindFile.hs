@@ -32,6 +32,7 @@ getTPTPDirs = do { dir <- getEnv "TPTP"; return [dir] } `catch` f
         f _ = return []
 
 findFileFlags =
+  inGroup "Input and clausifier options" $
   concat <$>
   sequenceA [
     pure ["."],

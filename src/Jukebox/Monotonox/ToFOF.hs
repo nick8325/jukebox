@@ -86,10 +86,10 @@ translate scheme mono f =
 
 tagsFlags :: OptionParser Bool
 tagsFlags =
+  inGroup "Options for encoding types" $
   bool "more-axioms"
-    ["Add extra typing axioms for function arguments,",
-     "when using typing tags.",
-     "These are unnecessary for completeness but may help (or hinder!) the prover."]
+    ["Add extra, redundant typing axioms for function arguments.",
+     "May help or hinder the prover. Only affects --encoding tags."]
 
 tags :: Bool -> Scheme
 tags moreAxioms = Scheme

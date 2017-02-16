@@ -20,11 +20,10 @@ import Control.Applicative
 newtype ClausifyFlags = ClausifyFlags { splitting :: Bool } deriving Show
 
 clausifyFlags =
-  inGroup "Clausifier options" $
+  inGroup "Input and clausifier options" $
   ClausifyFlags <$>
     bool "split"
-      ["Split the conjecture into several sub-conjectures.",
-       "Default: (off)"]
+      ["Split the conjecture into several sub-conjectures."]
 
 ----------------------------------------------------------------------
 -- clausify

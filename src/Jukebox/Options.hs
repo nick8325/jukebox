@@ -193,7 +193,7 @@ data Flag = Flag
 flag :: String -> [String] -> a -> ArgParser a -> OptionParser a
 flag name help def (Annotated desc (SeqParser args f)) =
   Annotated [desc'] (await name def g)
-  where desc' = Flag name "Common options" help desc
+  where desc' = Flag name "General options" help desc
         g xs =
           case f xs of
             Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
@@ -271,8 +271,12 @@ tool t p =
   where f x | x == toolProgName t = Just (t, parser p')
         f _ = Nothing
         p' = p <* versionParser <* helpParser
-        helpParser = flag "help" ["Show this help text."] () (argUsage ExitSuccess (help t p'))
-        versionParser = flag "version" ["Print the version number."] () (argUsage ExitSuccess [greeting t])
+        helpParser =
+          inGroup "Miscellaneous options" $
+          flag "help" ["Show this help text."] () (argUsage ExitSuccess (help t p'))
+        versionParser =
+          inGroup "Miscellaneous options" $
+          flag "version" ["Print the version number."] () (argUsage ExitSuccess [greeting t])
 
 -- Use the program name as a tool name if possible.
 getEffectiveArgs :: ToolParser a -> IO [String]
@@ -328,13 +332,11 @@ versionTool t0 = usageTool t0 "version" [greeting t0] "the version of"
 
 helpTool :: Tool -> ToolParser a -> ToolParser a
 helpTool t0 p = usageTool t0 "help" help "help for"
-  where help = concat [
+  where help = intercalate [""] [
           [greeting t0],
           usage t0 "<toolname> ",
-          ["<toolname> can be any of the following:"],
-          concat [ justify (toolProgName t) [toolHelp t] | t <- descr p ],
-          ["", "Use " ++ toolProgName t0 ++ " <toolname> --help for help on a particular tool."]
-          ]
+          ["Please run " ++ toolProgName t0 ++ " <toolname> --help, where <toolname> can be any of the following:"],
+          intercalate [""] [ justify (toolProgName t) [toolHelp t] | t <- descr p ]]
 
 help :: Tool -> OptionParser a -> [String]
 help t p =

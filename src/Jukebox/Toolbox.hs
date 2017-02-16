@@ -29,14 +29,12 @@ data GlobalFlags =
 
 globalFlags :: OptionParser GlobalFlags
 globalFlags =
-  inGroup "Global options" $
+  inGroup "Output options" $
   GlobalFlags <$>
     bool "quiet"
-      ["Do not print any informational output.",
-       "Default: (off)"] <*>
+      ["Do not print any informational output."] <*>
     bool "tstp"
-      ["Print output in TSTP style.",
-       "Default: (off)"]
+      ["Print output in a more TSTP-friendly way."]
 
 (=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
 f =>>= g = (>=>) <$> f <*> g
@@ -55,11 +53,13 @@ greetingBoxIO t globals = message globals (greeting t)
 message :: GlobalFlags -> String -> IO ()
 message globals msg =
   unless (quiet globals) $
-    hPutStrLn stderr (comment globals msg)
+    hPutStr stderr (comment globals msg)
 
 comment :: GlobalFlags -> String -> String
 comment globals msg =
-  if tstp globals then "% " ++ msg else msg
+  if tstp globals then
+    unlines ["% " ++ line | line <- lines msg]
+  else unlines (lines msg)
 
 allFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
 allFilesBox = flip allFiles <$> filenames
@@ -118,10 +118,10 @@ toFofIO globals clausify scheme f = do
 
 schemeBox :: OptionParser Scheme
 schemeBox =
+  inGroup "Options for encoding types" $
   choose <$>
   flag "encoding"
-    ["Which type encoding to use.",
-     "Default: --encoding guards"]
+    ["Which type encoding to use (defaults to guards)."]
     "guards"
     (argOption ["guards", "tags"])
   <*> tagsFlags
@@ -165,26 +165,28 @@ prettyPrintIO shw globals write prob = do
 
 writeFileBox :: OptionParser (String -> IO ())
 writeFileBox =
+  inGroup "Output options" $
   flag "output"
-    ["Where to write the output.",
-     "Default: stdout"]
+    ["Where to write the output file (defaults to stdout)."]
     putStr
     (fmap myWriteFile argFile)
   where myWriteFile "/dev/null" _ = return ()
+        myWriteFile "-" contents = putStr contents
         myWriteFile file contents = writeFile file contents
 
 guessModelBox :: OptionParser (Problem Form -> IO (Problem Form))
-guessModelBox = guessModelIO <$> expansive <*> universe
+guessModelBox =
+  inGroup "Options for the model guesser:" $
+  guessModelIO <$> expansive <*> universe
   where universe = choose <$>
                    flag "universe"
-                   ["Which universe to find the model in.",
-                    "Default: peano"]
+                   ["Which universe to find the model in (defaults to peano)."]
                    "peano"
                    (argOption ["peano", "trees"])
         choose "peano" = Peano
         choose "trees" = Trees
         expansive = manyFlags "expansive"
-                    ["Allow a function to construct 'new' terms in its base base."]
+                    ["Allow a function to construct 'new' terms in its base case."]
                     (arg "<function>" "expected a function name" Just)
 
 guessModelIO :: [String] -> Universe -> Problem Form -> IO (Problem Form)
@@ -198,9 +200,9 @@ allObligsIO globals solve CNF{..} = loop 1 conjectures
           result unsatisfiable
             "the conjecture was true or the axioms were contradictory"
         loop i (c:cs) = do
-          when multi $ putStrLn $ comment globals $ "Part " ++ part i
+          when multi $ putStr $ comment globals $ "Part " ++ part i
           answer <- solve (axioms ++ c)
-          when multi $ putStrLn $ comment globals $ "Partial result (" ++ part i ++ "): " ++ show answer
+          when multi $ putStr $ comment globals $ "Partial result (" ++ part i ++ "): " ++ show answer
           case answer of
             Satisfiable ->
               result satisfiable
