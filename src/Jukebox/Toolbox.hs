@@ -196,9 +196,9 @@ allObligsIO globals solve CNF{..} = loop 1 conjectures
           result unsatisfiable
             "PROVED.\nThe conjecture is true or the axioms are contradictory."
         loop i (c:cs) = do
-          when multi $ putStr $ comment globals $ "Part " ++ part i
+          when multi $ message globals $ "Part " ++ part i
           answer <- solve (axioms ++ c)
-          when multi $ putStr $ comment globals $ "Partial result (" ++ part i ++ "): " ++ show answer
+          when multi $ message globals $ "Partial result (" ++ part i ++ "): " ++ show answer
           case answer of
             Satisfiable ->
               result satisfiable
@@ -210,7 +210,7 @@ allObligsIO globals solve CNF{..} = loop 1 conjectures
         multi = length conjectures > 1
         part i = show i ++ "/" ++ show (length conjectures)
         result x hint = do
-          message globals ("SZS status " ++ x)
+          putStrLn ("% SZS status " ++ x)
           unless (quiet globals) $ putStrLn ""
           message globals hint
 
