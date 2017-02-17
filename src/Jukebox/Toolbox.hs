@@ -211,7 +211,7 @@ allObligsIO globals solve CNF{..} = loop 1 conjectures
         part i = show i ++ "/" ++ show (length conjectures)
         result x hint = do
           message globals ("SZS status " ++ x)
-          putStrLn ""
+          unless (quiet globals) $ putStrLn ""
           message globals hint
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
