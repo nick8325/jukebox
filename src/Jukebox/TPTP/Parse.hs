@@ -33,6 +33,11 @@ parseProblemWith found findFile name =
       where
         msg' = "Error in " ++ show loc ++ ":\n" ++ msg
 
+    readInFile _ "-" =
+      ExceptT $ do
+        liftIO (found "standard input")
+        fmap Right getContents `catch`
+          \(e :: IOException) -> return (Left (show e))
     readInFile pos name = do
       mfile <- liftIO (findFile name)
       case mfile of
