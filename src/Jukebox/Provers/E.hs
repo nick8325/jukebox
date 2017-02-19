@@ -88,7 +88,7 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
           , suffix == suffix' ]
         parse xs =
           let toks = scan xs
-          in case run_ parser (UserState initialState toks) of
+          in case run_ parser (UserState (initialState Nothing) toks) of
             Ok _ ts -> ts
             _ -> error "runE: couldn't parse result from E"
         parser =

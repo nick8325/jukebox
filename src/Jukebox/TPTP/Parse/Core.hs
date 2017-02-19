@@ -31,7 +31,8 @@ import qualified Jukebox.Name as Name
 -- The parser monad
 
 data ParseState =
-  MkState ![Input Form]            -- problem being constructed, inputs are in reverse order
+  MkState (Maybe String)           -- filename
+          ![Input Form]            -- problem being constructed, inputs are in reverse order
           !(Map String Type)       -- types in scope
           !(Map String [Function]) -- functions in scope
           !(Map String Variable)   -- variables in scope, for CNF
@@ -43,9 +44,9 @@ type ParsecState = UserState ParseState TokenStream
 data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 
 -- The initial parser state.
-initialState :: ParseState
-initialState =
-  initialStateFrom []
+initialState :: Maybe String -> ParseState
+initialState mfile =
+  initialStateFrom mfile []
     (Map.fromList [(show (name ty), ty) | ty <- [int, rat, real]])
     (Map.fromList
        [ (fun,
@@ -77,8 +78,8 @@ initialState =
        fun ["$to_rat"]  (\ty -> FunType [ty] rat) ++
        fun ["$to_real"] (\ty -> FunType [ty] real)
 
-initialStateFrom :: [Name] -> Map String Type -> Map String [Function] -> ParseState
-initialStateFrom xs tys fs = MkState [] tys fs Map.empty n
+initialStateFrom :: Maybe String -> [Name] -> Map String Type -> Map String [Function] -> ParseState
+initialStateFrom mfile xs tys fs = MkState mfile [] tys fs Map.empty n
   where
     n = maximum (0:[succ m | Unique m _ _ <- xs])
 
@@ -117,7 +118,7 @@ makeLocation file (L.Pos row col) =
   Location file (fromIntegral row) (fromIntegral col)
 
 parseProblem :: FilePath -> String -> ParseResult [Input Form]
-parseProblem name contents = parseProblemFrom initialState name contents
+parseProblem name contents = parseProblemFrom (initialState (Just name)) name contents
 
 parseProblemFrom :: ParseState -> FilePath -> String -> ParseResult [Input Form]
 parseProblemFrom state name contents =
@@ -155,11 +156,11 @@ parseProblemFrom state name contents =
     merge (Just xs) (Just ys) = Just (xs `intersect` ys)
 
     finalise :: ParseState -> Problem Form
-    finalise (MkState p _ _ _ _) = check (reverse p)
+    finalise (MkState _ p _ _ _ _) = check (reverse p)
 
 -- Wee function for testing.
 testParser :: Parser a -> String -> Either [String] a
-testParser p s = snd (run (const []) p (UserState initialState (scan s)))
+testParser p s = snd (run (const []) p (UserState (initialState Nothing) (scan s)))
 
 -- Primitive parsers.
 
@@ -250,17 +251,25 @@ input included = declaration Cnf (formulaIn cnf) <|>
 
 -- A TPTP kind.
 kind :: Parser (Tag -> Form -> Input Form)
-kind = axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
-       axiom Assumption <|> axiom Lemma <|> axiom Theorem <|>
-       general Conjecture Form.Conjecture <|>
-       general NegatedConjecture Form.Axiom <|>
-       general Question Form.Question
-  where axiom t = general t Form.Axiom
-        general k kind = keyword k >> return (mk kind)
-        mk kind tag form =
-          Input { Form.tag = tag,
-                  Form.kind = kind,
-                  Form.what = form }
+kind = do
+  MkState mfile _ _ _ _ _ <- getState
+  UserState _ (At (L.Pos n _) _) <- getPosition
+  let
+    axiom t = general t Form.Axiom
+    general k kind = keyword k >> return (mk kind)
+    mk kind tag form =
+      Input { Form.tag = tag,
+              Form.kind = kind,
+              Form.what = form,
+              Form.source =
+                case mfile of
+                  Nothing -> Form.Unknown
+                  Just file -> FromFile file (fromIntegral n) }
+  axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
+    axiom Assumption <|> axiom Lemma <|> axiom Theorem <|>
+    general Conjecture Form.Conjecture <|>
+    general NegatedConjecture Form.Axiom <|>
+    general Question Form.Question
 
 -- A formula name.
 tag :: Parser Tag
@@ -282,8 +291,8 @@ include = do
 
 newFormula :: Input Form -> Parser ()
 newFormula input = do
-  MkState p t f v n <- getState
-  putState (MkState (input:p) t f v n)
+  MkState mfile p t f v n <- getState
+  putState (MkState mfile (input:p) t f v n)
   
 newFunction :: String -> FunType -> Parser Function
 newFunction name ty = do
@@ -325,22 +334,22 @@ typeError fs@(f@(x ::: _):_) args' = do
 {-# INLINE lookupType #-}
 lookupType :: String -> Parser Type
 lookupType xs = do
-  MkState p t f v n <- getState
+  MkState mfile p t f v n <- getState
   case Map.lookup xs t of
     Nothing -> do
       let ty = Type (name xs) Infinite Infinite
-      putState (MkState p (Map.insert xs ty t) f v n)
+      putState (MkState mfile p (Map.insert xs ty t) f v n)
       return ty
     Just ty -> return ty
 
 {-# INLINE lookupFunction #-}
 lookupFunction :: FunType -> String -> Parser [Name ::: FunType]
 lookupFunction def x = do
-  MkState p t f v n <- getState
+  MkState mfile p t f v n <- getState
   case Map.lookup x f of
     Nothing -> do
       let decl = name x ::: def
-      putState (MkState p t (Map.insert x [decl] f) v n)
+      putState (MkState mfile p t (Map.insert x [decl] f) v n)
       return [decl]
     Just fs -> return fs
 
@@ -352,10 +361,10 @@ individual = Type (name "$i") Infinite Infinite
 
 cnf, tff, fof :: Parser Form
 cnf = do
-  MkState p t f _ n <- getState
-  putState (MkState p t f Map.empty n)
+  MkState mfile p t f _ n <- getState
+  putState (MkState mfile p t f Map.empty n)
   form <- formula NoQuantification __
-  MkState _ _ _ vs _ <- getState
+  MkState _ _ _ _ vs _ <- getState
   return (ForAll (Bind (Set.fromList (Map.elems vs)) form))
 tff = formula Typed Map.empty
 fof = formula Untyped Map.empty
@@ -424,12 +433,12 @@ instance TermLike Term where
   {-# INLINE var #-}
   var NoQuantification _ = do
     x <- variable
-    MkState p t f ctx n <- getState
+    MkState mfile p t f ctx n <- getState
     case Map.lookup x ctx of
       Just v -> return (Var v)
       Nothing -> do
         let v = Unique (n+1) x defaultRenamer ::: individual
-        putState (MkState p t f (Map.insert x v ctx) (n+1))
+        putState (MkState mfile p t f (Map.insert x v ctx) (n+1))
         return (Var v)
   var _ ctx = do
     x <- variable
@@ -562,8 +571,8 @@ binder mode = do
                Untyped ->
                  fatalError "Used a typed quantification in an untyped formula" };
              type_ } <|> return individual
-  MkState p t f v n <- getState
-  putState (MkState p t f v (n+1))
+  MkState mfile p t f v n <- getState
+  putState (MkState mfile p t f v (n+1))
   return (Unique n x defaultRenamer ::: ty)
 
 -- Parse a type

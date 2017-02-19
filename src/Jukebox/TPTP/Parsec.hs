@@ -173,3 +173,7 @@ getState = Parsec (\ok err inp@UserState{userState = state} exp -> ok state err 
 {-# INLINE putState #-}
 putState :: state -> Parsec (UserState state a) ()
 putState state = Parsec (\ok err UserState{userStream = stream} exp -> ok () err (UserState state stream) exp)
+
+{-# INLINE getPosition #-}
+getPosition :: Stream a b => Parsec a (Position a)
+getPosition = Parsec (\ok err inp exp -> ok (position inp) err inp exp)

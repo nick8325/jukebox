@@ -35,18 +35,21 @@ clausify flags inps = Form.run inps (run . clausifyInputs [] [])
     do return (toCNF (reverse theory) (reverse obligs))
   
   clausifyInputs theory obligs (inp:inps) | kind inp == Axiom =
-    do cs <- clausForm (tag inp) (what inp)
+    do cs <- clausForm inp
        clausifyInputs (cs ++ theory) obligs inps
 
   clausifyInputs theory obligs (inp:inps) | kind inp `elem` [Conjecture, Question] =
-    do clausifyObligs theory obligs (tag inp) (split' (what inp)) inps
+    do clausifyObligs theory obligs inp (split' (what inp)) inps
 
   clausifyObligs theory obligs _ [] inps =
     do clausifyInputs theory obligs inps
   
-  clausifyObligs theory obligs s (a:as) inps =
-    do cs <- clausForm s (nt a)
-       clausifyObligs theory (cs:obligs) s as inps
+  clausifyObligs theory obligs inp (a:as) inps =
+    do cs <-
+         clausForm inp {
+           what = nt a,
+           source = Inference "negate_conjecture" "cth" [inp] }
+       clausifyObligs theory (cs:obligs) inp as inps
 
   split' a | splitting flags = if null split_a then [true] else split_a
     where split_a = split a
@@ -99,18 +102,19 @@ split p =
 ----------------------------------------------------------------------
 -- core clausification algorithm
 
-clausForm :: String -> Form -> M [Input Clause]
-clausForm s p =
-  withName s $
-    do miniscoped      <- miniscope . check . simplify         . check $ p
+clausForm :: Input Form -> M [Input Clause]
+clausForm inp =
+  withName (tag inp) $
+    do miniscoped      <- miniscope . check . simplify         . check $ what inp
        noEquivPs       <- removeEquiv                          . check $ miniscoped
        noExistsPs      <- mapM removeExists                    . check $ noEquivPs
        noExpensiveOrPs <- fmap concat . mapM removeExpensiveOr . check $ noExistsPs
        noForAllPs      <- lift . mapM uniqueNames              . check $ noExpensiveOrPs
-       let !cnf_        = concatMap cnf                        . check $ noForAllPs
+       let !thm         = Input "skolemised" Axiom (Inference "clausify" "esa" [inp]) (And noForAllPs)
+           !cnf_        = concatMap cnf                        . check $ noForAllPs
            !simp        = simplifyCNF                          . check $ cnf_
            cs           = fmap clause                                  $ simp
-           inps         = [ Input (s ++ i) Axiom c
+           inps         = [ Input (tag inp ++ i) Axiom (Inference "clausify" "thm" [thm]) c
                           | (c, i) <- zip cs ("":
                                         [ '_':show i | i <- [1..] ]) ]
        return $! force . check                                         $ inps

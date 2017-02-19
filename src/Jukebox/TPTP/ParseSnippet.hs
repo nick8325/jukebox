@@ -21,8 +21,8 @@ cnf = form TPTP.Parse.Core.cnf
 form :: Symbolic a => Parser a -> [(String, Type)] -> [(String, Function)] -> String -> a
 form parser types funs0 str =
   case run_ (parser <* eof)
-            (UserState (MkState [] (Map.delete "$i" (Map.fromList types)) (Map.fromList funs) Map.empty 0) (scan str)) of
-    Ok (UserState (MkState _ types' funs' _ _) (At _ (Cons Eof _))) res
+            (UserState (MkState Nothing [] (Map.delete "$i" (Map.fromList types)) (Map.fromList funs) Map.empty 0) (scan str)) of
+    Ok (UserState (MkState _ _ types' funs' _ _) (At _ (Cons Eof _))) res
       | Map.insert "$i" individual (Map.fromList types) /=
         Map.insert "$i" individual types' ->
         error $ "ParseSnippet: type implicitly defined: " ++

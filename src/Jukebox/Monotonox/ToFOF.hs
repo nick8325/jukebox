@@ -25,7 +25,7 @@ data Scheme1 = Scheme1 {
   }
 
 guard :: Scheme1 -> (Type -> Bool) -> Input Form -> Input Form
-guard scheme mono (Input t k f) = Input t k (aux (pos k) f)
+guard scheme mono (Input t k info f) = Input t k info (aux (pos k) f)
   where aux pos (ForAll (Bind vs f))
           | pos = forAll scheme (Bind vs (aux pos f))
           | otherwise = Not (exists scheme (Bind vs (Not (aux pos f))))
@@ -65,18 +65,25 @@ translate1 scheme mono f = Form.run f $ \inps -> do
         map (simplify . ForAll . bind) . split . simplify . foldr (/\) true $
           funcAxioms ++ typeAxioms
   return $
-    [ Input ("types" ++ show i) Axiom axiom | (axiom, i) <- zip axioms [1..] ] ++
+    [ Input ("types" ++ show i) Axiom (Inference "type_axiom" "esa" []) axiom | (axiom, i) <- zip axioms [1..] ] ++
     map (guard scheme1' mono') inps
 
 translate scheme mono f =
   let f' =
         Form.run f $ \inps -> do
-          forM inps $ \(Input tag kind f) -> do
+          forM inps $ \inp@(Input tag kind _ f) -> do
             let prepare f = fmap (foldr (/\) true) (run (withName tag (removeEquiv (simplify f))))
-            fmap (Input tag kind) $
-              case kind of
-                Axiom -> prepare f
-                Conjecture -> fmap notInwards (prepare (nt f))
+            case kind of
+              Axiom ->
+                fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
+                  prepare f
+              Conjecture ->
+                let
+                  neg_inp =
+                    Input tag Axiom
+                      (Inference "negate_conjecture" "cth" [inp]) (nt f) in
+                fmap (Input tag kind (Inference "type_encoding" "esa" [neg_inp])) $
+                fmap notInwards (prepare (nt f))
       typeI = Type (name "$i") (Finite 0) Infinite
       trType O = O
       trType ty = typeI

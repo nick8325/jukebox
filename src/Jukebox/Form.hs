@@ -308,9 +308,15 @@ instance Show Answer where
 data NoAnswerReason = GaveUp | Timeout deriving (Eq, Ord, Show)
 
 data Input a = Input
-  { tag ::  Tag,
-    kind :: Kind,
-    what :: a }
+  { tag    :: Tag,
+    kind   :: Kind,
+    source :: InputSource,
+    what   :: a }
+
+data InputSource =
+    Unknown
+  | FromFile String Int
+  | Inference String String [Input Form]
 
 type Problem a = [Input a]
 
@@ -404,7 +410,7 @@ instance Symbolic a => Unpack [a] where
   rep' (x:xs) = Binary (:) x xs
 
 instance Symbolic a => Unpack (Input a) where
-  rep' (Input tag kind what) = Unary (Input tag kind) what
+  rep' (Input tag kind info what) = Unary (Input tag kind info) what
 
 instance Unpack CNF where
   rep' (CNF ax conj s1 s2) =
