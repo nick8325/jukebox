@@ -173,7 +173,7 @@ copy = id
 unquote :: String -> String
 unquote (_:x)
   | null z = init y
-  | otherwise = y ++ [z !! 1] ++ unquote (drop 2 z)
+  | otherwise = y ++ [z !! 1] ++ unquote (drop 1 z)
   where (y, z) = break (== '\\') x
 
 readRational :: String -> Rational

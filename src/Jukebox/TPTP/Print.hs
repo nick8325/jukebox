@@ -70,7 +70,7 @@ pPrintInput family pp i =
 
 pPrintClause :: String -> String -> String -> Doc -> Doc
 pPrintClause family name kind rest =
-  text family <> parens (sep [text name <> comma <+> text kind <> comma, rest]) <> text "."
+  text family <> parens (sep [text (escapeAtom name) <> comma <+> text kind <> comma, rest]) <> text "."
 
 instance Pretty Clause where
   pPrint (Clause (Bind _ ts)) =
