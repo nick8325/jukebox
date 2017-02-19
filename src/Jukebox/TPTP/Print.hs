@@ -1,10 +1,11 @@
 -- Pretty-printing of formulae. WARNING: icky code inside!
-{-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances, CPP, GADTs #-}
-module Jukebox.TPTP.Print(prettyShow, prettyNames, showClauses, pPrintClauses, showProblem, pPrintProblem)
+{-# LANGUAGE FlexibleContexts, TypeSynonymInstances, TypeOperators, FlexibleInstances, CPP, GADTs, PatternGuards #-}
+module Jukebox.TPTP.Print(prettyShow, prettyNames, showClauses, pPrintClauses, showProblem, pPrintProblem, pPrintProof)
        where
 
 #include "errors.h"
 import Data.Char
+import Data.Maybe
 import Text.PrettyPrint.HughesPJ
 import qualified Jukebox.TPTP.Lexer as L
 import Jukebox.Form
@@ -33,6 +34,84 @@ pPrintProblem prob0
   where
     prob = prettyNames prob0
 
+-- Print a problem together with all source/derivation information.
+pPrintProof :: Problem Form -> Doc
+pPrintProof prob =
+  pPrintAnnotProof (reverse (annot 1 Set.empty Map.empty (reverse prob)))
+  where
+    fun f [] = text f
+    fun f xs = text f <> parens (fsep (punctuate comma xs))
+    list = brackets . fsep . punctuate comma
+
+    clause n = "c" ++ show n
+
+    info inp = (kind inp, what inp)
+
+    -- We maintain: the set of formulas printed so far,
+    -- the set of formulas which have been given a clause number so far,
+    -- and the highest number given so far.
+    -- The clauses come out in reverse dependency order.
+    annot :: Int -> Set (Kind, Form) -> Map (Kind, Form) Int -> [Input Form] -> [(Input Form, (String, [Doc]))]
+    annot _ _ _ [] = []
+    annot m seen named (inp:inps)
+        -- Already processed this formula
+      | Set.member (kind inp, what inp) seen =
+          annot m seen named inps
+        -- Formula is identical to its parent
+      | Inference _ _ [inp'] <- source inp,
+        let [p, q] = prettyNames [what inp, what inp'] in
+        kind inp == kind inp' &&
+        -- I have NO idea why this doesn't work without show here :(
+        show p == show q =
+          annot m seen named (inp { source = source inp' }:inps)
+      | otherwise =
+        case Map.lookup (info inp) named of
+          Nothing ->
+            -- Give the formula a name
+            annot (m+1) seen (Map.insert (info inp) m named) (inp:inps)
+          Just n ->
+            -- A new formula - print it out
+            let
+              (k, m', named', new, stuff) =
+                case source inp of
+                  Unknown ->
+                    ("plain", m, named, [], [])
+                  FromFile file _ ->
+                    (show (kind inp), m, named, [],
+                     [fun "file" [text (escapeAtom file), text (escapeAtom (tag inp))]])
+                  Inference name status parents ->
+                    -- Give any unnamed parents a name
+                    let
+                      unnamed = [inp | inp <- parents, not (info inp `Map.member` named)]
+                      named' =
+                        named `Map.union`
+                        Map.fromList (zip (map info parents) [m..])
+                    in
+                      ("plain", m+length unnamed, named', parents,
+                       [fun "inference" [
+                         text name, list [fun "status" [text status]],
+                         list [text (clause (fromJust (Map.lookup (info inp) named'))) | inp <- parents]]])
+            in
+              (inp { tag = clause n }, (k, stuff)):
+              annot m' (Set.insert (info inp) seen) named' (new++inps)
+
+pPrintAnnotProof :: [(Input Form, (String, [Doc]))] -> Doc
+pPrintAnnotProof annots0 =
+  vcat $
+    [ vcat (pPrintDecls inps) | not (isReallyFof inps) ] ++
+    [ pPrintClause family (tag inp) k (pp (what inp):rest)
+    | (inp, (k, rest)) <- annots ]
+  where
+    inps0 = map fst annots0
+    inps = prettyNames inps0
+    annots = zip inps (map snd annots0)
+
+    (pp, family) =
+      if isReallyFof inps then
+        (pPrintFof 0, "fof")
+      else
+        (pPrintTff 0, "tff")
+
 showProblem :: Problem Form -> String
 showProblem = show . pPrintProblem
 
@@ -57,7 +136,7 @@ pPrintDecls prob =
     funcDecl (f ::: ty) = typeClause f (pPrint ty)
     typeClause name ty =
       pPrintClause "tff" "type" "type"
-        (text (escapeAtom (show name)) <> colon <+> ty)
+        [text (escapeAtom (show name)) <> colon <+> ty]
 
 instance Pretty a => Pretty (Input a) where
   pPrint = pPrintInput "tff" pPrint
@@ -66,11 +145,11 @@ instance Pretty a => Show (Input a) where
 
 pPrintInput :: String -> (a -> Doc) -> Input a -> Doc
 pPrintInput family pp i =
-  pPrintClause family (tag i) (show (kind i)) (pp (what i))
+  pPrintClause family (tag i) (show (kind i)) [pp (what i)]
 
-pPrintClause :: String -> String -> String -> Doc -> Doc
+pPrintClause :: String -> String -> String -> [Doc] -> Doc
 pPrintClause family name kind rest =
-  text family <> parens (sep [text (escapeAtom name) <> comma <+> text kind <> comma, rest]) <> text "."
+  text family <> parens (sep (punctuate comma ([text (escapeAtom name), text kind] ++ rest))) <> text "."
 
 instance Pretty Clause where
   pPrint (Clause (Bind _ ts)) =

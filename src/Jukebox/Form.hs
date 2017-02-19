@@ -167,9 +167,11 @@ data Form
     -- Just exists so that parsing followed by pretty-printing is
     -- somewhat lossless; the simplify function will get rid of it
   | Connective Connective Form Form
+  deriving (Eq, Ord)
 
 -- Miscellaneous connectives that exist in TPTP
 data Connective = Implies | Follows | Xor | Nor | Nand
+  deriving (Eq, Ord)
 
 connective :: Connective -> Form -> Form -> Form
 connective Implies t u = nt t \/ u
@@ -179,6 +181,7 @@ connective Nor t u = nt (t \/ u)
 connective Nand t u = nt (t /\ u)
 
 data Bind a = Bind (Set Variable) a
+  deriving (Eq, Ord)
 
 true, false :: Form
 true = And []
