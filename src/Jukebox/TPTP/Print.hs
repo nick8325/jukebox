@@ -99,18 +99,26 @@ pPrintAnnotProof :: [(Input Form, (String, [Doc]))] -> Doc
 pPrintAnnotProof annots0 =
   vcat $
     [ vcat (pPrintDecls inps) | not (isReallyFof inps) ] ++
-    [ pPrintClause family (tag inp) k (pp (what inp):rest)
-    | (inp, (k, rest)) <- annots ]
+    [ pPrintClause (family x) (tag inp) k (pp x:rest)
+    | (inp, (k, rest)) <- annots,
+      let x = what inp ]
   where
     inps0 = map fst annots0
     inps = prettyNames inps0
     annots = zip inps (map snd annots0)
 
-    (pp, family) =
-      if isReallyFof inps then
-        (pPrintFof 0, "fof")
-      else
-        (pPrintTff 0, "tff")
+    family x
+      | isReallyFof x && isJust (toClause x) = "cnf"
+      | isReallyFof x = "fof"
+      | otherwise = "tff"
+
+    pp x
+      | isReallyFof x =
+        case toClause x of
+          Nothing -> pPrintFof 0 x
+          Just cl -> pPrint cl
+      | otherwise =
+        pPrintTff 0 x
 
 showProblem :: Problem Form -> String
 showProblem = show . pPrintProblem

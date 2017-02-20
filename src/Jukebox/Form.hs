@@ -293,6 +293,15 @@ toForm (Clause (Bind vs ls)) = ForAll (Bind vs (Or (map Literal ls)))
 toLiterals :: Clause -> [Literal]
 toLiterals (Clause (Bind _ ls)) = ls
 
+toClause :: Form -> Maybe Clause
+toClause (ForAll (Bind _ f)) = toClause f
+toClause f = clause <$> cl f
+  where
+    cl (Or fs) = concat <$> mapM cl fs
+    cl (Literal l) = Just [l]
+    cl (Not (Literal l)) = Just [neg l]
+    cl _ = Nothing
+
 ----------------------------------------------------------------------
 -- Problems
 
