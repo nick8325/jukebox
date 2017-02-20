@@ -16,6 +16,7 @@ import Data.Set(Set)
 import Jukebox.Name
 import Jukebox.Utils
 import Text.PrettyPrint.HughesPJClass
+import Control.Monad.Trans.State.Strict
 
 pPrintClauses :: Problem Clause -> Doc
 pPrintClauses prob0
@@ -37,7 +38,7 @@ pPrintProblem prob0
 -- Print a problem together with all source/derivation information.
 pPrintProof :: Problem Form -> Doc
 pPrintProof prob =
-  pPrintAnnotProof (reverse (annot 1 Set.empty Map.empty (reverse prob)))
+  pPrintAnnotProof (evalState (concat <$> mapM annot prob) (1, Map.empty))
   where
     fun f [] = text f
     fun f xs = text f <> parens (fsep (punctuate comma xs))
@@ -48,52 +49,55 @@ pPrintProof prob =
     info inp = (kind inp, what inp)
 
     -- We maintain: the set of formulas printed so far,
-    -- the set of formulas which have been given a clause number so far,
     -- and the highest number given so far.
-    -- The clauses come out in reverse dependency order.
-    annot :: Int -> Set (Kind, Form) -> Map (Kind, Form) Int -> [Input Form] -> [(Input Form, (String, [Doc]))]
-    annot _ _ _ [] = []
-    annot m seen named (inp:inps)
-        -- Already processed this formula
-      | Set.member (kind inp, what inp) seen =
-          annot m seen named inps
-        -- Formula is identical to its parent
+    findNumber :: Input Form -> State (Int, Map (Kind, Form) Int) (Maybe Int)
+    findNumber inp =
+      gets (Map.lookup (info inp) . snd)
+
+    newNumber :: Input Form -> State (Int, Map (Kind, Form) Int) (Maybe Int)
+    newNumber inp = do
+      (n, map) <- get
+      case Map.lookup (info inp) map of
+        Nothing -> do
+          put (n+1, Map.insert (info inp) n map)
+          return (Just n)
+        Just _ -> return Nothing
+
+    annot :: Input Form -> State (Int, Map (Kind, Form) Int) [(Input Form, (String, [Doc]))]
+    annot inp
+      -- Formula is identical to its parent
       | Inference _ _ [inp'] <- source inp,
-        let [p, q] = prettyNames [what inp, what inp'] in
-        kind inp == kind inp' &&
-        -- I have NO idea why this doesn't work without show here :(
-        show p == show q =
-          annot m seen named (inp { source = source inp' }:inps)
-      | otherwise =
-        case Map.lookup (info inp) named of
-          Nothing ->
-            -- Give the formula a name
-            annot (m+1) seen (Map.insert (info inp) m named) (inp:inps)
-          Just n ->
-            -- A new formula - print it out
-            let
-              (k, m', named', new, stuff) =
-                case source inp of
-                  Unknown ->
-                    ("plain", m, named, [], [])
-                  FromFile file _ ->
-                    (show (kind inp), m, named, [],
-                     [fun "file" [text (escapeAtom file), text (escapeAtom (tag inp))]])
-                  Inference name status parents ->
-                    -- Give any unnamed parents a name
-                    let
-                      unnamed = [inp | inp <- parents, not (info inp `Map.member` named)]
-                      named' =
-                        named `Map.union`
-                        Map.fromList (zip (map info parents) [m..])
-                    in
-                      ("plain", m+length unnamed, named', parents,
-                       [fun "inference" [
-                         text name, list [fun "status" [text status]],
-                         list [text (clause (fromJust (Map.lookup (info inp) named'))) | inp <- parents]]])
-            in
-              (inp { tag = clause n }, (k, stuff)):
-              annot m' (Set.insert (info inp) seen) named' (new++inps)
+          let [p, q] = prettyNames [what inp, what inp'] in
+          kind inp == kind inp' &&
+          -- I have NO idea why this doesn't work without show here :(
+          show p == show q =
+            annot inp { source = source inp' }
+      | otherwise = do
+          mn <- newNumber inp
+          case mn of
+            Nothing ->
+              -- Already processed this formula
+              return []
+            Just n -> do
+              let
+                ret k stuff =
+                  return [(inp { tag = clause n }, (k, stuff))]
+
+              case source inp of
+                Unknown -> ret "plain" []
+                FromFile file _ ->
+                  ret (show (kind inp))
+                    [fun "file" [text (escapeAtom file), text (escapeAtom (tag inp))]]
+                Inference name status parents -> do
+                  -- Process all parents first
+                  rest <- mapM annot parents
+                  nums <- map fromJust <$> mapM findNumber parents
+
+                  fmap (concat rest ++) $
+                    ret "plain"
+                      [fun "inference" [
+                        text name, list [fun "status" [text status]],
+                        list [text (clause n) | n <- nums]]]
 
 pPrintAnnotProof :: [(Input Form, (String, [Doc]))] -> Doc
 pPrintAnnotProof annots0 =
