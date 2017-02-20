@@ -28,10 +28,10 @@ guard :: Scheme1 -> (Type -> Bool) -> Input Form -> Input Form
 guard scheme mono (Input t k info f) = Input t k info (aux (pos k) f)
   where aux pos (ForAll (Bind vs f))
           | pos = forAll scheme (Bind vs (aux pos f))
-          | otherwise = Not (exists scheme (Bind vs (Not (aux pos f))))
+          | otherwise = notInwards (exists scheme (Bind vs (Not (aux pos f))))
         aux pos (Exists (Bind vs f))
           | pos = exists scheme (Bind vs (aux pos f))
-          | otherwise = Not (forAll scheme (Bind vs (Not (aux pos f))))
+          | otherwise = notInwards (forAll scheme (Bind vs (Not (aux pos f))))
         aux _pos (Literal (Pos (t :=: u)))
           | not (mono (typ t)) = equals scheme t u
         aux _pos (Literal (Neg (t :=: u)))
@@ -78,12 +78,8 @@ translate scheme mono f =
                 fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
                   prepare f
               Conjecture ->
-                let
-                  neg_inp =
-                    Input tag (Axiom "negated_conjecture")
-                      (Inference "negate_conjecture" "cth" [inp]) (nt f) in
-                fmap (Input tag kind (Inference "type_encoding" "esa" [neg_inp])) $
-                fmap notInwards (prepare (nt f))
+                fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
+                fmap notInwards $ prepare $ nt f
       typeI = Type (name "$i") (Finite 0) Infinite
       trType O = O
       trType ty = typeI
