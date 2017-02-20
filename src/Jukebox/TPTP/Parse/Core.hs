@@ -255,7 +255,7 @@ kind = do
   MkState mfile _ _ _ _ _ <- getState
   UserState _ (At (L.Pos n _) _) <- getPosition
   let
-    axiom t = general t Form.Axiom
+    axiom t = general t (Form.Axiom (show t))
     general k kind = keyword k >> return (mk kind)
     mk kind tag form =
       Input { Form.tag = tag,
@@ -267,8 +267,8 @@ kind = do
                   Just file -> FromFile file (fromIntegral n) }
   axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
     axiom Assumption <|> axiom Lemma <|> axiom Theorem <|>
+    axiom NegatedConjecture <|>
     general Conjecture Form.Conjecture <|>
-    general NegatedConjecture Form.Axiom <|>
     general Question Form.Question
 
 -- A formula name.

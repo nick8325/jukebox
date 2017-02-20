@@ -285,7 +285,7 @@ pPrintQuant bind q vs f
       nest 2 (pPrintForm bind 1 f)]
 
 instance Show Kind where
-  show Axiom = "axiom"
+  show (Axiom kind) = kind
   show Conjecture = "conjecture"
   show Question = "question"
 

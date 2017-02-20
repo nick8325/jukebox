@@ -57,8 +57,8 @@ guessModel expansive univ prob = run prob $ \forms -> do
   let withExpansive f func = f func (base (name func) `elem` expansive) answer
   (constructors, prelude) <- universe univ i
   program <- fmap concat (mapM (withExpansive (function constructors)) (functions forms))
-  return (map (Input "adt" Axiom Unknown) prelude ++
-          map (Input "program" Axiom Unknown) program ++
+  return (map (Input "adt" (Axiom "axiom") Unknown) prelude ++
+          map (Input "program" (Axiom "axiom") Unknown) program ++
           forms)
 
 ind :: Symbolic a => a -> Type
