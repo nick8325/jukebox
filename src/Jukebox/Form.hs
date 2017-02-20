@@ -553,6 +553,19 @@ functions = usort . termsAndBinders term mempty where
   term (f :@: _) = return f
   term _ = mempty
 
+funOcc :: Symbolic a => Function -> a -> Int
+funOcc f x = getSum (occ x)
+  where
+    occ :: Symbolic a => a -> Sum Int
+    occ x = collect occ x `mappend` occ1 x
+
+    occ1 :: Symbolic a => a -> Sum Int
+    occ1 x
+      | Term <- typeOf x,
+        g :@: _ <- x,
+        f == g = Sum 1
+      | otherwise = mempty
+
 isFof :: Symbolic a => a -> Bool
 isFof f = length (types' f) <= 1
 
