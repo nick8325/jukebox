@@ -73,15 +73,20 @@ pPrintProof prob =
           show p == show q =
             annot inp { source = source inp' }
       | otherwise = do
-          mn <- newNumber inp
+          mn <- findNumber inp
           case mn of
-            Nothing ->
+            Just _ ->
               -- Already processed this formula
               return []
-            Just n -> do
+            Nothing -> do
               let
-                ret k stuff =
-                  return [(inp { tag = clause n }, (k, stuff))]
+                ret k stuff = do
+                  res <- newNumber inp
+                  case res of
+                    Just n ->
+                      return [(inp { tag = clause n }, (k, stuff))]
+                    Nothing ->
+                      return []
 
               case source inp of
                 Unknown -> ret "plain" []
