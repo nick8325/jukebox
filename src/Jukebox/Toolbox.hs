@@ -194,7 +194,7 @@ allObligsBox = allObligsIO <$> globalFlags
 allObligsIO globals solve CNF{..} = loop 1 conjectures
   where loop _ [] =
           result unsatisfiable
-            "PROVED.\nThe conjecture is true or the axioms are contradictory."
+            ["PROVED.", "The conjecture is true or the axioms are contradictory."]
         loop i (c:cs) = do
           when multi $ message globals $ "Part " ++ part i
           answer <- solve (axioms ++ c)
@@ -202,17 +202,17 @@ allObligsIO globals solve CNF{..} = loop 1 conjectures
           case answer of
             Satisfiable ->
               result satisfiable
-                "DISPROVED.\nThe conjecture is not true and the axioms are consistent."
+                ["DISPROVED.", "The conjecture is not true and the axioms are consistent."]
             Unsatisfiable -> loop (i+1) cs
             NoAnswer x ->
               result (show x)
-                "GAVE UP.\nCouldn't prove or disprove the conjecture."
+                ["GAVE UP.", "Couldn't prove or disprove the conjecture."]
         multi = length conjectures > 1
         part i = show i ++ "/" ++ show (length conjectures)
         result x hint = do
           putStrLn ("% SZS status " ++ x)
-          unless (quiet globals) $ putStrLn ""
-          message globals hint
+          putStrLn ""
+          sequence_ [putStrLn ("% " ++ line) | line <- hint]
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
 inferBox = (\globals prob -> do
