@@ -55,7 +55,7 @@ instance Applicative SeqParser where
 arg :: ArgDesc -> String -> (String -> Maybe a) -> ArgParser a
 arg desc err f = Annotated desc (SeqParser 1 c)
   where c [] = Left (Mistake err)
-        c (x:_) | "--" `isPrefixOf` x = Left (Mistake err)
+        c (x:_) | "-" `isPrefixOf` x = Left (Mistake err)
         c (x:_) =
           case f x of
             Nothing -> Left (Mistake err)
@@ -219,7 +219,7 @@ manyFlags name help (Annotated desc (SeqParser args f)) =
 filenames :: OptionParser [String]
 filenames = Annotated [] (from [])
   where from xs = awaitP p xs (f xs)
-        p x = not ("--" `isPrefixOf` x)
+        p x = not ("-" `isPrefixOf` x)
         f xs y _ = Yes 0 (from (xs ++ [y]))
 
 -- Take a value from the environment.
