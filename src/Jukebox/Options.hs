@@ -88,7 +88,7 @@ argFiles = arg "<files>" "expected a list of files" $ \x ->
         w = takeWhile (/= ',') s
         r = tail (dropWhile (/= ',') s)
 
-argName :: ArgParser FilePath
+argName :: ArgParser String
 argName = arg "<name>" "expected a name" Just
 
 argNums :: ArgParser [Int]

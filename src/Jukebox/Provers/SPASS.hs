@@ -49,6 +49,6 @@ runSPASS flags prob
 extractAnswer :: String -> Answer
 extractAnswer result =
   head $
-    [ Unsatisfiable    | "SPASS beiseite: Proof found." <- lines result ] ++
-    [ Satisfiable      | "SPASS beiseite: Completion found." <- lines result ] ++
+    [ Unsat Unsatisfiable | "SPASS beiseite: Proof found." <- lines result ] ++
+    [ Sat Satisfiable     | "SPASS beiseite: Completion found." <- lines result ] ++
     [ NoAnswer Timeout ]

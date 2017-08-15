@@ -19,11 +19,11 @@ parseString xs =
     Parser.ParseStalled loc _ _ ->
       error ("Include directive found at " ++ show loc)
 
-parseProblem :: (FilePath -> IO ()) -> [FilePath] -> FilePath -> IO (Either String (Problem Form))
-parseProblem found dirs name = parseProblemWith found (findFileTPTP dirs) name
+parseProblem :: [FilePath] -> FilePath -> IO (Either String (Problem Form))
+parseProblem dirs name = parseProblemWith (findFileTPTP dirs) name
 
-parseProblemWith :: (FilePath -> IO ()) -> (FilePath -> IO (Maybe FilePath)) -> FilePath -> IO (Either String (Problem Form))
-parseProblemWith found findFile name =
+parseProblemWith :: (FilePath -> IO (Maybe FilePath)) -> FilePath -> IO (Either String (Problem Form))
+parseProblemWith findFile name =
   runExceptT $ do
     file <- readInFile (Parser.Location "<command line>" 0 0) name
     process (Parser.parseProblem name file)
@@ -35,7 +35,6 @@ parseProblemWith found findFile name =
 
     readInFile _ "-" =
       ExceptT $ do
-        liftIO (found "standard input")
         fmap Right getContents `catch`
           \(e :: IOException) -> return (Left (show e))
     readInFile pos name = do
@@ -45,7 +44,6 @@ parseProblemWith found findFile name =
           err pos ("File '" ++ name ++ "' not found")
         Just file ->
           ExceptT $ do
-            liftIO (found file)
             fmap Right (readFile file) `catch`
               \(e :: IOException) -> return (Left (show e))
 

@@ -25,7 +25,7 @@ import Jukebox.TPTP.Lexer hiding
    keyword, defined, kind)
 import qualified Jukebox.TPTP.Lexer as L
 import qualified Jukebox.Form as Form
-import Jukebox.Form hiding (tag, kind, Axiom, Conjecture, Question, newFunction, TypeOf(..), run)
+import Jukebox.Form hiding (tag, kind, Axiom, Conjecture, Question, newFunction, TypeOf(..), run, Theorem)
 import qualified Jukebox.Name as Name
 
 -- The parser monad

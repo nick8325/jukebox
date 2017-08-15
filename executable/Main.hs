@@ -51,37 +51,37 @@ internal = [guessmodel]
 
 fof =
   Tool "fof" "Translate a problem from TFF (typed) to FOF (untyped)" $
-    allFilesBox <*>
-      (parseProblemBox =>>=
+    forAllFilesBox <*>
+      (readProblemBox =>>=
        toFofBox =>>=
-       prettyPrintProblemBox)
+       printProblemBox)
 
 monotonox =
   Tool "monotonox" "Analyse a problem for monotonicity" $
-    allFilesBox <*>
-      (parseProblemBox =>>=
+    forAllFilesBox <*>
+      (readProblemBox =>>=
        clausifyBox =>>=
        oneConjectureBox =>>=
-       monotonicityBox =>>=
+       showMonotonicityBox =>>=
        writeFileBox)
 
 smt =
   Tool "smt" "Translate a problem from TPTP format to SMTLIB format" $
-    allFilesBox <*>
-      (parseProblemBox =>>=
-       prettyPrintProblemSMTBox)
+    forAllFilesBox <*>
+      (readProblemBox =>>=
+       printProblemSMTBox)
 
 cnf =
   Tool "cnf" "Clausify a TPTP (TFF or FOF) problem" $
-    allFilesBox <*>
-      (parseProblemBox =>>=
+    forAllFilesBox <*>
+      (readProblemBox =>>=
        clausifyBox =>>=
        oneConjectureBox =>>=
-       prettyPrintClausesBox)
+       printClausesBox)
 
 guessmodel =
   Tool "guessmodel" "Guess an infinite model (internal use)" $
-    allFilesBox <*>
-      (parseProblemBox =>>=
+    forAllFilesBox <*>
+      (readProblemBox =>>=
        guessModelBox =>>=
-       prettyPrintProblemBox)
+       printProblemBox)

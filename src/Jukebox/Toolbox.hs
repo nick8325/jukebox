@@ -1,3 +1,4 @@
+-- Components ("boxes") which can be put together to make tools.
 {-# LANGUAGE RecordWildCards, CPP #-}
 module Jukebox.Toolbox where
 
@@ -22,6 +23,9 @@ import Control.Applicative
 #endif
 import Data.IORef
 
+----------------------------------------------------------------------
+-- Some standard flags.
+
 data GlobalFlags =
   GlobalFlags {
     quiet :: Bool }
@@ -34,68 +38,189 @@ globalFlags =
     bool "quiet"
       ["Do not print any informational output."]
 
-(=>>=) :: (Monad m, Applicative f) => f (a -> m b) -> f (b -> m c) -> f (a -> m c)
+data TSTPFlags =
+  TSTPFlags {
+    tstp :: Bool }
+  deriving Show
+
+tstpFlags :: OptionParser TSTPFlags
+tstpFlags =
+  inGroup "Output options" $
+  TSTPFlags <$>
+    bool "tstp"
+      ["Produce TSTP-friendly output."]
+
+----------------------------------------------------------------------
+-- Printing output messages.
+
+-- Print a message as a TPTP comment.
+comment :: String -> IO ()
+comment msg = mapM_ putStrLn ["% " ++ line | line <- lines msg]
+
+-- Do something only when output is enabled.
+quietly :: GlobalFlags -> IO () -> IO ()
+quietly globals action = unless (quiet globals) action
+
+----------------------------------------------------------------------
+-- Combinators for boxes.
+
+-- Boxes typically have the type OptionParser (a -> IO b).
+-- The following two combinators chain boxes together.
+(=>>=) :: OptionParser (a -> IO b) -> OptionParser (b -> IO c) -> OptionParser (a -> IO c)
 f =>>= g = (>=>) <$> f <*> g
-infixl 1 =>>= -- same as >=>
+infixl 1 =>>= -- same fixity as >=>
 
-(=>>) :: (Monad m, Applicative f) => f (m a) -> f (m b) -> f (m b)
+(=>>) :: OptionParser (IO a) -> OptionParser (IO b) -> OptionParser (IO b)
 x =>> y = (>>) <$> x <*> y
-infixl 1 =>> -- same as >>
+infixl 1 =>> -- same fixity as >>
 
-message :: GlobalFlags -> String -> IO ()
-message globals msg =
-  putStr (comment globals msg)
+----------------------------------------------------------------------
+-- Process all files that were passed in on the command line.
 
-comment :: GlobalFlags -> String -> String
-comment globals msg
-  | quiet globals = ""
-  | otherwise =
-    unlines ["% " ++ line | line <- lines msg]
+forAllFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
+forAllFilesBox = forAllFiles <$> filenames
 
-allFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
-allFilesBox = flip allFiles <$> filenames
-
-allFiles :: (FilePath -> IO ()) -> [FilePath] -> IO ()
-allFiles _ [] = do
+forAllFiles :: [FilePath] -> (FilePath -> IO ()) -> IO ()
+forAllFiles [] _ = do
   hPutStrLn stderr "No input files specified! Try --help."
+  hPutStrLn stderr "You can use \"-\" to read from standard input."
   exitWith (ExitFailure 1)
-allFiles f xs = mapM_ f xs
+forAllFiles xs f = mapM_ f xs
 
-parseProblemBox :: OptionParser (FilePath -> IO (Problem Form))
-parseProblemBox = parseProblemIO <$> globalFlags <*> findFileFlags
+----------------------------------------------------------------------
+-- Read in a single problem.
 
-parseProblemIO :: GlobalFlags -> [FilePath] -> FilePath -> IO (Problem Form)
-parseProblemIO flags dirs f = do
-  let found file = message flags $ "Reading " ++ file ++ "..."
-  r <- parseProblem found dirs f
+readProblemBox :: OptionParser (FilePath -> IO (Problem Form))
+readProblemBox = readProblem <$> findFileFlags
+
+readProblem :: [FilePath] -> FilePath -> IO (Problem Form)
+readProblem dirs f = do
+  r <- parseProblem dirs f
   case r of
     Left err -> do
       hPutStrLn stderr err
       exitWith (ExitFailure 1)
     Right x -> return x
 
+----------------------------------------------------------------------
+-- Write output to a file.
+
+printProblemBox :: OptionParser (Problem Form -> IO ())
+printProblemBox = prettyPrintIO showProblem <$> writeFileBox
+
+printProblemSMTBox :: OptionParser (Problem Form -> IO ())
+printProblemSMTBox = prettyPrintIO SMT.showProblem <$> writeFileBox
+
+printClausesBox :: OptionParser (Problem Clause -> IO ())
+printClausesBox = prettyPrintIO showClauses <$> writeFileBox
+
+prettyPrintIO :: (a -> String) -> (String -> IO ()) -> a -> IO ()
+prettyPrintIO shw write prob = do
+  write (shw prob ++ "\n")
+
+writeFileBox :: OptionParser (String -> IO ())
+writeFileBox =
+  inGroup "Output options" $
+  flag "output"
+    ["Where to write the output file (defaults to stdout)."]
+    putStr
+    (fmap myWriteFile argFile)
+  where myWriteFile "/dev/null" _ = return ()
+        myWriteFile "-" contents = putStr contents
+        myWriteFile file contents = writeFile file contents
+
+----------------------------------------------------------------------
+-- Clausify a problem.
+
 clausifyBox :: OptionParser (Problem Form -> IO CNF)
-clausifyBox = clausifyIO <$> globalFlags <*> clausifyFlags
+clausifyBox =
+  (\flags prob -> return $! clausify flags prob) <$> clausifyFlags
 
-clausifyIO :: GlobalFlags -> ClausifyFlags -> Problem Form -> IO CNF
-clausifyIO globals flags prob = do
-  return $! clausify flags prob
-
-toFofBox :: OptionParser (Problem Form -> IO (Problem Form))
-toFofBox = toFofIO <$> globalFlags <*> clausifyBox <*> schemeBox
+----------------------------------------------------------------------
+-- Make sure that the problem only has one conjecture.
 
 oneConjectureBox :: OptionParser (CNF -> IO (Problem Clause))
-oneConjectureBox = pure oneConjecture
+oneConjectureBox = oneConjecture <$> flags
+  where
+    flags =
+      inGroup "Input and clausifier options" $
+      flag "conjecture"
+        ["If the problem has multiple conjectures, take only this one",
+         "(conjectures are numbered from 1)"]
+        Nothing (Just <$> argNum)
 
-oneConjecture :: CNF -> IO (Problem Clause)
-oneConjecture cnf = run cnf f
-  where f (CNF cs [cs'] _ _) = return (return (cs ++ cs'))
-        f _ = return $ do
-          hPutStrLn stderr "Error: more than one conjecture found in input problem"
-          exitWith (ExitFailure 1)
+oneConjecture :: Maybe Int -> CNF -> IO (Problem Clause)
+oneConjecture conj cnf =
+  run cnf $ \(CNF axioms obligs _ _) ->
+    case conj of
+      Just n ->
+        if n <= length obligs then choose axioms (obligs !! (n-1))
+        else err ["Conjecture number out of bounds:",
+                  "problem after clausification has " ++ show (length obligs) ++ " conjectures"]
+      Nothing ->
+        case obligs of
+          [cs] -> choose axioms cs
+          _ ->
+            err ["Can't handle more than one conjecture in input problem!",
+                 "This problem has " ++ show (length obligs) ++ " conjectures.",
+                 "Try using the --conjecture flag."]
+  where
+    err msgs = return $ do
+      mapM_ (hPutStrLn stderr) msgs
+      exitWith (ExitFailure 1)
 
-toFofIO :: GlobalFlags -> (Problem Form -> IO CNF) -> Scheme -> Problem Form -> IO (Problem Form)
-toFofIO globals clausify scheme f = do
+    choose axioms cs = return (return (axioms ++ cs))
+
+----------------------------------------------------------------------
+-- Solve all conjectures in a problem and report the final SZS status.
+
+-- A solver is given a problem in CNF and should return an answer.
+--
+-- It also is given a function of type IO () -> IO ().
+-- Wrapping an action in this function delays the action until after
+-- the answer is printed; this can be useful for e.g. printing a proof
+-- when the prover might be running under a timeout.
+type Solver = (IO () -> IO ()) -> Problem Clause -> IO Answer
+
+forAllConjecturesBox :: FilePath -> OptionParser (Solver -> CNF -> IO ())
+forAllConjecturesBox file = forAllConjectures file <$> globalFlags <*> tstpFlags
+
+forAllConjectures :: FilePath -> GlobalFlags -> TSTPFlags -> Solver -> CNF -> IO ()
+forAllConjectures file globals (TSTPFlags tstp) solve CNF{..} = do
+  todo <- newIORef (return ())
+  loop 1 todo conjectures
+  where loop _ todo [] =
+          result todo unsatisfiable
+        loop i todo (c:cs) = do
+          when multi $ do
+            join (readIORef todo)
+            writeIORef todo (return ())
+            quietly globals $ putStrLn $ "Part " ++ part i
+          answer <- solve (\x -> modifyIORef todo (>> x)) (axioms ++ c)
+          when multi $ putStrLn $ "Partial result (" ++ part i ++ "): " ++ show answer
+          case answer of
+            Sat _ -> result todo satisfiable
+            Unsat _ -> loop (i+1) todo cs
+            NoAnswer x -> result todo (NoAnswer x)
+        multi = length conjectures > 1
+        part i = show i ++ "/" ++ show (length conjectures)
+        result todo x = do
+          if tstp then
+            putStrLn ("% SZS status " ++ show x ++ " for " ++ show file)
+           else do
+            putStrLn ("RESULT: " ++ show x ++ " (" ++ show file ++ ")")
+            putStrLn (explainAnswer x)
+          putStrLn ""
+          join (readIORef todo)
+
+----------------------------------------------------------------------
+-- Convert a problem from TFF to FOF.
+
+toFofBox :: OptionParser (Problem Form -> IO (Problem Form))
+toFofBox = toFof <$> clausifyBox <*> schemeBox
+
+toFof :: (Problem Form -> IO CNF) -> Scheme -> Problem Form -> IO (Problem Form)
+toFof clausify scheme f = do
   CNF{..} <- clausify f
   -- In some cases we might get better results by considering each
   -- problem (axioms + conjecture) separately, but no big deal.
@@ -119,56 +244,37 @@ schemeBox =
   where choose "guards" _flags = guards
         choose "tags" flags = tags flags
 
-monotonicityBox :: OptionParser (Problem Clause -> IO String)
-monotonicityBox = monotonicity <$> globalFlags
+----------------------------------------------------------------------
+-- Analyse monotonicity.
 
-monotonicity :: GlobalFlags -> Problem Clause -> IO String
-monotonicity globals cs = do
-  m <- monotone (map what cs)
-  let info (ty, Nothing) = [base ty ++ ": not monotone"]
-      info (ty, Just m) =
-        [prettyShow ty ++ ": monotone"] ++
-        concat
-        [ case ext of
-             CopyExtend -> []
-             TrueExtend -> ["  " ++ base p ++ " true-extended"]
-             FalseExtend -> ["  " ++ base p ++ " false-extended"]
-        | (p, ext) <- Map.toList m ]
-
-  return (unlines (concat (map info (Map.toList m))))
-
+-- Annotate types with monotonicity information.
 annotateMonotonicityBox :: OptionParser (Problem Clause -> IO (Problem Clause))
-annotateMonotonicityBox = (\globals x -> do
-  annotateMonotonicity x) <$> globalFlags
+annotateMonotonicityBox = pure annotateMonotonicity
 
-prettyPrintProblemBox :: OptionParser (Problem Form -> IO ())
-prettyPrintProblemBox = prettyPrintIO showProblem <$> globalFlags <*> writeFileBox
+showMonotonicityBox :: OptionParser (Problem Clause -> IO String)
+showMonotonicityBox =
+  pure $ \cs -> do
+    m <- monotone (map what cs)
+    let info (ty, Nothing) = [base ty ++ ": not monotone"]
+        info (ty, Just m) =
+          [prettyShow ty ++ ": monotone"] ++
+          concat
+          [ case ext of
+               CopyExtend -> []
+               TrueExtend -> ["  " ++ base p ++ " true-extended"]
+               FalseExtend -> ["  " ++ base p ++ " false-extended"]
+          | (p, ext) <- Map.toList m ]
 
-prettyPrintProblemSMTBox :: OptionParser (Problem Form -> IO ())
-prettyPrintProblemSMTBox = prettyPrintIO SMT.showProblem <$> globalFlags <*> writeFileBox
+    return (unlines (concat (map info (Map.toList m))))
 
-prettyPrintClausesBox :: OptionParser (Problem Clause -> IO ())
-prettyPrintClausesBox = prettyPrintIO showClauses <$> globalFlags <*> writeFileBox
-
-prettyPrintIO :: (a -> String) -> GlobalFlags -> (String -> IO ()) -> a -> IO ()
-prettyPrintIO shw globals write prob = do
-  write (shw prob ++ "\n")
-
-writeFileBox :: OptionParser (String -> IO ())
-writeFileBox =
-  inGroup "Output options" $
-  flag "output"
-    ["Where to write the output file (defaults to stdout)."]
-    putStr
-    (fmap myWriteFile argFile)
-  where myWriteFile "/dev/null" _ = return ()
-        myWriteFile "-" contents = putStr contents
-        myWriteFile file contents = writeFile file contents
+----------------------------------------------------------------------
+-- Guess an infinite model.
 
 guessModelBox :: OptionParser (Problem Form -> IO (Problem Form))
 guessModelBox =
   inGroup "Options for the model guesser:" $
-  guessModelIO <$> expansive <*> universe
+  (\expansive univ prob -> return (guessModel expansive univ prob))
+    <$> expansive <*> universe
   where universe = choose <$>
                    flag "universe"
                    ["Which universe to find the model in (defaults to peano)."]
@@ -180,44 +286,11 @@ guessModelBox =
                     ["Allow a function to construct 'new' terms in its base case."]
                     (arg "<function>" "expected a function name" Just)
 
-guessModelIO :: [String] -> Universe -> Problem Form -> IO (Problem Form)
-guessModelIO expansive univ prob = return (guessModel expansive univ prob)
-
-allObligsBox :: OptionParser ((Problem Clause -> (IO () -> IO ()) -> IO Answer) -> CNF -> IO ())
-allObligsBox = allObligsIO <$> globalFlags
-
-allObligsIO globals solve CNF{..} = do
-  todo <- newIORef (return ())
-  loop 1 todo conjectures
-  where loop _ todo [] =
-          result todo unsatisfiable
-            ["PROVED.", "The conjecture is true or the axioms are contradictory."]
-        loop i todo (c:cs) = do
-          when multi $ do
-            join (readIORef todo)
-            writeIORef todo (return ())
-            message globals $ "Part " ++ part i
-          answer <- solve (axioms ++ c) (\x -> modifyIORef todo (>> x))
-          when multi $ message globals $ "Partial result (" ++ part i ++ "): " ++ show answer
-          case answer of
-            Satisfiable ->
-              result todo satisfiable
-                ["DISPROVED.", "The conjecture is not true and the axioms are consistent."]
-            Unsatisfiable -> loop (i+1) todo cs
-            NoAnswer x ->
-              result todo (show x)
-                ["GAVE UP.", "Couldn't prove or disprove the conjecture."]
-        multi = length conjectures > 1
-        part i = show i ++ "/" ++ show (length conjectures)
-        result todo x hint = do
-          putStrLn ("% SZS status " ++ x)
-          putStrLn ""
-          join (readIORef todo)
-          sequence_ [putStrLn ("% " ++ line) | line <- hint]
+----------------------------------------------------------------------
+-- Infer types.
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
-inferBox = (\globals prob -> do
-  return (run prob inferTypes)) <$> globalFlags
+inferBox = pure (\prob -> return (run prob inferTypes))
 
 printInferredBox :: OptionParser ((Problem Clause, Type -> Type) -> IO (Problem Clause))
 printInferredBox = pure $ \(prob, rep) -> do

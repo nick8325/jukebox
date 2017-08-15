@@ -10,7 +10,7 @@ import Jukebox.Utils
 import Jukebox.TPTP.Parsec hiding (run)
 import Jukebox.TPTP.Parse.Core hiding (newFunction, Term)
 import Jukebox.TPTP.Print
-import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, Var)
+import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, Var, Theorem)
 import Data.Maybe
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
@@ -69,10 +69,10 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
         funMap = Map.fromList [(show (name x), x) | x <- functions prob]
         result = lines str
         status = head $
-          [Satisfiable | "# SZS status Satisfiable" <- result] ++
-          [Satisfiable | "# SZS status CounterSatisfiable" <- result] ++
-          [Unsatisfiable | "# SZS status Unsatisfiable" <- result] ++
-          [Unsatisfiable | "# SZS status Theorem" <- result] ++
+          [Sat Satisfiable | "# SZS status Satisfiable" <- result] ++
+          [Sat CounterSatisfiable | "# SZS status CounterSatisfiable" <- result] ++
+          [Unsat Unsatisfiable | "# SZS status Unsatisfiable" <- result] ++
+          [Unsat Theorem | "# SZS status Theorem" <- result] ++
           [NoAnswer Timeout | "# SZS status ResourceOut" <- result] ++
           [NoAnswer Timeout | "# SZS status Timeout" <- result] ++
           [NoAnswer Timeout | "# SZS status MemyOut" <- result] ++

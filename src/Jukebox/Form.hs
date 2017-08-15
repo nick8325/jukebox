@@ -274,13 +274,13 @@ data CNF =
   CNF {
     axioms :: [Input Clause],
     conjectures :: [[Input Clause]],
-    satisfiable :: String,
-    unsatisfiable :: String }
+    satisfiable :: Answer,
+    unsatisfiable :: Answer }
 
 toCNF :: [Input Clause] -> [[Input Clause]] -> CNF
-toCNF axioms [] = CNF axioms [[]] "Satisfiable" "Unsatisfiable"
-toCNF axioms [conjecture] = CNF axioms [conjecture] "CounterSatisfiable" "Theorem"
-toCNF axioms conjectures = CNF axioms conjectures "GaveUp" "Theorem"
+toCNF axioms [] = CNF axioms [[]] (Sat Satisfiable) (Unsat Unsatisfiable)
+toCNF axioms [conjecture] = CNF axioms [conjecture] (Sat CounterSatisfiable) (Unsat Theorem)
+toCNF axioms conjectures = CNF axioms conjectures (NoAnswer GaveUp) (Unsat Theorem)
 
 newtype Clause = Clause (Bind [Literal])
 
@@ -309,15 +309,27 @@ type Tag = String
 
 data Kind = Axiom String | Conjecture | Question deriving (Eq, Ord)
 
-data Answer = Satisfiable | Unsatisfiable | NoAnswer NoAnswerReason
+data Answer = Sat SatReason | Unsat UnsatReason | NoAnswer NoAnswerReason
   deriving (Eq, Ord)
 
+data NoAnswerReason = GaveUp | Timeout deriving (Eq, Ord, Show)
+data SatReason = Satisfiable | CounterSatisfiable deriving (Eq, Ord, Show)
+data UnsatReason = Unsatisfiable | Theorem deriving (Eq, Ord, Show)
+
 instance Show Answer where
-  show Satisfiable = "Satisfiable"
-  show Unsatisfiable = "Unsatisfiable"
+  show (Sat reason) = show reason
+  show (Unsat reason) = show reason
   show (NoAnswer x) = show x
 
-data NoAnswerReason = GaveUp | Timeout deriving (Eq, Ord, Show)
+explainAnswer :: Answer -> String
+explainAnswer (Sat _) =
+  "Disproved the conjecture (and showed that the axioms are consistent)"
+explainAnswer (Unsat _) =
+  "Proved the conjecture (or found a contradiction in the axioms)"
+explainAnswer (NoAnswer GaveUp) =
+  "Couldn't solve the problem"
+explainAnswer (NoAnswer Timeout) =
+  "Ran out of time while solving the problem"
 
 data Input a = Input
   { tag    :: Tag,
