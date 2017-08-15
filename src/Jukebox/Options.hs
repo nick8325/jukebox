@@ -249,11 +249,12 @@ inGroup :: String -> OptionParser a -> OptionParser a
 inGroup x (Annotated fls f) = Annotated [fl{ flagGroup = x } | fl <- fls] f
 
 -- Add a --version flag.
-version :: String -> OptionParser ()
-version x =
-  inGroup "Miscellaneous options" $
-  flag "version" ["Show the version number."] ()
-    (argUsage ExitSuccess [x])
+version :: String -> OptionParser a -> OptionParser a
+version x p =
+  p <*
+    inGroup "Miscellaneous options"
+      (flag "version" ["Show the version number."] ()
+        (argUsage ExitSuccess [x]))
 
 ----------------------------------------------------------------------
 -- Help screens, error messages and so on.

@@ -322,14 +322,12 @@ instance Show Answer where
   show (NoAnswer x) = show x
 
 explainAnswer :: Answer -> String
-explainAnswer (Sat _) =
-  "Disproved the conjecture (and showed that the axioms are consistent)"
-explainAnswer (Unsat _) =
-  "Proved the conjecture (or found a contradiction in the axioms)"
-explainAnswer (NoAnswer GaveUp) =
-  "Couldn't solve the problem"
-explainAnswer (NoAnswer Timeout) =
-  "Ran out of time while solving the problem"
+explainAnswer (Sat Satisfiable) = "the axioms are consistent"
+explainAnswer (Sat CounterSatisfiable) = "the conjecture is false"
+explainAnswer (Unsat Unsatisfiable) = "the axioms are contradictory"
+explainAnswer (Unsat Theorem) = "the conjecture is true"
+explainAnswer (NoAnswer GaveUp) = "couldn't solve the problem"
+explainAnswer (NoAnswer Timeout) = "ran out of time while solving the problem"
 
 data Input a = Input
   { tag    :: Tag,

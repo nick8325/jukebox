@@ -176,17 +176,17 @@ oneConjecture conj cnf =
 
 -- A solver is given a problem in CNF and should return an answer.
 --
--- It also is given a function of type IO () -> IO ().
+-- It is also given a function of type IO () -> IO ().
 -- Wrapping an action in this function delays the action until after
 -- the answer is printed; this can be useful for e.g. printing a proof
 -- when the prover might be running under a timeout.
 type Solver = (IO () -> IO ()) -> Problem Clause -> IO Answer
 
-forAllConjecturesBox :: FilePath -> OptionParser (Solver -> CNF -> IO ())
-forAllConjecturesBox file = forAllConjectures file <$> globalFlags <*> tstpFlags
+forAllConjecturesBox :: OptionParser (Solver -> CNF -> IO ())
+forAllConjecturesBox = forAllConjectures <$> tstpFlags
 
-forAllConjectures :: FilePath -> GlobalFlags -> TSTPFlags -> Solver -> CNF -> IO ()
-forAllConjectures file globals (TSTPFlags tstp) solve CNF{..} = do
+forAllConjectures :: TSTPFlags -> Solver -> CNF -> IO ()
+forAllConjectures (TSTPFlags tstp) solve CNF{..} = do
   todo <- newIORef (return ())
   loop 1 todo conjectures
   where loop _ todo [] =
@@ -195,9 +195,10 @@ forAllConjectures file globals (TSTPFlags tstp) solve CNF{..} = do
           when multi $ do
             join (readIORef todo)
             writeIORef todo (return ())
-            quietly globals $ putStrLn $ "Part " ++ part i
           answer <- solve (\x -> modifyIORef todo (>> x)) (axioms ++ c)
-          when multi $ putStrLn $ "Partial result (" ++ part i ++ "): " ++ show answer
+          when multi $ do
+            putStrLn $ "Partial result (" ++ part i ++ "): " ++ show answer
+            putStrLn ""
           case answer of
             Sat _ -> result todo satisfiable
             Unsat _ -> loop (i+1) todo cs
@@ -205,13 +206,11 @@ forAllConjectures file globals (TSTPFlags tstp) solve CNF{..} = do
         multi = length conjectures > 1
         part i = show i ++ "/" ++ show (length conjectures)
         result todo x = do
-          if tstp then
-            putStrLn ("% SZS status " ++ show x ++ " for " ++ show file)
-           else do
-            putStrLn ("RESULT: " ++ show x ++ " (" ++ show file ++ ")")
-            putStrLn (explainAnswer x)
-          putStrLn ""
+          when tstp $ do
+            putStrLn ("% SZS status " ++ show x)
+            putStrLn ""
           join (readIORef todo)
+          putStrLn ("RESULT: " ++ show x ++ " (" ++ explainAnswer x ++ ").")
 
 ----------------------------------------------------------------------
 -- Convert a problem from TFF to FOF.
