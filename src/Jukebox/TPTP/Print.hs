@@ -20,18 +20,19 @@ import Control.Monad.Trans.State.Strict
 
 pPrintClauses :: Problem Clause -> Doc
 pPrintClauses prob0
-  | isFof prob = vcat (map (pPrintInput "cnf" pPrint) prob)
-  | otherwise  = pPrintProblem (map (fmap toForm) prob0)
+  | isReallyFof prob = vcat (map (pPrintInput "cnf" pPrint) prob)
+  | otherwise = pPrintProblem "tcf" (map (fmap toForm) prob)
   where
     prob = prettyNames prob0
 
 showClauses :: Problem Clause -> String
 showClauses = show . pPrintClauses
 
-pPrintProblem :: Problem Form -> Doc
-pPrintProblem prob0
+pPrintProblem :: String -> Problem Form -> Doc
+-- "kind" is only used if the problem is typed
+pPrintProblem kind prob0
   | isReallyFof prob = vcat (map (pPrintInput "fof" (pPrintFof 0)) prob)
-  | otherwise = vcat (pPrintDecls prob ++ map (pPrintInput "tff" (pPrintTff 0)) prob)
+  | otherwise = vcat (pPrintDecls kind prob ++ map (pPrintInput kind (pPrintTff 0)) prob)
   where
     prob = prettyNames prob0
 
@@ -107,7 +108,7 @@ pPrintProof prob =
 pPrintAnnotProof :: [(Input Form, (String, [Doc]))] -> Doc
 pPrintAnnotProof annots0 =
   vcat $
-    [ vcat (pPrintDecls inps) | not (isReallyFof inps) ] ++
+    [ vcat (pPrintDecls "tff" inps) | not (isReallyFof inps) ] ++
     [ pPrintClause (family x) (tag inp) k (pp x:rest)
     | (inp, (k, rest)) <- annots,
       let x = what inp ]
@@ -130,7 +131,7 @@ pPrintAnnotProof annots0 =
         pPrintTff 0 x
 
 showProblem :: Problem Form -> String
-showProblem = show . pPrintProblem
+showProblem = show . pPrintProblem "tff"
 
 isReallyFof :: Symbolic a => a -> Bool
 isReallyFof = all p . types
@@ -140,8 +141,8 @@ isReallyFof = all p . types
     p _ = False
     i = name "$i"
 
-pPrintDecls :: Problem Form -> [Doc]
-pPrintDecls prob =
+pPrintDecls :: String -> Problem Form -> [Doc]
+pPrintDecls kind prob =
   map typeDecl (usort (types prob)) ++
   map funcDecl (usort (functions prob))
   where
@@ -151,8 +152,10 @@ pPrintDecls prob =
     i = name "$i"
 
     funcDecl (f ::: ty) = typeClause f (pPrint ty)
+
+    typeClause :: Show a => a -> Doc -> Doc
     typeClause name ty =
-      pPrintClause "tff" "type" "type"
+      pPrintClause kind "type" "type"
         [text (escapeAtom (show name)) <> colon <+> ty]
 
 instance Pretty a => Pretty (Input a) where
