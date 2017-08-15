@@ -42,12 +42,6 @@ infixl 1 =>>= -- same as >=>
 x =>> y = (>>) <$> x <*> y
 infixl 1 =>> -- same as >>
 
-greetingBox :: Tool -> OptionParser (IO ())
-greetingBox t = greetingBoxIO t <$> globalFlags
-
-greetingBoxIO :: Tool -> GlobalFlags -> IO ()
-greetingBoxIO t globals = message globals (greeting t)
-
 message :: GlobalFlags -> String -> IO ()
 message globals msg =
   putStr (comment globals msg)

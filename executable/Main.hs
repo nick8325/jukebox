@@ -8,67 +8,80 @@ import Jukebox.Toolbox
 import Control.Applicative
 import Data.Monoid
 #endif
+import Data.List
+import System.Exit
+import System.Environment
 
-tools = mconcat [fof, cnf, smt, monotonox, guessmodel]
+main = do
+  prog <- getProgName
+  args <- getArgs
+  let
+    progTool = prog ++ " <toolname>"
+    help =
+      printHelp ExitSuccess $
+        intercalate [""] $
+          [usageText progTool "Jukebox, a first-order logic toolbox"] ++
+          [["<toolname> can be any of the following:"] ++
+           [ "  " ++ name tool ++ " - " ++ description tool
+           | tool <- tools, name tool `notElem` map name internal ]] ++
+          [["For more information about each tool, run " ++ progTool ++ " --help."]]
+    usage msg = printError prog msg
+  case args of
+    [] -> help
+    ["--help"] -> help
+    ["--version"] ->
+      putStrLn $ "Jukebox version " ++ VERSION_jukebox
+    (('-':_):_) -> usage "Expected a tool name as first argument"
+    (arg:args) ->
+      case [tool | tool <- tools, name tool == arg] of
+        [] -> usage ("No such tool " ++ arg)
+        [tool] ->
+          join $
+            parseCommandLineWithArgs
+              (prog ++ " " ++ name tool) args (description tool) (pipeline tool)
 
-fof = tool info pipeline
-  where
-    info = Tool "fof" "Jukebox TFF-to-FOF translator" "1"
-                "Translate from TFF (typed) to FOF (untyped)"
-    pipeline =
-      greetingBox info =>>
-      allFilesBox <*>
-        (parseProblemBox =>>=
-         toFofBox =>>=
-         prettyPrintProblemBox)
+data Tool =
+  Tool {
+    name :: String,
+    description :: String,
+    pipeline :: OptionParser (IO ()) }
 
-monotonox = tool info pipeline
-  where
-    info = Tool "monotonox" "Monotonox" "1"
-                "Monotonicity analysis"
-    pipeline =
-      greetingBox info =>>
-      allFilesBox <*>
-        (parseProblemBox =>>=
-         clausifyBox =>>=
-         oneConjectureBox =>>=
-         monotonicityBox =>>=
-         writeFileBox)
+tools = [fof, cnf, smt, monotonox, guessmodel]
+internal = [guessmodel]
 
-smt = tool info pipeline
-  where
-    info = Tool "smt" "Jukebox TFF-to-SMTLIB translator" "1"
-                "Translate from TFF to SMTLIB"
-    pipeline =
-      greetingBox info =>>
-      allFilesBox <*>
-        (parseProblemBox =>>=
-         prettyPrintProblemSMTBox)
+fof =
+  Tool "fof" "Translate a problem from TFF (typed) to FOF (untyped)" $
+    allFilesBox <*>
+      (parseProblemBox =>>=
+       toFofBox =>>=
+       prettyPrintProblemBox)
 
-cnf = tool info pipeline
-  where
-    info = Tool "cnf" "Jukebox clausifier" "1"
-                "Clausify a problem"
-    pipeline =
-      greetingBox info =>>
-      allFilesBox <*>
-        (parseProblemBox =>>=
-         clausifyBox =>>=
-         oneConjectureBox =>>=
-         prettyPrintClausesBox)
+monotonox =
+  Tool "monotonox" "Analyse a problem for monotonicity" $
+    allFilesBox <*>
+      (parseProblemBox =>>=
+       clausifyBox =>>=
+       oneConjectureBox =>>=
+       monotonicityBox =>>=
+       writeFileBox)
 
-guessmodel = tool info pipeline
-  where
-    info = Tool "guessmodel" "Infinite model guesser" "1"
-                "Guess an infinite model"
-    pipeline =
-      greetingBox info =>>
-      allFilesBox <*>
-        (parseProblemBox =>>=
-         guessModelBox =>>=
-         prettyPrintProblemBox)
+smt =
+  Tool "smt" "Translate a problem from TPTP format to SMTLIB format" $
+    allFilesBox <*>
+      (parseProblemBox =>>=
+       prettyPrintProblemSMTBox)
 
-jukebox = Tool "jukebox" "Jukebox" "1"
-               "A first-order logic toolbox"
+cnf =
+  Tool "cnf" "Clausify a TPTP (TFF or FOF) problem" $
+    allFilesBox <*>
+      (parseProblemBox =>>=
+       clausifyBox =>>=
+       oneConjectureBox =>>=
+       prettyPrintClausesBox)
 
-main = join (parseCommandLine jukebox tools)
+guessmodel =
+  Tool "guessmodel" "Guess an infinite model (internal use)" $
+    allFilesBox <*>
+      (parseProblemBox =>>=
+       guessModelBox =>>=
+       prettyPrintProblemBox)

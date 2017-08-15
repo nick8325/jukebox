@@ -1,8 +1,13 @@
+-- Command-line option parsing using applicative functors.
+-- Parsers are represented as values of type OptionParser a,
+-- and run using the function
+--   parseCommandLine :: String -> OptionParser a -> IO a.
+-- OptionParsers are built from ArgParsers, which parse a single
+-- option (e.g. --verbosity 3).
+
 {-# LANGUAGE FlexibleContexts, CPP #-}
 module Jukebox.Options where
 
-import Control.Arrow((***))
-import Control.Monad(mplus)
 import Data.Char
 import Data.List
 import System.Environment
@@ -33,11 +38,10 @@ instance (Monoid d, Monoid (p a)) => Monoid (Annotated d p a) where
     Annotated (d `mappend` d') (p `mappend` p')
 
 ----------------------------------------------------------------------
--- Parsing of single arguments (e.g. integers)
--- and single flags (e.g. --verbosity 3).
+-- The ArgParser type: parsing of single flags.
 
-type ArgParser = Annotated ArgDesc SeqParser
-type ArgDesc = String -- description, e.g. "<number>"
+type ArgParser = Annotated String SeqParser
+  -- annotated with a description, e.g. "<number>"
 
 -- Called SeqParser because <*> is sequential composition.
 data SeqParser a = SeqParser
@@ -52,7 +56,10 @@ instance Applicative SeqParser where
   SeqParser a c <*> SeqParser a' c' = SeqParser (a + a') f
     where f xs = c xs <*> c' (drop a xs)
 
-arg :: ArgDesc -> String -> (String -> Maybe a) -> ArgParser a
+----------------------------------------------------------------------
+-- Combinators for building ArgParsers.
+
+arg :: String -> String -> (String -> Maybe a) -> ArgParser a
 arg desc err f = Annotated desc (SeqParser 1 c)
   where c [] = Left (Mistake err)
         c (x:_) | "-" `isPrefixOf` x = Left (Mistake err)
@@ -116,14 +123,22 @@ argUsage :: ExitCode -> [String] -> ArgParser a
 argUsage code err = Annotated [] (SeqParser 0 (const (Left (Usage code err))))
 
 ----------------------------------------------------------------------
--- Parsing of whole command lines.
+-- The OptionParser type: parsing of whole command lines.
 
 type OptionParser = Annotated [Flag] ParParser
+
+-- The help information for a flag.
+data Flag = Flag
+  { flagName :: String,
+    flagGroup :: String,
+    flagHelp :: [String],
+    flagArgs :: String } deriving (Eq, Show)
 
 -- Called ParParser because <*> is parallel composition.
 -- In other words, in f <*> x, f and x both see the whole command line.
 -- We want this when parsing command lines because
--- it doesn't matter what order we write the options in.
+-- it doesn't matter what order we write the options in,
+-- and because f and x might understand the same flags.
 data ParParser a = ParParser
   { val :: IO a, -- impure so we can put system information in our options records
     peek :: [String] -> ParseResult a }
@@ -183,13 +198,10 @@ awaitP p def par = ParParser (return def) f
 await :: String -> a -> ([String] -> ParseResult a) -> ParParser a
 await flag def f = awaitP (\x -> "--" ++ flag == x) def (const f)
 
-data Flag = Flag
-  { flagName :: String,
-    flagGroup :: String,
-    flagHelp :: [String],
-    flagArgs :: String } deriving (Eq, Show)
+----------------------------------------------------------------------
+-- Combinators for building OptionParsers.
 
--- From a flag name and and argument parser, produce an OptionParser.
+-- From a flag name and description and argument parser, produce an OptionParser.
 flag :: String -> [String] -> a -> ArgParser a -> OptionParser a
 flag name help def (Annotated desc (SeqParser args f)) =
   Annotated [desc'] (await name def g)
@@ -204,6 +216,11 @@ flag name help def (Annotated desc (SeqParser args f)) =
           await name ()
             (const (Error (Mistake ("Option --" ++ name ++ " occurred twice"))))
 
+-- A boolean flag.
+bool :: String -> [String] -> OptionParser Bool
+bool name help = flag name help False (pure True)
+
+-- A variant of 'flag' that allows repeated flags.
 manyFlags :: String -> [String] -> ArgParser a -> OptionParser [a]
 manyFlags name help (Annotated desc (SeqParser args f)) =
   fmap reverse (Annotated [desc'] (go []))
@@ -215,11 +232,11 @@ manyFlags name help (Annotated desc (SeqParser args f)) =
             Left (Usage code err) -> Error (Usage code err)
             Right x -> Yes args (go (x:xs))
 
--- Read filenames from the command line.
+-- A parser that reads all file names from the command line.
 filenames :: OptionParser [String]
 filenames = Annotated [] (from [])
   where from xs = awaitP p xs (f xs)
-        p x = not ("-" `isPrefixOf` x)
+        p x = not ("-" `isPrefixOf` x) || x == "-"
         f xs y _ = Yes 0 (from (xs ++ [y]))
 
 -- Take a value from the environment.
@@ -227,143 +244,71 @@ io :: IO a -> OptionParser a
 io m = Annotated [] p
   where p = ParParser m (const (No p))
 
--- A boolean flag.
-bool :: String -> [String] -> OptionParser Bool
-bool name help = flag name help False (pure True)
-
+-- Change the group associated with a set of flags.
 inGroup :: String -> OptionParser a -> OptionParser a
 inGroup x (Annotated fls f) = Annotated [fl{ flagGroup = x } | fl <- fls] f
 
-----------------------------------------------------------------------
--- Selecting a particular tool.
-
-type ToolParser = Annotated [Tool] PrefixParser
-data Tool = Tool
-  { toolProgName :: String,
-    toolName :: String,
-    toolVersion :: String,
-    toolHelp :: String }
-
-newtype PrefixParser a = PrefixParser (String -> Maybe (Tool, ParParser a))
-
-instance Functor PrefixParser where
-  fmap f (PrefixParser g) = PrefixParser (fmap (id *** fmap f) . g)
-
-instance Monoid (PrefixParser a) where
-  mempty = PrefixParser (const Nothing)
-  PrefixParser f `mappend` PrefixParser g =
-    PrefixParser (\xs -> f xs `mplus` g xs)
-
-runPref :: PrefixParser a -> [String] -> Either Error (IO a)
-runPref _ [] = Left (Mistake "Expected a tool name")
-runPref (PrefixParser f) (x:xs) =
-  case f x of
-    Nothing -> Left (Mistake ("No such tool " ++ x))
-    Just (t, p) ->
-      case runPar p xs of
-        Left (Mistake x) -> Left (Usage (ExitFailure 1) (argError t x))
-        Left (Usage code x) -> Left (Usage code x)
-        Right x -> Right x
-
-tool :: Tool -> OptionParser a -> ToolParser a
-tool t p =
-  Annotated [t] (PrefixParser f)
-  where f x | x == toolProgName t = Just (t, parser p')
-        f _ = Nothing
-        p' = p <* versionParser <* helpParser
-        helpParser =
-          inGroup "Miscellaneous options" $
-          flag "help" ["Show this help text."] () (argUsage ExitSuccess (help t p'))
-        versionParser =
-          inGroup "Miscellaneous options" $
-          flag "version" ["Print the version number."] () (argUsage ExitSuccess [greeting t])
-
--- Use the program name as a tool name if possible.
-getEffectiveArgs :: ToolParser a -> IO [String]
-getEffectiveArgs (Annotated tools _) = do
-  progName <-
-    case tools of
-      [tool] -> return (toolProgName tool)
-      _ -> getProgName
-  args <- getArgs
-  if progName `elem` map toolProgName tools
-    then return (progName:args)
-    else return args
-
-parseCommandLine :: Tool -> ToolParser a -> IO a
-parseCommandLine t p = do
-  let p' =
-        case p of
-          Annotated [_] _ -> p
-          _ -> versionTool t `mappend` helpTool t p `mappend` p
-  args <- getEffectiveArgs p'
-  case runPref (parser p') args of
-    Left (Mistake err) -> printHelp (ExitFailure 1) (argError t err)
-    Left (Usage code err) -> printHelp code err
-    Right x -> x
+-- Add a --version flag.
+version :: String -> OptionParser ()
+version x =
+  inGroup "Miscellaneous options" $
+  flag "version" ["Show the version number."] ()
+    (argUsage ExitSuccess [x])
 
 ----------------------------------------------------------------------
--- Help screens.
+-- Help screens, error messages and so on.
 
 printHelp :: ExitCode -> [String] -> IO a
 printHelp code xs = do
-  mapM_ (hPutStrLn stderr ) xs
+  mapM_ (hPutStrLn stderr) xs
   exitWith code
 
-argError :: Tool -> String -> [String]
-argError t err = [
-  greeting t,
-  err ++ ". Try --help."
-  ]
+printError :: String -> String -> IO a
+printError name err =
+  printHelp (ExitFailure 1) $
+    [err ++ ".", "Try " ++ name ++ " --help."]
 
-usageTool :: Tool -> String -> [String] -> String -> ToolParser a
-usageTool t0 flag msg bit = tool (Tool flag' flag' flag' "0") p
-  where p = Annotated [] (ParParser (printHelp ExitSuccess msg)
-                                    (const (Error (Usage (ExitFailure 1) msg'))))
-        flag' = "--" ++ flag
-        msg' = [
-          greeting t0,
-          "Didn't expect any arguments after " ++ flag' ++ ".",
-          "Try " ++ toolProgName t0 ++ " <toolname> " ++ flag' ++ " if you want " ++ bit ++ " a particular tool."
-          ]
+help :: String -> String -> OptionParser a -> OptionParser a
+help name description p = p'
+  where
+    p' =
+      p <*
+        (inGroup "Miscellaneous options" $
+         flag "help" ["Show this help text."] () (argUsage ExitSuccess (helpText name description p)))
 
-versionTool :: Tool -> ToolParser a
-versionTool t0 = usageTool t0 "version" [greeting t0] "the version of"
+usageText :: String -> String -> [String]
+usageText name descr =
+  [descr ++ ".",
+   "Usage: " ++ name ++ " <option>* <file>*, where <file> should be in TPTP format."]
 
-helpTool :: Tool -> ToolParser a -> ToolParser a
-helpTool t0 p = usageTool t0 "help" help "help for"
-  where help = intercalate [""] [
-          [greeting t0],
-          usage t0 "<toolname> ",
-          ["Please run " ++ toolProgName t0 ++ " <toolname> --help, where <toolname> can be any of the following:"],
-          intercalate [""] [ justify (toolProgName t) [toolHelp t] | t <- descr p ]]
-
-help :: Tool -> OptionParser a -> [String]
-help t p =
-  intercalate [""]
-    [[greeting t],
-     usage t "",
-     intercalate [""] [
-       [flagGroup f0 ++ ":"] ++
-       concat [justify ("--" ++ flagName f ++ " " ++ flagArgs f) (flagHelp f) | f <- fs]
-       | fs@(f0:_) <- groups (nub (descr p)) ]]
-
+helpText :: String -> String -> OptionParser a -> [String]
+helpText name description p =
+  intercalate [""] $
+    [usageText name description] ++
+    [[flagGroup f0 ++ ":"] ++
+     concat [justify ("--" ++ flagName f ++ " " ++ flagArgs f) (flagHelp f) | f <- fs]
+     | fs@(f0:_) <- groups (nub (descr p)) ]
   where
     groups [] = []
     groups (f:fs) =
       (f:[f' | f' <- fs, flagGroup f == flagGroup f']):
       groups [f' | f' <- fs, flagGroup f /= flagGroup f']
 
-greeting :: Tool -> String
-greeting t = toolName t ++ ", version " ++ toolVersion t ++ "."
-
-usage :: Tool -> String -> [String]
-usage t opts = [
-  "Usage: " ++ toolProgName t ++ " " ++ opts ++ "<option>* <file>*",
-  toolHelp t ++ ".",
-  "",
-  "<file> should be in TPTP format."
-  ]
-
 justify :: String -> [String] -> [String]
 justify name help = ["  " ++ name] ++ map ("    " ++) help
+
+----------------------------------------------------------------------
+-- Running the parser.
+
+parseCommandLine :: String -> OptionParser a -> IO a
+parseCommandLine description p = do
+  name <- getProgName
+  args <- getArgs
+  parseCommandLineWithArgs name args description p
+
+parseCommandLineWithArgs :: String -> [String] -> String -> OptionParser a -> IO a
+parseCommandLineWithArgs name args description p = do
+  case runPar (parser (help name description p)) args of
+    Left (Mistake err) -> printError name err
+    Left (Usage code err) -> printHelp code err
+    Right x -> x
