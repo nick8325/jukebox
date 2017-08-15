@@ -20,6 +20,7 @@ import qualified Jukebox.SMTLIB as SMT
 #if __GLASGOW_HASKELL__ < 710
 import Control.Applicative
 #endif
+import Data.IORef
 
 data GlobalFlags =
   GlobalFlags {
@@ -188,30 +189,36 @@ guessModelBox =
 guessModelIO :: [String] -> Universe -> Problem Form -> IO (Problem Form)
 guessModelIO expansive univ prob = return (guessModel expansive univ prob)
 
-allObligsBox :: OptionParser ((Problem Clause -> IO Answer) -> CNF -> IO ())
+allObligsBox :: OptionParser ((Problem Clause -> (IO () -> IO ()) -> IO Answer) -> CNF -> IO ())
 allObligsBox = allObligsIO <$> globalFlags
 
-allObligsIO globals solve CNF{..} = loop 1 conjectures
-  where loop _ [] =
-          result unsatisfiable
+allObligsIO globals solve CNF{..} = do
+  todo <- newIORef (return ())
+  loop 1 todo conjectures
+  where loop _ todo [] =
+          result todo unsatisfiable
             ["PROVED.", "The conjecture is true or the axioms are contradictory."]
-        loop i (c:cs) = do
-          when multi $ message globals $ "Part " ++ part i
-          answer <- solve (axioms ++ c)
+        loop i todo (c:cs) = do
+          when multi $ do
+            join (readIORef todo)
+            writeIORef todo (return ())
+            message globals $ "Part " ++ part i
+          answer <- solve (axioms ++ c) (\x -> modifyIORef todo (>> x))
           when multi $ message globals $ "Partial result (" ++ part i ++ "): " ++ show answer
           case answer of
             Satisfiable ->
-              result satisfiable
+              result todo satisfiable
                 ["DISPROVED.", "The conjecture is not true and the axioms are consistent."]
-            Unsatisfiable -> loop (i+1) cs
+            Unsatisfiable -> loop (i+1) todo cs
             NoAnswer x ->
-              result (show x)
+              result todo (show x)
                 ["GAVE UP.", "Couldn't prove or disprove the conjecture."]
         multi = length conjectures > 1
         part i = show i ++ "/" ++ show (length conjectures)
-        result x hint = do
+        result todo x hint = do
           putStrLn ("% SZS status " ++ x)
           putStrLn ""
+          join (readIORef todo)
           sequence_ [putStrLn ("% " ++ line) | line <- hint]
 
 inferBox :: OptionParser (Problem Clause -> IO (Problem Clause, Type -> Type))
