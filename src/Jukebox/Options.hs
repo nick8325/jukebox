@@ -275,7 +275,7 @@ help name description p = p'
     p' =
       p <*
         (inGroup "Miscellaneous options" $
-         flag "help" ["Show this help text."] () (argUsage ExitSuccess (helpText name description p)))
+         flag "help" ["Show this help text."] () (argUsage ExitSuccess (helpText name description p')))
 
 usageText :: String -> String -> [String]
 usageText name descr =
