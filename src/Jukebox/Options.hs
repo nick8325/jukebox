@@ -309,7 +309,7 @@ help name description p = p'
         <*
         (if any flagExpert (descr p) then
           (inGroup "Miscellaneous options" $
-           flag "expert-help" ["Show help text for hidden options too."] ()
+           flag "expert-help" ["Show help text for hidden options."] ()
              (argUsage ExitSuccess (helpText True name description p')))
          else pure ())
 
