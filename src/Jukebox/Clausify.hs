@@ -23,7 +23,7 @@ clausifyFlags =
   inGroup "Input and clausifier options" $
   ClausifyFlags <$>
     bool "split"
-      ["Split the conjecture into several sub-conjectures."]
+      ["Split the conjecture into several sub-conjectures (off by default)."]
 
 ----------------------------------------------------------------------
 -- clausify

@@ -36,9 +36,9 @@ findFileFlags =
   concat <$>
   sequenceA [
     pure ["."],
-    flag "root"
-      ["Extra directories that will be searched for TPTP input files."]
-      []
-      argFiles,
+    concat <$>
+      manyFlags "root"
+        ["Extra directories that will be searched for TPTP input files."]
+        argFiles,
     io getTPTPDirs
     ]

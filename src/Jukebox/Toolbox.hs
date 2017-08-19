@@ -35,8 +35,11 @@ globalFlags :: OptionParser GlobalFlags
 globalFlags =
   inGroup "Output options" $
   GlobalFlags <$>
-    bool "quiet"
-      ["Do not print any informational output."]
+    -- Use flag rather than bool to avoid getting a --no-quiet option in the
+    -- help message
+    flag "quiet"
+      ["Only print essential information."]
+      False (pure True)
 
 data TSTPFlags =
   TSTPFlags {
@@ -48,7 +51,7 @@ tstpFlags =
   inGroup "Output options" $
   TSTPFlags <$>
     bool "tstp"
-      ["Produce TSTP-friendly output."]
+      ["Produce TSTP-compatible output (off by default)."]
 
 ----------------------------------------------------------------------
 -- Printing output messages.
@@ -122,7 +125,7 @@ writeFileBox :: OptionParser (String -> IO ())
 writeFileBox =
   inGroup "Output options" $
   flag "output"
-    ["Where to write the output file (defaults to stdout)."]
+    ["Where to write the output file (stdout by default)."]
     putStr
     (fmap myWriteFile argFile)
   where myWriteFile "/dev/null" _ = return ()
@@ -145,8 +148,8 @@ oneConjectureBox = oneConjecture <$> flags
     flags =
       inGroup "Input and clausifier options" $
       flag "conjecture"
-        ["If the problem has multiple conjectures, take only this one",
-         "(conjectures are numbered from 1)"]
+        ["If the problem has multiple conjectures, take only this one.",
+         "Conjectures are numbered from 1."]
         Nothing (Just <$> argNum)
 
 oneConjecture :: Maybe Int -> CNF -> IO (Problem Clause)
@@ -236,7 +239,7 @@ schemeBox =
   inGroup "Options for encoding types" $
   choose <$>
   flag "encoding"
-    ["Which type encoding to use (defaults to guards)."]
+    ["Which type encoding to use (guards by default)."]
     "guards"
     (argOption ["guards", "tags"])
   <*> tagsFlags
@@ -276,7 +279,7 @@ guessModelBox =
     <$> expansive <*> universe
   where universe = choose <$>
                    flag "universe"
-                   ["Which universe to find the model in (defaults to peano)."]
+                   ["Which universe to find the model in (peano by default)."]
                    "peano"
                    (argOption ["peano", "trees"])
         choose "peano" = Peano

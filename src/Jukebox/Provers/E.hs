@@ -25,18 +25,15 @@ eflags =
   inGroup "E prover options" $
   EFlags <$>
     flag "eprover"
-      ["Path to the E theorem prover.",
-       "Default: eprover"]
+      ["Path to the E theorem prover (\"eprover\" by default)."]
       "eprover"
       argFile <*>
     flag "timeout"
-      ["Timeout for E, in seconds.",
-       "Default: (off)"]
+      ["Timeout for E, in seconds (off by default)."]
       Nothing
       (fmap Just argNum) <*>
     flag "memory"
-      ["Memory limit for E, in megabytes.",
-       "Default: (off)"]
+      ["Memory limit for E, in megabytes (unlimited by default)."]
       Nothing
       (fmap Just argNum)
 

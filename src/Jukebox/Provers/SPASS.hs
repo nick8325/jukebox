@@ -19,18 +19,15 @@ spassFlags =
   inGroup "SPASS prover options" $
   SPASSFlags <$>
     flag "spass"
-      ["Path to SPASS.",
-       "Default: SPASS"]
+      ["Path to SPASS (\"SPASS\" by default)."]
       "SPASS"
       argFile <*>
     flag "timeout"
-      ["Timeout in seconds.",
-       "Default: (none)"]
+      ["Timeout in seconds (off by default)."]
       Nothing
       (fmap Just argNum) <*>
     flag "sos"
-      ["Use set-of-support strategy.",
-       "Default: false"]
+      ["Use set-of-support strategy (off by default)."]
       False
       (pure True)
 

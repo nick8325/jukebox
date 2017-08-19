@@ -131,8 +131,13 @@ type OptionParser = Annotated [Flag] ParParser
 data Flag = Flag
   { flagName :: String,
     flagGroup :: String,
+    flagMode :: FlagMode,
     flagHelp :: [String],
     flagArgs :: String } deriving (Eq, Show)
+data FlagMode = NormalMode | ExpertMode | HiddenMode deriving (Eq, Show)
+
+flagExpert :: Flag -> Bool
+flagExpert f = flagMode f == ExpertMode
 
 -- Called ParParser because <*> is parallel composition.
 -- In other words, in f <*> x, f and x both see the whole command line.
@@ -185,57 +190,80 @@ runPar p xs@(x:_) =
     No _ -> Left (Mistake ("Didn't recognise option " ++ x))
     Error err -> Left err
 
-awaitP :: (String -> Bool) -> a -> (String -> [String] -> ParseResult a) -> ParParser a
-awaitP p def par = ParParser (return def) f
+await :: (String -> Bool) -> a -> (String -> [String] -> ParseResult a) -> ParParser a
+await p def par = ParParser (return def) f
   where f (x:xs) | p x =
           case par x xs of
             Yes n r -> Yes (n+1) r
             No _ ->
               error "Options.await: got No"
             Error err -> Error err
-        f _ = No (awaitP p def par)
+        f _ = No (await p def par)
 
-await :: String -> a -> ([String] -> ParseResult a) -> ParParser a
-await flag def f = awaitP (\x -> "--" ++ flag == x) def (const f)
+----------------------------------------------------------------------
+-- Low-level primitives for building OptionParsers.
+
+-- Produce an OptionParser with maximum flexibility.
+primFlag ::
+  -- Name and description of options (for documentation)
+  String -> [String] ->
+  -- Predicate which checks if this argument is our option
+  (String -> Bool) ->
+  -- Handle repeated occurrences of the same option
+  (a -> a -> Either Error a) ->
+  -- Change the argument parsing depending on the option name
+  (String -> a -> a) ->
+  -- Default argument value and argument parser
+  a -> ArgParser a -> OptionParser a
+primFlag name help p combine change def (Annotated desc (SeqParser args f)) =
+  Annotated [desc'] (await p def (g Right))
+  where desc' = Flag name "General options" NormalMode help desc
+        g comb x xs =
+          case f xs >>= comb . change x of
+            Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
+            Left (Usage code err) -> Error (Usage code err)
+            Right y ->
+              Yes args (await p y (g (combine y)))
 
 ----------------------------------------------------------------------
 -- Combinators for building OptionParsers.
 
 -- From a flag name and description and argument parser, produce an OptionParser.
 flag :: String -> [String] -> a -> ArgParser a -> OptionParser a
-flag name help def (Annotated desc (SeqParser args f)) =
-  Annotated [desc'] (await name def g)
-  where desc' = Flag name "General options" help desc
-        g xs =
-          case f xs of
-            Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
-            Left (Usage code err) -> Error (Usage code err)
-            Right y -> Yes args (pure y <* noFlag)
-        -- Give an error if the flag is repeated.
-        noFlag =
-          await name ()
-            (const (Error (Mistake ("Option --" ++ name ++ " occurred twice"))))
-
--- A boolean flag.
-bool :: String -> [String] -> OptionParser Bool
-bool name help = flag name help False (pure True)
+flag name help def p =
+  primFlag name help
+    (\x -> x == "--" ++ name)
+    (\x y -> return y) -- take second occurrence of flag
+    (\_ -> id)
+    def p
 
 -- A variant of 'flag' that allows repeated flags.
 manyFlags :: String -> [String] -> ArgParser a -> OptionParser [a]
-manyFlags name help (Annotated desc (SeqParser args f)) =
-  fmap reverse (Annotated [desc'] (go []))
-  where desc' = Flag name "Common options" help desc
-        go xs = await name xs (g xs)
-        g xs ys =
-          case f ys of
-            Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
-            Left (Usage code err) -> Error (Usage code err)
-            Right x -> Yes args (go (x:xs))
+manyFlags name help p =
+  primFlag name help
+    (\x -> x == "--" ++ name)
+    (\x y -> return (x ++ y))
+    (\_ -> id)
+    [] (return <$> p)
+
+-- A boolean flag.
+bool :: String -> [String] -> OptionParser Bool
+bool name help =
+  primFlag ("(no-)" ++ pos name) help
+    (\x -> x `elem` ["--" ++ pos name, "--" ++ neg name])
+    (\x y -> return y)
+    (\name' -> if "--" ++ name == name' then id else not)
+    False (pure True)
+  where
+    pos ('n':'o':'-':flag) = flag
+    pos flag = flag
+
+    neg flag = "no-" ++ pos flag
 
 -- A parser that reads all file names from the command line.
 filenames :: OptionParser [String]
 filenames = Annotated [] (from [])
-  where from xs = awaitP p xs (f xs)
+  where from xs = await p xs (f xs)
         p x = not ("-" `isPrefixOf` x) || x == "-"
         f xs y _ = Yes 0 (from (xs ++ [y]))
 
@@ -247,6 +275,14 @@ io m = Annotated [] p
 -- Change the group associated with a set of flags.
 inGroup :: String -> OptionParser a -> OptionParser a
 inGroup x (Annotated fls f) = Annotated [fl{ flagGroup = x } | fl <- fls] f
+
+-- Mark a flag as being for experts only.
+expert :: OptionParser a -> OptionParser a
+expert (Annotated fls f) = Annotated [fl{ flagMode = ExpertMode } | fl <- fls] f
+
+-- Mark a flag as being hidden.
+hidden :: OptionParser a -> OptionParser a
+hidden (Annotated fls f) = Annotated [fl{ flagMode = HiddenMode } | fl <- fls] f
 
 -- Add a --version flag.
 version :: String -> OptionParser a -> OptionParser a
@@ -275,25 +311,40 @@ help name description p = p'
     p' =
       p <*
         (inGroup "Miscellaneous options" $
-         flag "help" ["Show this help text."] () (argUsage ExitSuccess (helpText name description p')))
+         flag "help" ["Show help text."] ()
+        
+           (argUsage ExitSuccess (helpText False name description p')))
+        <*
+        (if any flagExpert (descr p) then
+          (inGroup "Miscellaneous options" $
+           flag "expert-help" ["Show help text for hidden options too."] ()
+             (argUsage ExitSuccess (helpText True name description p')))
+         else pure ())
 
 usageText :: String -> String -> [String]
 usageText name descr =
   [descr ++ ".",
-   "Usage: " ++ name ++ " <option>* <file>*, where <file> should be in TPTP format."]
+   "Usage: " ++ name ++ " <option>* <file>*, where <file> is in TPTP format."]
 
-helpText :: String -> String -> OptionParser a -> [String]
-helpText name description p =
+helpText :: Bool -> String -> String -> OptionParser a -> [String]
+helpText expert name description p =
   intercalate [""] $
     [usageText name description] ++
     [[flagGroup f0 ++ ":"] ++
      concat [justify ("--" ++ flagName f ++ " " ++ flagArgs f) (flagHelp f) | f <- fs]
-     | fs@(f0:_) <- groups (nub (descr p)) ]
+     | fs@(f0:_) <- groups (filter ok (nub (descr p))) ] ++
+    [ ["To see hidden options too, try --expert-help."]
+    | any flagExpert (descr p), not expert ]
   where
     groups [] = []
     groups (f:fs) =
       (f:[f' | f' <- fs, flagGroup f == flagGroup f']):
       groups [f' | f' <- fs, flagGroup f /= flagGroup f']
+    ok flag =
+      case flagMode flag of
+        NormalMode -> True
+        ExpertMode -> expert
+        HiddenMode -> False
 
 justify :: String -> [String] -> [String]
 justify name help = ["  " ++ name] ++ map ("    " ++) help
