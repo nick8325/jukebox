@@ -52,6 +52,7 @@ tstpFlags =
   TSTPFlags <$>
     bool "tstp"
       ["Produce TSTP-compatible output (off by default)."]
+      False
 
 ----------------------------------------------------------------------
 -- Printing output messages.

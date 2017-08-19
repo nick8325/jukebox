@@ -24,6 +24,7 @@ clausifyFlags =
   ClausifyFlags <$>
     bool "split"
       ["Split the conjecture into several sub-conjectures (off by default)."]
+      False
 
 ----------------------------------------------------------------------
 -- clausify

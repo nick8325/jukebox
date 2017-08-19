@@ -211,15 +211,14 @@ primFlag ::
   (String -> Bool) ->
   -- Handle repeated occurrences of the same option
   (a -> a -> Either Error a) ->
-  -- Change the argument parsing depending on the option name
-  (String -> a -> a) ->
   -- Default argument value and argument parser
-  a -> ArgParser a -> OptionParser a
-primFlag name help p combine change def (Annotated desc (SeqParser args f)) =
+  -- The argument parser is given the option name.
+  a -> ArgParser (String -> a) -> OptionParser a
+primFlag name help p combine def (Annotated desc (SeqParser args f)) =
   Annotated [desc'] (await p def (g Right))
   where desc' = Flag name "General options" NormalMode help desc
         g comb x xs =
-          case f xs >>= comb . change x of
+          case f xs >>= comb . ($ x) of
             Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
             Left (Usage code err) -> Error (Usage code err)
             Right y ->
@@ -234,8 +233,7 @@ flag name help def p =
   primFlag name help
     (\x -> x == "--" ++ name)
     (\x y -> return y) -- take second occurrence of flag
-    (\_ -> id)
-    def p
+    def (const <$> p)
 
 -- A variant of 'flag' that allows repeated flags.
 manyFlags :: String -> [String] -> ArgParser a -> OptionParser [a]
@@ -243,22 +241,16 @@ manyFlags name help p =
   primFlag name help
     (\x -> x == "--" ++ name)
     (\x y -> return (x ++ y))
-    (\_ -> id)
-    [] (return <$> p)
+    [] (const <$> return <$> p)
 
 -- A boolean flag.
-bool :: String -> [String] -> OptionParser Bool
-bool name help =
-  primFlag ("(no-)" ++ pos name) help
-    (\x -> x `elem` ["--" ++ pos name, "--" ++ neg name])
+bool :: String -> [String] -> Bool -> OptionParser Bool
+bool name help def =
+  primFlag ("(no-)" ++ name) help
+    (\x -> x `elem` ["--" ++ name, "--no-" ++ name])
     (\x y -> return y)
-    (\name' -> if "--" ++ name == name' then id else not)
-    False (pure True)
-  where
-    pos ('n':'o':'-':flag) = flag
-    pos flag = flag
-
-    neg flag = "no-" ++ pos flag
+    def
+    (pure (\name' -> if "--" ++ name == name' then True else False))
 
 -- A parser that reads all file names from the command line.
 filenames :: OptionParser [String]
