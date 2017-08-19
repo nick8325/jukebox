@@ -40,7 +40,7 @@ instance (Monoid d, Monoid (p a)) => Monoid (Annotated d p a) where
 ----------------------------------------------------------------------
 -- The ArgParser type: parsing of single flags.
 
-type ArgParser = Annotated String SeqParser
+type ArgParser = Annotated [String] SeqParser
   -- annotated with a description, e.g. "<number>"
 
 -- Called SeqParser because <*> is sequential composition.
@@ -60,7 +60,7 @@ instance Applicative SeqParser where
 -- Combinators for building ArgParsers.
 
 arg :: String -> String -> (String -> Maybe a) -> ArgParser a
-arg desc err f = Annotated desc (SeqParser 1 c)
+arg desc err f = Annotated [desc] (SeqParser 1 c)
   where c [] = Left (Mistake err)
         c (x:_) | "-" `isPrefixOf` x = Left (Mistake err)
         c (x:_) =
@@ -216,7 +216,7 @@ primFlag ::
   a -> ArgParser (String -> a) -> OptionParser a
 primFlag name help p combine def (Annotated desc (SeqParser args f)) =
   Annotated [desc'] (await p def (g Right))
-  where desc' = Flag name "General options" NormalMode help desc
+  where desc' = Flag name "General options" NormalMode help (unwords desc)
         g comb x xs =
           case f xs >>= comb . ($ x) of
             Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
