@@ -185,9 +185,7 @@ pPrintType ty = pPrintName (name ty)
 pPrintInput :: Input Form -> Doc
 pPrintInput Input{kind = Axiom _, what = form} =
   sexp ["assert", pPrintForm form]
-pPrintInput Input{kind = Conjecture, what = form} =
-  sexp ["assert", sexp ["not", pPrintForm form]]
-pPrintInput Input{kind = Question, what = form} =
+pPrintInput Input{kind = Conjecture _, what = form} =
   sexp ["assert", sexp ["not", pPrintForm form]]
 
 pPrintForm :: Form -> Doc

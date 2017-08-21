@@ -298,8 +298,7 @@ pPrintQuant bind q vs f
 
 instance Show Kind where
   show (Axiom kind) = kind
-  show Conjecture = "conjecture"
-  show Question = "question"
+  show (Conjecture kind) = kind
 
 prettyNames :: Symbolic a => a -> a
 prettyNames x0 = mapName replace x

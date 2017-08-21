@@ -40,7 +40,9 @@ clausify flags inps = Form.run inps (run . clausifyInputs [] [])
     do cs <- clausForm axiom inp
        clausifyInputs (cs ++ theory) obligs inps
 
-  clausifyInputs theory obligs (inp:inps) | kind inp `elem` [Conjecture, Question] =
+  clausifyInputs theory obligs (inp:inps)
+      -- XX translate question in answer literal
+    | Conjecture _ <- kind inp =
     do clausifyObligs theory obligs inp (split' (what inp)) inps
 
   clausifyObligs theory obligs _ [] inps =

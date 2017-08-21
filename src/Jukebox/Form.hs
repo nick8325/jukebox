@@ -307,7 +307,7 @@ toClause f = clause <$> cl f
 
 type Tag = String
 
-data Kind = Axiom String | Conjecture | Question deriving (Eq, Ord)
+data Kind = Axiom String | Conjecture String deriving (Eq, Ord)
 
 data Answer = Sat SatReason | Unsat UnsatReason | NoAnswer NoAnswerReason
   deriving (Eq, Ord)

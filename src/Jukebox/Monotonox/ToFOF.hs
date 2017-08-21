@@ -43,7 +43,7 @@ guard scheme mono (Input t k info f) = Input t k info (aux (pos k) f)
         aux _pos (Equiv _ _) = error "ToFOF.guard: equiv should have been eliminated"
         aux _pos (Connective _ _ _) = error "ToFOF.guard: connective should have been eliminated"
         pos Axiom{} = True
-        pos Conjecture = False
+        pos Conjecture{} = False
 
 translate, translate1 :: Scheme -> (Type -> Bool) -> Problem Form -> Problem Form
 translate1 scheme mono f = Form.run f $ \inps -> do
@@ -77,7 +77,7 @@ translate scheme mono f =
               Axiom{} ->
                 fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
                   prepare f
-              Conjecture ->
+              Conjecture{} ->
                 fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
                 fmap notInwards $ prepare $ nt f
       typeI = Type (name "$i") (Finite 0) Infinite
