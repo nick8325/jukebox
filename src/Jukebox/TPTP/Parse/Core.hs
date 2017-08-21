@@ -329,7 +329,7 @@ typeError fs@(f@(x ::: _):_) args' = do
                  else
                    " has type " ++ showTypes (map rhs fs) ++
                    " but was applied to " ++ plural (length args') "an argument" "arguments" ++
-                   " of type " ++ prettyShow (map typ args')
+                   " of type " ++ intercalate ", " (map (prettyShow . typ) args')
 
 {-# INLINE lookupType #-}
 lookupType :: String -> Parser Type
