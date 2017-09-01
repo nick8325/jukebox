@@ -1,3 +1,5 @@
+Fix memory consumption with CSR etc
+
 Mostly to do with name generation:
 * Allow generating names more flexibly, e.g., attach a prefix to a
   name, put the disambiguating number in a particular place.
