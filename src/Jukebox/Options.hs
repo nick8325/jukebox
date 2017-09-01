@@ -232,7 +232,7 @@ flag :: String -> [String] -> a -> ArgParser a -> OptionParser a
 flag name help def p =
   primFlag name help
     (\x -> x == "--" ++ name)
-    (\x y -> return y) -- take second occurrence of flag
+    (\_ y -> return y) -- take second occurrence of flag
     def (const <$> p)
 
 -- A variant of 'flag' that allows repeated flags.
@@ -248,7 +248,7 @@ bool :: String -> [String] -> Bool -> OptionParser Bool
 bool name help def =
   primFlag ("(no-)" ++ name) help
     (\x -> x `elem` ["--" ++ name, "--no-" ++ name])
-    (\x y -> return y)
+    (\_ y -> return y)
     def
     (pure (\name' -> if "--" ++ name == name' then True else False))
 

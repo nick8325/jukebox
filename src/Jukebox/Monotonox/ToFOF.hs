@@ -82,7 +82,7 @@ translate scheme mono f =
                 fmap notInwards $ prepare $ nt f
       typeI = Type (name "$i") (Finite 0) Infinite
       trType O = O
-      trType ty = typeI
+      trType _ = typeI
   in Form.run (translate1 scheme mono f') (return . mapType trType)
 
 -- Typing functions.
