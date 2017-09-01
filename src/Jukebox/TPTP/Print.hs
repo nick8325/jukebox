@@ -297,8 +297,21 @@ pPrintQuant bind q vs f
       nest 2 (pPrintForm bind 1 f)]
 
 instance Show Kind where
-  show (Axiom kind) = kind
-  show (Conjecture kind) = kind
+  show (Ax kind) = show kind
+  show (Conj kind) = show kind
+
+instance Show AxKind where
+  show Axiom = "axiom"
+  show Hypothesis = "hypothesis"
+  show Definition = "definition"
+  show Assumption = "assumption"
+  show Lemma = "lemma"
+  show TheoremKind = "theorem"
+  show NegatedConjecture = "negated_conjecture"
+
+instance Show ConjKind where
+  show Conjecture = "conjecture"
+  show Question = "question"
 
 prettyNames :: Symbolic a => a -> a
 prettyNames x0 = mapName replace x

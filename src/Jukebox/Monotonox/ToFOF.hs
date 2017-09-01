@@ -42,8 +42,8 @@ guard scheme mono (Input t k info f) = Input t k info (aux (pos k) f)
         aux pos (Or fs) = Or (fmap (aux pos) fs)
         aux _pos (Equiv _ _) = error "ToFOF.guard: equiv should have been eliminated"
         aux _pos (Connective _ _ _) = error "ToFOF.guard: connective should have been eliminated"
-        pos Axiom{} = True
-        pos Conjecture{} = False
+        pos Ax{} = True
+        pos Conj{} = False
 
 translate, translate1 :: Scheme -> (Type -> Bool) -> Problem Form -> Problem Form
 translate1 scheme mono f = Form.run f $ \inps -> do
@@ -65,7 +65,7 @@ translate1 scheme mono f = Form.run f $ \inps -> do
         map (simplify . ForAll . bind) . split . simplify . foldr (/\) true $
           funcAxioms ++ typeAxioms
   return $
-    [ Input ("types" ++ show i) (Axiom "axiom") (Inference "type_axiom" "esa" []) axiom | (axiom, i) <- zip axioms [1..] ] ++
+    [ Input ("types" ++ show i) (Ax Axiom) (Inference "type_axiom" "esa" []) axiom | (axiom, i) <- zip axioms [1..] ] ++
     map (guard scheme1' mono') inps
 
 translate scheme mono f =
@@ -74,10 +74,10 @@ translate scheme mono f =
           forM inps $ \inp@(Input tag kind _ f) -> do
             let prepare f = fmap (foldr (/\) true) (run (withName tag (removeEquiv (simplify f))))
             case kind of
-              Axiom{} ->
+              Ax{} ->
                 fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
                   prepare f
-              Conjecture{} ->
+              Conj{} ->
                 fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
                 fmap notInwards $ prepare $ nt f
       typeI = Type (name "$i") (Finite 0) Infinite

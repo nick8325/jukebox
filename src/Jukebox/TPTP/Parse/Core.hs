@@ -21,11 +21,13 @@ import Data.Symbol
 import Jukebox.TPTP.Lexer hiding
   (Pos, Error, Include, Var, Type, Not, ForAll,
    Exists, And, Or, Type, Apply, Implies, Follows, Xor, Nand, Nor,
-   Rational, Real,
+   Rational, Real, NegatedConjecture, Question,
+   Axiom, Hypothesis, Definition, Assumption, Lemma, Theorem, NegatedConjecture,
+   Conjecture, Question,
    keyword, defined, kind)
 import qualified Jukebox.TPTP.Lexer as L
 import qualified Jukebox.Form as Form
-import Jukebox.Form hiding (tag, kind, Axiom, Conjecture, newFunction, TypeOf(..), run, Theorem)
+import Jukebox.Form hiding (tag, kind, newFunction, TypeOf(..), run)
 import qualified Jukebox.Name as Name
 
 -- The parser monad
@@ -255,8 +257,9 @@ kind = do
   MkState mfile _ _ _ _ _ <- getState
   UserState _ (At (L.Pos n _) _) <- getPosition
   let
-    axiom t = general t (Form.Axiom (show t))
     general k kind = keyword k >> return (mk kind)
+    axiom t kind = general t (Form.Ax kind)
+    conjecture t kind = general t (Form.Conj kind)
     mk kind tag form =
       Input { Form.tag = tag,
               Form.kind = kind,
@@ -265,11 +268,15 @@ kind = do
                 case mfile of
                   Nothing -> Form.Unknown
                   Just file -> FromFile file (fromIntegral n) }
-  axiom Axiom <|> axiom Hypothesis <|> axiom Definition <|>
-    axiom Assumption <|> axiom Lemma <|> axiom Theorem <|>
-    axiom NegatedConjecture <|>
-    general Conjecture (Form.Conjecture "conjecture") <|>
-    general Question (Form.Conjecture "question")
+  axiom L.Axiom Axiom <|>
+    axiom L.Hypothesis Hypothesis <|>
+    axiom L.Definition Definition <|>
+    axiom L.Assumption Assumption <|>
+    axiom L.Lemma Lemma <|>
+    axiom L.Theorem TheoremKind <|>
+    axiom L.NegatedConjecture NegatedConjecture <|>
+    conjecture L.Conjecture Conjecture <|>
+    conjecture L.Question Question
 
 -- A formula name.
 tag :: Parser Tag
