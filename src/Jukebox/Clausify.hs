@@ -34,7 +34,18 @@ clausify flags inps = Form.run inps (run . clausifyInputs [] [])
  where
   clausifyInputs theory obligs [] =
     do return (toCNF (reverse theory) (reverse obligs))
-  
+
+  -- If using --split, translate a negated_conjecture p
+  -- into a conjecture ~p, to allow splitting to occur.
+  clausifyInputs theory obligs (inp:inps)
+    | splitting flags, Ax NegatedConjecture <- kind inp =
+      clausifyInputs theory obligs (inp':inps)
+    where
+      inp' =
+        inp {
+          kind = Conj Conjecture,
+          what = Not (what inp) }
+
   clausifyInputs theory obligs (inp:inps)
     | Ax axiom <- kind inp =
     do cs <- clausForm axiom inp

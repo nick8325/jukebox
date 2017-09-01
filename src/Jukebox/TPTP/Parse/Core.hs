@@ -371,8 +371,7 @@ cnf = do
   MkState mfile p t f _ n <- getState
   putState (MkState mfile p t f Map.empty n)
   form <- formula NoQuantification __
-  MkState _ _ _ _ vs _ <- getState
-  return (ForAll (Bind (Set.fromList (Map.elems vs)) form))
+  return (closeForm form)
 tff = formula Typed Map.empty
 fof = formula Untyped Map.empty
 

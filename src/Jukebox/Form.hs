@@ -288,7 +288,9 @@ clause :: [Signed Atomic] -> Clause
 clause xs = Clause (bind xs)
 
 toForm :: Clause -> Form
-toForm (Clause (Bind vs ls)) = ForAll (Bind vs (Or (map Literal ls)))
+toForm (Clause (Bind vs ls))
+  | Set.null vs = Or (map Literal ls)
+  | otherwise = ForAll (Bind vs (Or (map Literal ls)))
 
 toLiterals :: Clause -> [Literal]
 toLiterals (Clause (Bind _ ls)) = ls
