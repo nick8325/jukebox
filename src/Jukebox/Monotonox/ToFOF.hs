@@ -91,9 +91,11 @@ tagsFlags :: OptionParser Bool
 tagsFlags =
   inGroup "Options for encoding types" $
   bool "more-axioms"
-    ["Add extra, redundant typing axioms for function arguments (off by default).",
-     "May help or hinder the prover. Only affects --encoding tags."]
-    False
+    ["Add extra, redundant typing axioms for function arguments (on by default).",
+     "Improves performance on provers which use equations as rewrite rules",
+     "to simplify discovered facts. May harm performance on other provers."
+     "Only affects --encoding tags."]
+    True
 
 tags :: Bool -> Scheme
 tags moreAxioms = Scheme
