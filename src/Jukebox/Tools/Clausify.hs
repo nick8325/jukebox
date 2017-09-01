@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, BangPatterns, CPP, PatternGuards #-}
-module Jukebox.Clausify where
+module Jukebox.Tools.Clausify where
 
 import Jukebox.Form hiding (run)
 import qualified Jukebox.Form as Form

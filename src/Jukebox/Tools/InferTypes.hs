@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, GADTs, CPP #-}
-module Jukebox.InferTypes where
+module Jukebox.Tools.InferTypes where
 
 #include "errors.h"
 import Control.Monad

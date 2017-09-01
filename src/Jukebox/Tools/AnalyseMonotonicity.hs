@@ -1,5 +1,5 @@
 {-# LANGUAGE TypeOperators, CPP #-}
-module Jukebox.Monotonox.Monotonicity where
+module Jukebox.Tools.AnalyseMonotonicity where
 
 import Prelude hiding (lookup)
 import Jukebox.Name
@@ -8,7 +8,7 @@ import Control.Monad
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
 #ifndef NO_MINISAT
-import Jukebox.HighSat
+import Jukebox.Sat.Easy
 #endif
 
 data Extension = TrueExtend | FalseExtend | CopyExtend deriving Show

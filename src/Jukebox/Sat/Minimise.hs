@@ -1,4 +1,4 @@
-module Jukebox.SatMin where
+module Jukebox.Sat.Minimise where
 
 import Jukebox.Sat
 

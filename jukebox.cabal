@@ -33,11 +33,11 @@ Library
   if flag(minisat)
     Build-depends: minisat
     Exposed-modules:
-      Jukebox.Sat3
-      Jukebox.SatEq
       Jukebox.Sat
-      Jukebox.SatMin
-      Jukebox.HighSat
+      Jukebox.Sat.ThreeValued
+      Jukebox.Sat.Equality
+      Jukebox.Sat.Minimise
+      Jukebox.Sat.Easy
   else
     cpp-options: -DNO_MINISAT
   ghc-options: -W -fno-warn-incomplete-patterns
@@ -45,18 +45,18 @@ Library
   Hs-source-dirs: src
   include-dirs: src
   Exposed-modules:
-    Jukebox.Clausify
     Jukebox.Form
-    Jukebox.GuessModel
-    Jukebox.InferTypes
-    Jukebox.Monotonox.Monotonicity
-    Jukebox.Monotonox.ToFOF
     Jukebox.Name
     Jukebox.Options
-    Jukebox.Provers.E
-    Jukebox.Provers.SPASS
+    Jukebox.ExternalProvers.E
+    Jukebox.ExternalProvers.SPASS
     Jukebox.SMTLIB
     Jukebox.Toolbox
+    Jukebox.Tools.Clausify
+    Jukebox.Tools.GuessModel
+    Jukebox.Tools.InferTypes
+    Jukebox.Tools.AnalyseMonotonicity
+    Jukebox.Tools.EncodeTypes
     Jukebox.TPTP.Parse.Core
     Jukebox.TPTP.FindFile
     Jukebox.TPTP.Lexer

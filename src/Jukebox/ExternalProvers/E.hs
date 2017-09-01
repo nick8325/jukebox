@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs #-}
-module Jukebox.Provers.E where
+module Jukebox.ExternalProvers.E where
 
 import Jukebox.Form hiding (tag, Or)
 import Jukebox.Name

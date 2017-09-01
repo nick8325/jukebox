@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, PatternGuards #-}
-module Jukebox.GuessModel where
+module Jukebox.Tools.GuessModel where
 
 import Control.Monad
 import Jukebox.Name

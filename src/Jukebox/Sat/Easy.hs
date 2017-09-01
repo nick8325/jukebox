@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns, GeneralizedNewtypeDeriving, CPP #-}
-module Jukebox.HighSat where
+module Jukebox.Sat.Easy where
 
 import MiniSat hiding (neg)
 import qualified MiniSat

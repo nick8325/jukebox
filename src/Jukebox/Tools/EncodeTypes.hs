@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, PatternGuards #-}
-module Jukebox.Monotonox.ToFOF where
+module Jukebox.Tools.EncodeTypes where
 
-import Jukebox.Clausify(split, removeEquiv, run, withName)
+import Jukebox.Tools.Clausify(split, removeEquiv, run, withName)
 import Jukebox.Name
 import Jukebox.Form hiding (run)
 import qualified Jukebox.Form as Form
@@ -93,7 +93,7 @@ tagsFlags =
   bool "more-axioms"
     ["Add extra, redundant typing axioms for function arguments (on by default).",
      "Improves performance on provers which use equations as rewrite rules",
-     "to simplify discovered facts. May harm performance on other provers."
+     "to simplify discovered facts. May harm performance on other provers.",
      "Only affects --encoding tags."]
     True
 

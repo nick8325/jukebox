@@ -1,7 +1,7 @@
-module Jukebox.SatEq where
+module Jukebox.Sat.Equality where
 
 import Jukebox.Sat
-import Jukebox.Sat3
+import Jukebox.Sat.ThreeValued
 
 import Data.IORef
 import Data.Map as M

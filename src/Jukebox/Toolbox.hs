@@ -7,15 +7,15 @@ import Jukebox.Form
 import Jukebox.Name
 import Jukebox.TPTP.Print
 import Control.Monad
-import Jukebox.Clausify hiding (run)
 import Jukebox.TPTP.Parse
-import Jukebox.Monotonox.Monotonicity hiding (guards)
-import Jukebox.Monotonox.ToFOF
+import Jukebox.Tools.Clausify hiding (run)
+import Jukebox.Tools.AnalyseMonotonicity hiding (guards)
+import Jukebox.Tools.EncodeTypes
+import Jukebox.Tools.GuessModel
+import Jukebox.Tools.InferTypes
 import System.Exit
 import System.IO
 import Jukebox.TPTP.FindFile
-import Jukebox.GuessModel
-import Jukebox.InferTypes
 import qualified Data.Map.Strict as Map
 import qualified Jukebox.SMTLIB as SMT
 #if __GLASGOW_HASKELL__ < 710

@@ -1,4 +1,4 @@
-module Jukebox.Sat3 where
+module Jukebox.Sat.ThreeValued where
 
 import Jukebox.Sat
 

@@ -1,5 +1,5 @@
 {-# LANGUAGE GADTs, CPP #-}
-module Jukebox.Provers.SPASS where
+module Jukebox.ExternalProvers.SPASS where
 
 import Jukebox.Form hiding (tag, Or)
 import Jukebox.Options
