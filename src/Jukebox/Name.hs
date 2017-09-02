@@ -15,6 +15,7 @@ import Control.Applicative
 data Name =
     Fixed !FixedName
   | Unique {-# UNPACK #-} !Int64 String Renamer
+  | Variant !Name ![Name] Renamer
 
 data FixedName =
     Basic {-# UNPACK #-} !Symbol
@@ -45,6 +46,7 @@ renamer x =
   case name x of
     Fixed _ -> defaultRenamer
     Unique _ _ f -> f
+    Variant _ _ f -> f
 
 defaultRenamer :: Renamer
 defaultRenamer xs 0 = Renaming [] xs
@@ -57,6 +59,7 @@ defaultRenamer xs n = Renaming [] $ xs ++ sep ++ show (n+1)
 withRenamer :: Name -> Renamer -> Name
 Fixed x `withRenamer` _ = Fixed x
 Unique n xs _ `withRenamer` f = Unique n xs f
+Variant x xs _ `withRenamer` f = Variant x xs f
 
 instance Eq Name where
   x == y = compareName x == compareName y
@@ -64,15 +67,19 @@ instance Eq Name where
 instance Ord Name where
   compare = comparing compareName
 
-compareName :: Name -> Either FixedName Int64
+compareName :: Name -> Either FixedName (Either Int64 (Name, [Name]))
 compareName (Fixed xs) = Left xs
-compareName (Unique n _ _) = Right n
+compareName (Unique n _ _) = Right (Left n)
+compareName (Variant x xs _) = Right (Right (x, xs))
 
 instance Show Name where
   show (Fixed x) = show x
   show (Unique n xs f) = ys ++ "@" ++ show n
     where
       Renaming _ ys = f xs 0
+  show (Variant x xs f) =
+    "variant(" ++ show x ++
+      concat [", " ++ show x | x <- xs] ++ ")"
 
 class Named a where
   name :: a -> Name
@@ -82,6 +89,10 @@ instance Named [Char] where
 
 instance Named Name where
   name = id
+
+variant :: (Named a, Named b) => a -> [b] -> Name
+variant x xs =
+  Variant (name x) (map name xs) defaultRenamer
 
 data a ::: b = a ::: b deriving Show
 
