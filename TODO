@@ -2,6 +2,10 @@
   - Bool/Int/Real/Nat as constructors for Type
   - Builtins as constructors for Function
   - Get rid of ::: - use Typed and Named instance for e.g. Function instead
+  Possible problem: what happens to functions like $plus when we translate
+  to FOF? Can we always do type substitution e.g. turning $rat to $i?
+  Could possible keep ::: instead.
+  - See if some of the Name constructors (e.g. Integer) can be got rid of.
 * Fix memory consumption with CSR etc
 * Guess-model: skolemise problem first
 * Type inference
