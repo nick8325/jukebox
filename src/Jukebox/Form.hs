@@ -30,8 +30,6 @@ debugging = False
 ----------------------------------------------------------------------
 -- Types
 
-data DomainSize = Finite Int | Infinite deriving (Eq, Ord, Show, Typeable)
-
 data Type =
     O
   | Type { tname :: !Name }
