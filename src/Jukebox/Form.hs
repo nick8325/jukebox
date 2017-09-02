@@ -2,7 +2,7 @@
 --
 -- "Show" instances for several of these types are found in TPTP.Print.
 
-{-# LANGUAGE DeriveDataTypeable, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns, PatternGuards #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleContexts, Rank2Types, GADTs, TypeOperators, ScopedTypeVariables, BangPatterns, PatternGuards, DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 module Jukebox.Form where
 
 import Prelude hiding (sequence, mapM)
@@ -123,11 +123,9 @@ instance Eq Atomic where
 instance Ord Atomic where
   compare = comparing normAtomic
 
-data Signed a = Pos a | Neg a deriving (Show, Eq, Ord)
+data Signed a = Pos a | Neg a
+  deriving (Show, Eq, Ord, Functor, Foldable, Traversable)
 
-instance Functor Signed where
-  fmap f (Pos x) = Pos (f x)
-  fmap f (Neg x) = Neg (f x)
 type Literal = Signed Atomic
 
 neg :: Signed a -> Signed a
@@ -282,7 +280,7 @@ toCNF axioms conjectures = CNF axioms conjectures (NoAnswer GaveUp) (Unsat Theor
 
 newtype Clause = Clause (Bind [Literal])
 
-clause :: [Signed Atomic] -> Clause
+clause :: [Literal] -> Clause
 clause xs = Clause (bind xs)
 
 toForm :: Clause -> Form
@@ -338,6 +336,7 @@ data Input a = Input
     kind   :: Kind,
     source :: InputSource,
     what   :: a }
+  deriving (Functor, Foldable, Traversable)
 
 data InputSource =
     Unknown
@@ -345,9 +344,6 @@ data InputSource =
   | Inference String String [Input Form]
 
 type Problem a = [Input a]
-
-instance Functor Input where
-  fmap f x = x { what = f (what x) }
 
 ----------------------------------------------------------------------
 -- Symbolic stuff
