@@ -1,71 +1,20 @@
-Fix memory consumption with CSR etc
-
-Mostly to do with name generation:
-* Allow generating names more flexibly, e.g., attach a prefix to a
-  name, put the disambiguating number in a particular place.
-  This will make GuessModel nicer and allow us to remove the
-  clausifier monad.
-* Make the disambiguator understand scope a bit better.
-* Make the clausifier return a Problem [Clause] instead of
-  ([Clause], [[Clause]])?
-  (Don't generate clause names, instead associate each input formula
-  with a list of output clauses.)
-
+* Change formula representation:
+  - Bool/Int/Real/Nat as constructors for Type
+  - Builtins as constructors for Function
+  - Get rid of ::: - use Typed and Named instance for e.g. Function instead
+* Fix memory consumption with CSR etc
 * Guess-model: skolemise problem first
 * Type inference
 * Support for non-formula inputs, e.g. domain size restrictions
   (produced by type inference) or interpreted domains?
-
-* Clean up generic stuff.
-
-* Make output TPTP-compliant and catch exceptions+print with "internal
-  error" message.
-
-* Work out how to do $distinct, $answer (wrt types). Possibilities:
-    * polymorphism
-    * give each instance a different name, don't use suffix in
-      uniquifier for them
-    * give each instance a different name, mark somehow as special
-      (give Function type a semantics field?)
-    * give each instance a different name, maintain a list of
-      "special" names
-  Maybe rule out polymorphism for now---in full generality,
-  things like a -> b make our life hard. (type variable on right
-  that's not on left.) Add "semantics" field?? Bit icky...
-
-* Form.isFof: don't look for $i, check for unitypedness.
-  Maybe remove $i from stdNames altogether?
-
-* Split Name class into Named and Described classes
-  so that 1) String/ByteString can be member of Described but not Named,
-  2) we can implement addPrefix and addSuffix (Described a => String -> a -> a)
-
-* Support TFF1 (polymorphism)? Something like
-  Function = (Name ::: FunType) ::: [Type]
-  so that we retain f :@: ts for application.
-
+* Add $distinct, $answer.
 * Make GuessModel work with conjecture and existentials.
-
 * Make E interface preserve names and print out satisfiability status.
 * Add Equinox interface (including model finding)
-
-* Allow parsing of CNF directly?
-
 * Put GuessModel refinement loop in Haskell code
-
-* Make main loop prettier.
-
-* Clean up toolbox mess.
-
-* Remove as many exclamation marks as possible
-
-* Add helper functions for running NameM stuff.
-
-* Allow some names to have fixed string interpretations (like $answer, $i).
 
 * Allow some terms to have fixed types?? (like distinct objects etc.)
   These should be preserved by type inference.
-  Maybe a fancier type structure would help here.
 
 * Similarly, we have certain clauses that shouldn't be printed out.
   e.g. $distinct for distinct objects,
@@ -75,13 +24,3 @@ Mostly to do with name generation:
 
 * Make = a predicate? Would need to have some way of
   pattern-matching on it.
-
-* Remove the OptionParser wrapper around optionless boxes, use pure instead.
-
-* Add memo-combinators instead of silly share thing.
-
-* Look at Stratego for inspiration with generic stuff.
-
-* See if static minisat works.
-
-* Look at GHC generics.
