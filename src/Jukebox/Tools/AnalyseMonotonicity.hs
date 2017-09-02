@@ -10,20 +10,18 @@ import Data.Map(Map)
 #ifndef NO_MINISAT
 import Jukebox.Sat.Easy
 #endif
+import qualified Data.Set as Set
+import Data.Set(Set)
+import Data.Maybe
 
 data Extension = TrueExtend | FalseExtend | CopyExtend deriving Show
 
 data Var = FalseExtended Function | TrueExtended Function deriving (Eq, Ord)
 
-annotateMonotonicity :: Problem Clause -> IO (Problem Clause)
-annotateMonotonicity prob = do
+analyseMonotonicity :: Problem Clause -> IO (Set Type)
+analyseMonotonicity prob = do
   m <- monotone (map what prob)
-  let f O = O
-      f ty =
-        case Map.lookup ty m of
-          Nothing -> ty
-          Just{} -> ty { tmonotone = Finite 0 }
-  return (fmap (mapType f) prob)
+  return (Set.fromList (Map.keys (Map.filter isJust m)))
 
 monotone :: [Clause] -> IO (Map Type (Maybe (Map Function Extension)))
 #ifdef NO_MINISAT

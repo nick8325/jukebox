@@ -66,7 +66,7 @@ solve funMap varMap prob = (prob', rep)
 
         type_ = memo type__
         type__ (_, O) = O
-        type__ (name, _) = Type (rep name) Infinite Infinite
+        type__ (name, _) = Type (rep name)
 
         rep = evalUF initial $ do
           generate funMap varMap prob

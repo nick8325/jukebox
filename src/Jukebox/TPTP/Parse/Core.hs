@@ -49,18 +49,14 @@ data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 initialState :: Maybe String -> ParseState
 initialState mfile =
   initialStateFrom mfile []
-    (Map.fromList [(show (name ty), ty) | ty <- [int, rat, real]])
+    (Map.fromList [(show (name ty), ty) | ty <- [intType, ratType, realType]])
     (Map.fromList
        [ (fun,
           [Fixed (Overloaded (intern fun) (intern (show (name kind)))) ::: ty
           | (kind, ty) <- tys ])
        | (fun, tys) <- funs ])
    where
-     int  = Type (name "$int")  (Finite 0) Infinite
-     rat  = Type (name "$rat")  (Finite 0) Infinite
-     real = Type (name "$real") (Finite 0) Infinite
-
-     overloads f = [(ty, f ty) | ty <- [int, rat, real]]
+     overloads f = [(ty, f ty) | ty <- [intType, ratType, realType]]
      fun xs f = [(x, overloads f) | x <- xs]
 
      funs =
@@ -75,10 +71,10 @@ initialState mfile =
             "$remainder_e", "$remainder_t", "$remainder_f"]
          (\ty -> FunType [ty, ty] ty) ++
        [("$quotient",
-         [(ty, FunType [ty, ty] ty) | ty <- [rat, real]])] ++
-       fun ["$to_int"]  (\ty -> FunType [ty] int) ++
-       fun ["$to_rat"]  (\ty -> FunType [ty] rat) ++
-       fun ["$to_real"] (\ty -> FunType [ty] real)
+         [(ty, FunType [ty, ty] ty) | ty <- [ratType, realType]])] ++
+       fun ["$to_int"]  (\ty -> FunType [ty] intType) ++
+       fun ["$to_rat"]  (\ty -> FunType [ty] ratType) ++
+       fun ["$to_real"] (\ty -> FunType [ty] realType)
 
 initialStateFrom :: Maybe String -> [Name] -> Map String Type -> Map String [Function] -> ParseState
 initialStateFrom mfile xs tys fs = MkState mfile [] tys fs Map.empty n
@@ -344,7 +340,7 @@ lookupType xs = do
   MkState mfile p t f v n <- getState
   case Map.lookup xs t of
     Nothing -> do
-      let ty = Type (name xs) Infinite Infinite
+      let ty = Type (name xs)
       putState (MkState mfile p (Map.insert xs ty t) f v n)
       return ty
     Just ty -> return ty
@@ -362,7 +358,7 @@ lookupFunction def x = do
 
 -- The type $i (anything whose type is not specified gets this type)
 individual :: Type
-individual = Type (name "$i") Infinite Infinite
+individual = Type (name "$i")
 
 -- Parsing formulae.
 
@@ -499,9 +495,9 @@ term mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
       fromThing (Term ((Fixed x ::: FunType [] ty) :@: []))
 
 intType, ratType, realType :: Type
-intType = Type (name "$int") (Finite 0) Infinite
-ratType = Type (name "$rat") (Finite 0) Infinite
-realType = Type (name "$real") (Finite 0) Infinite
+intType = Type (name "$int")
+ratType = Type (name "$rat")
+realType = Type (name "$real")
 
 literal, unitary, quantified, formula ::
   FormulaLike a => Mode -> Map String Variable -> Parser a

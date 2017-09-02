@@ -137,7 +137,7 @@ isReallyFof :: Symbolic a => a -> Bool
 isReallyFof = all p . types
   where
     p O = True
-    p (Type ty _ _) | ty == i = True
+    p (Type ty) | ty == i = True
     p _ = False
     i = name "$i"
 
@@ -147,7 +147,7 @@ pPrintDecls kind prob =
   map funcDecl (usort (functions prob))
   where
     typeDecl O = empty
-    typeDecl (Type ty _ _) | ty == i = empty
+    typeDecl (Type ty) | ty == i = empty
     typeDecl ty = typeClause ty (text "$tType")
     i = name "$i"
 
@@ -350,7 +350,7 @@ prettyNames x0 = mapName replace x
     globals =
       usort $
         [ f | f ::: _ <- functions x ] ++
-        [ ty | Type ty _ _ <- types x ]
+        [ ty | Type ty <- types x ]
     (globalsScope, globalsUsed) = add fixed globals
 
     fixed = Set.fromList [ show xs | Fixed xs <- names x ]

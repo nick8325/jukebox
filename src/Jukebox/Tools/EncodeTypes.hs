@@ -80,7 +80,7 @@ translate scheme mono f =
               Conj{} ->
                 fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
                 fmap notInwards $ prepare $ nt f
-      typeI = Type (name "$i") (Finite 0) Infinite
+      typeI = Type (name "$i")
       trType O = O
       trType _ = typeI
   in Form.run (translate1 scheme mono f') (return . mapType trType)

@@ -34,12 +34,8 @@ data DomainSize = Finite Int | Infinite deriving (Eq, Ord, Show, Typeable)
 
 data Type =
     O
-  | Type {
-      tname :: !Name,
-      -- type is monotone when domain size is >= tmonotone
-      tmonotone :: DomainSize,
-      -- if there is a model of size >= tsize then there is a model of size tsize
-      tsize :: DomainSize } deriving Typeable
+  | Type { tname :: !Name }
+  deriving Typeable
 
 data FunType = FunType { args :: [Type], res :: Type } deriving (Eq, Ord, Typeable)
 
@@ -93,9 +89,7 @@ newFunction :: Named a => a -> [Type] -> Type -> NameM Function
 newFunction x args res = newSymbol x (FunType args res)
 
 newType :: Named a => a -> NameM Type
-newType x = do
-  n <- newName x
-  return (Type n Infinite Infinite)
+newType x = Type <$> newName x
 
 funArgs :: Function -> [Type]
 funArgs (_ ::: ty) = args ty
@@ -691,7 +685,7 @@ mapName f0 = rename
       memo $ \ty ->
         case ty of
           O -> O
-          Type name x y -> Type (f name) x y
+          Type name -> Type (f name)
 
     f = memo f0
 

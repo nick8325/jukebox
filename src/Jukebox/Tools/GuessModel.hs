@@ -65,7 +65,7 @@ ind :: Symbolic a => a -> Type
 ind x =
   case types' x of
     [ty] -> ty
-    [] -> Type (name "$i") Infinite Infinite
+    [] -> Type (name "$i")
     _ -> error "GuessModel: can't deal with many-typed problems"
 
 function :: [Function] -> Function -> Bool -> Function -> NameM [Form]

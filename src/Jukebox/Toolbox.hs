@@ -22,6 +22,7 @@ import qualified Jukebox.SMTLIB as SMT
 import Control.Applicative
 #endif
 import Data.IORef
+import Data.Set(Set)
 
 ----------------------------------------------------------------------
 -- Some standard flags.
@@ -250,9 +251,8 @@ schemeBox =
 ----------------------------------------------------------------------
 -- Analyse monotonicity.
 
--- Annotate types with monotonicity information.
-annotateMonotonicityBox :: OptionParser (Problem Clause -> IO (Problem Clause))
-annotateMonotonicityBox = pure annotateMonotonicity
+analyseMonotonicityBox :: OptionParser (Problem Clause -> IO (Set Type))
+analyseMonotonicityBox = pure analyseMonotonicity
 
 showMonotonicityBox :: OptionParser (Problem Clause -> IO String)
 showMonotonicityBox =
