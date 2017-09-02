@@ -33,6 +33,7 @@ base x =
   case name x of
     Fixed x -> show x
     Unique _ xs _ -> xs
+    Variant x _ _ -> base x
 
 instance Show FixedName where
   show (Basic xs) = unintern xs
