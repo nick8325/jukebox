@@ -317,7 +317,7 @@ prettyNames :: Symbolic a => a -> a
 prettyNames x0 = mapName replace x
   where
     replace name@Fixed{}  = name
-    replace x@Unique{} = Map.findWithDefault (name (base x)) x sub
+    replace x = Map.findWithDefault (name (base x)) x sub
 
     sub = globalsScope `Map.union` pretty globalsUsed x
 
@@ -339,6 +339,11 @@ prettyNames x0 = mapName replace x
     add1 (Fixed xs) (scope, used) =
       (scope, Set.insert (show xs) used)
     add1 x@(Unique _ base f) (scope, used) =
+      addWith base f x (scope, used)
+    add1 x@(Variant y _ f) (scope, used) =
+      addWith (base y) f x (scope, used)
+
+    addWith base f x (scope, used) =
       (Map.insert x (name winner) scope,
        Set.insert winner (Set.fromList taken `Set.union` used))
       where
