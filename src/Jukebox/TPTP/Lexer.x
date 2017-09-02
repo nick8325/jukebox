@@ -38,6 +38,7 @@ $white+ ;
 "thf" { k Thf }
 "tff" { k Tff }
 "fof" { k Fof }
+"tcf" { k Tcf }
 "cnf" { k Cnf }
 "axiom" { k Axiom }
 "hypothesis" { k Hypothesis }
@@ -108,7 +109,7 @@ data Token = Atom { keyword :: !Keyword, tokenName :: !String }
            | Error
 
 data Keyword = Normal
-             | Thf | Tff | Fof | Cnf
+             | Thf | Tff | Fof | Tcf | Cnf
              | Axiom | Hypothesis | Definition | Assumption
              | Lemma | Theorem | Conjecture | NegatedConjecture | Question
              | Plain | FiDomain | FiHypothesis | FiPredicates | Type | Unknown

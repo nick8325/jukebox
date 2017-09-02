@@ -224,7 +224,8 @@ section included = skipMany (input included) >> (fmap Just include <|> (eof >> r
 input :: (Tag -> Bool) -> Parser ()
 input included = declaration Cnf (formulaIn cnf) <|>
                  declaration Fof (formulaIn fof) <|>
-                 declaration Tff (\tag -> formulaIn tff tag <|> typeDeclaration)
+                 declaration Tff (\tag -> formulaIn tff tag <|> typeDeclaration) <|>
+                 declaration Tcf (\tag -> formulaIn tff tag <|> typeDeclaration)
   where {-# INLINE declaration #-}
         declaration k m = do
           keyword k
