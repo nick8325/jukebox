@@ -35,6 +35,12 @@ data Type =
   | Type { tname :: !Name }
   deriving Typeable
 
+indType, intType, ratType, realType :: Type
+indType = Type (name "$i")
+intType = Type (name "$int")
+ratType = Type (name "$rat")
+realType = Type (name "$real")
+
 data FunType = FunType { args :: [Type], res :: Type } deriving (Eq, Ord, Typeable)
 
 -- Helper function for defining (Eq, Ord) instances

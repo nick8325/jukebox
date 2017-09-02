@@ -23,8 +23,8 @@ form parser types funs0 str =
   case run_ (parser <* eof)
             (UserState (MkState Nothing [] (Map.delete "$i" (Map.fromList types)) (Map.fromList funs) Map.empty 0) (scan str)) of
     Ok (UserState (MkState _ _ types' funs' _ _) (At _ (Cons Eof _))) res
-      | Map.insert "$i" individual (Map.fromList types) /=
-        Map.insert "$i" individual types' ->
+      | Map.insert "$i" indType (Map.fromList types) /=
+        Map.insert "$i" indType types' ->
         error $ "ParseSnippet: type implicitly defined: " ++
                 show (map snd (Map.toList types' \\ types))
       | Map.fromList funs /= funs' ->
@@ -45,9 +45,9 @@ form parser types funs0 str =
       case lookup "$i" types of
         Nothing -> id
         Just i ->
-          \ty -> if ty == individual then i else ty
+          \ty -> if ty == indType then i else ty
     introI =
       case lookup "$i" types of
         Nothing -> id
         Just i ->
-          \ty -> if ty == i then individual else ty
+          \ty -> if ty == i then indType else ty

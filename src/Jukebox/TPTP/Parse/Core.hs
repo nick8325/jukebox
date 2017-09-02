@@ -313,7 +313,7 @@ showTypes = intercalate " and " . map prettyShow
 {-# INLINE applyFunction #-}
 applyFunction :: String -> [Term] -> Type -> Parser Term
 applyFunction name args res = do
-  fs <- lookupFunction (FunType (replicate (length args) individual) res) name
+  fs <- lookupFunction (FunType (replicate (length args) indType) res) name
   case [ f | f <- fs, funArgs f == map typ args ] of
     [] -> typeError fs args
     (f:_) -> return (f :@: args)
@@ -355,10 +355,6 @@ lookupFunction def x = do
       putState (MkState mfile p t (Map.insert x [decl] f) v n)
       return [decl]
     Just fs -> return fs
-
--- The type $i (anything whose type is not specified gets this type)
-individual :: Type
-individual = Type (name "$i")
 
 -- Parsing formulae.
 
@@ -427,7 +423,7 @@ instance TermLike Form where
 
 instance TermLike Term where
   {-# INLINE fromThing #-}
-  fromThing (Apply x xs) = applyFunction x xs individual
+  fromThing (Apply x xs) = applyFunction x xs indType
   fromThing (Term t) = return t
   fromThing (Formula _) = mzero
   parser = term
@@ -439,7 +435,7 @@ instance TermLike Term where
     case Map.lookup x ctx of
       Just v -> return (Var v)
       Nothing -> do
-        let v = Unique (n+1) x defaultRenamer ::: individual
+        let v = Unique (n+1) x defaultRenamer ::: indType
         putState (MkState mfile p t f (Map.insert x v ctx) (n+1))
         return (Var v)
   var _ ctx = do
@@ -493,11 +489,6 @@ term mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
     {-# INLINE constant #-}
     constant x ty =
       fromThing (Term ((Fixed x ::: FunType [] ty) :@: []))
-
-intType, ratType, realType :: Type
-intType = Type (name "$int")
-ratType = Type (name "$rat")
-realType = Type (name "$real")
 
 literal, unitary, quantified, formula ::
   FormulaLike a => Mode -> Map String Variable -> Parser a
@@ -572,7 +563,7 @@ binder mode = do
                Typed -> return ();
                Untyped ->
                  fatalError "Used a typed quantification in an untyped formula" };
-             type_ } <|> return individual
+             type_ } <|> return indType
   MkState mfile p t f v n <- getState
   putState (MkState mfile p t f v (n+1))
   return (Unique n x defaultRenamer ::: ty)
@@ -581,7 +572,7 @@ binder mode = do
 type_ :: Parser Type
 type_ =
   do { x <- atom; lookupType x } <|>
-  do { defined DI; return individual }
+  do { defined DI; return indType }
 
 -- A little data type to help with parsing types.
 data Type_ = TType | Fun [Type] Type | Prod [Type]
