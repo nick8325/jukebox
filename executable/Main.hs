@@ -28,6 +28,7 @@ main = do
     usage msg = printError prog msg
   case args of
     [] -> help
+    ["help"] -> help
     ["--help"] -> help
     ["--version"] ->
       putStrLn $ "Jukebox version " ++ VERSION_jukebox
