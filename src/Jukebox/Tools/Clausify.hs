@@ -151,16 +151,16 @@ forAll xs a
   | otherwise =
     case positive a of
       And as ->
-        fmap And (mapM (forAll xs) as)
+        fmap And (mapM (forAll ys) as)
 
       ForAll (Bind zs a) ->
         -- invariant: no variable bound twice on same path
         forAll (Set.union ys zs) a
 
       Or as ->
-        forAllOr xs [ (a, free a) | a <- as ]
+        forAllOr ys [ (a, free a) | a <- as ]
 
-      _ -> return (ForAll (Bind xs a))
+      _ -> return (ForAll (Bind ys a))
   where
     -- no need to quantify over anything not used
     ys = xs `Set.intersection` free a
@@ -176,7 +176,7 @@ forAllOr xs fs
       (x, xs') = Set.deleteFindMin xs
       (bs1,bs2) = partition ((x `Set.member`) . snd) fs
       -- Also quantify over all variables common to bs1 and bs2
-      common = Set.unions (map snd bs1) `Set.intersection` Set.unions (map snd bs2)
+      common = Set.unions (map snd bs1) `Set.intersection` Set.unions (map snd bs2) `Set.intersection` xs
 
     -- (forall x. bs1) \/ bs2
     f <- forAllOr (xs' Set.\\ common) bs1
