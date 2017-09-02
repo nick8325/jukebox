@@ -175,11 +175,13 @@ forAllOr xs fs
       -- Pick a variable to push inwards first
       (x, splittable') = Set.deleteFindMin splittable
       (bs1,bs2) = partition ((x `Set.member`) . snd) fs
+      -- Also quantify over all variables common to bs1 and bs2
+      common' = Set.unions (map snd bs1) `Set.intersection` Set.unions (map snd bs2)
 
     -- (forall x. bs1) \/ bs2
-    f <- forAllOr splittable' [(f, Set.delete x vs) | (f, vs) <- bs1]
-    g <- forAllOr splittable' bs2
-    return (ForAll (Bind common (ForAll (Bind (Set.singleton x) f) \/ g)))
+    f <- forAllOr (splittable' Set.\\ common' Set.\\ Set.singleton x) bs1
+    g <- forAllOr (splittable' Set.\\ common') bs2
+    return (ForAll (Bind (common `Set.union` common') (ForAll (Bind (Set.singleton x) f) \/ g)))
   where
     splittable = xs Set.\\ foldr1 Set.intersection (map snd fs)
     common = xs Set.\\ splittable
