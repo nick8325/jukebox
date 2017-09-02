@@ -183,6 +183,12 @@ oneConjecture conj cnf =
     choose axioms cs = return (return (axioms ++ cs))
 
 ----------------------------------------------------------------------
+-- Turn a set of clauses back into formulas.
+
+toFormulasBox :: OptionParser (Problem Clause -> IO (Problem Form))
+toFormulasBox = pure $ \prob -> return (map (fmap toForm) prob)
+
+----------------------------------------------------------------------
 -- Solve all conjectures in a problem and report the final SZS status.
 
 -- A solver is given a problem in CNF and should return an answer.
