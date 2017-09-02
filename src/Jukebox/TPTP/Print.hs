@@ -169,7 +169,7 @@ pPrintInput family pp i =
 
 pPrintClause :: String -> String -> String -> [Doc] -> Doc
 pPrintClause family name kind rest =
-  text family <> parens (sep (punctuate comma ([text (escapeAtom name), text kind] ++ rest))) <> text "."
+  text family <> parens (fsep (punctuate comma ([text (escapeAtom name), text kind] ++ rest))) <> text "."
 
 instance Pretty Clause where
   pPrint (Clause (Bind _ ts)) =
@@ -235,7 +235,7 @@ instance Pretty Term where
       _ -> text (escapeAtom (show f))
   pPrint ((f ::: _) :@: ts) =
     text (escapeAtom (show f)) <>
-    parens (sep (punctuate comma (map pPrint ts)))
+    parens (fsep (punctuate comma (map pPrint ts)))
 
 instance Show Term where
   show = prettyShow
@@ -285,15 +285,15 @@ pPrintConnective _bind _p ident _op [] = text ident
 pPrintConnective bind p _ident _op [x] = pPrintForm bind p x
 pPrintConnective bind p _ident op (x:xs) =
   maybeParens (p > 0) $
-    sep (ppr x:[ nest 2 (text op <+> ppr x) | x <- xs ])
+    fsep (ppr x:[ nest 2 (text op <+> ppr x) | x <- xs ])
       where ppr = pPrintForm bind 1
             
 pPrintQuant :: (Variable -> Doc) -> String -> Set.Set Variable -> Form -> Doc
 pPrintQuant bind q vs f
   | Set.null vs = pPrintForm bind 1 f
   | otherwise =
-    sep [
-      text q <> brackets (sep (punctuate comma (map bind (Set.toList vs)))) <> colon,
+    fsep [
+      text q <> brackets (fsep (punctuate comma (map bind (Set.toList vs)))) <> colon,
       nest 2 (pPrintForm bind 1 f)]
 
 instance Show Kind where
