@@ -57,6 +57,7 @@ Library
     Jukebox.Tools.InferTypes
     Jukebox.Tools.AnalyseMonotonicity
     Jukebox.Tools.EncodeTypes
+    Jukebox.Tools.HornToUnit
     Jukebox.TPTP.Parse.Core
     Jukebox.TPTP.FindFile
     Jukebox.TPTP.Lexer

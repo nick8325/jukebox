@@ -67,6 +67,8 @@ instance Eq Name where
 instance Ord Name where
   compare = comparing compareName
 
+-- It's important that FixedNames come first so that they get added
+-- first to the used names list in Jukebox.TPTP.Print.prettyRename.
 compareName :: Name -> Either FixedName (Either Int64 (Name, [Name]))
 compareName (Fixed xs) = Left xs
 compareName (Unique n _ _) = Right (Left n)
@@ -77,7 +79,7 @@ instance Show Name where
   show (Unique n xs f) = ys ++ "@" ++ show n
     where
       Renaming _ ys = f xs 0
-  show (Variant x xs f) =
+  show (Variant x xs _) =
     "variant(" ++ show x ++
       concat [", " ++ show x | x <- xs] ++ ")"
 
@@ -93,6 +95,10 @@ instance Named Name where
 variant :: (Named a, Named b) => a -> [b] -> Name
 variant x xs =
   Variant (name x) (map name xs) defaultRenamer
+
+unvariant :: Name -> Maybe (Name, [Name])
+unvariant (Variant x xs _) = Just (x, xs)
+unvariant _ = Nothing
 
 data a ::: b = a ::: b deriving Show
 

@@ -13,6 +13,7 @@ import Jukebox.Tools.AnalyseMonotonicity hiding (guards)
 import Jukebox.Tools.EncodeTypes
 import Jukebox.Tools.GuessModel
 import Jukebox.Tools.InferTypes
+import Jukebox.Tools.HornToUnit
 import System.Exit
 import System.IO
 import Jukebox.TPTP.FindFile
@@ -65,6 +66,11 @@ comment msg = mapM_ putStrLn ["% " ++ line | line <- lines msg]
 -- Do something only when output is enabled.
 quietly :: GlobalFlags -> IO () -> IO ()
 quietly globals action = unless (quiet globals) action
+
+-- Indent a piece of text.
+indent :: String -> String
+indent msg =
+  unlines ["  " ++ line | line <- lines msg]
 
 ----------------------------------------------------------------------
 -- Combinators for boxes.
@@ -300,3 +306,20 @@ printInferredBox = pure $ \(prob, rep) -> do
   forM_ (types prob) $ \ty ->
     putStrLn $ show ty ++ " => " ++ show (rep ty)
   return prob
+
+----------------------------------------------------------------------
+-- Translate Horn problems to unit equality.
+
+hornToUnitBox :: OptionParser (Problem Clause -> IO (Problem Clause))
+hornToUnitBox = hornToUnitIO <$> hornFlags
+
+hornToUnitIO :: HornFlags -> Problem Clause -> IO (Problem Clause)
+hornToUnitIO flags prob =
+  case hornToUnit flags prob of
+    Left clause -> do
+      mapM_ (hPutStrLn stderr) [
+        "Expected a Horn problem, but the input file contained",
+        "the following non-Horn clause:",
+        indent (show (pPrintClauses [clause])) ]
+      exitWith (ExitFailure 1)
+    Right prob -> return prob

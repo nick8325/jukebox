@@ -47,7 +47,7 @@ data Tool =
     description :: String,
     pipeline :: OptionParser (IO ()) }
 
-tools = [fof, cnf, smt, monotonox, guessmodel]
+tools = [fof, cnf, smt, monotonox, guessmodel, hornToUnit]
 internal = [guessmodel]
 
 fof =
@@ -86,3 +86,12 @@ guessmodel =
       (readProblemBox =>>=
        guessModelBox =>>=
        printProblemBox)
+
+hornToUnit =
+  Tool "horn-to-unit" "Encode a Horn problem as unit equality" $
+    forAllFilesBox <*>
+      (readProblemBox =>>=
+       clausifyBox =>>=
+       oneConjectureBox =>>=
+       hornToUnitBox =>>=
+       printClausesBox)
