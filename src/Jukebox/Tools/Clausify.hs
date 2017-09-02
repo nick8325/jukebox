@@ -146,36 +146,43 @@ miniscope (ForAll (Bind xs f)) = miniscope f >>= forAll xs
 miniscope (Exists (Bind xs f)) = miniscope f >>= forAll xs . nt >>= return . nt
 
 forAll :: Set Variable -> Form -> M Form
-forAll xs a | Set.null xs = return a
-forAll xs a =
-  case positive a of
-    And as ->
-      fmap And (mapM (forAll xs) as)
-    
-    ForAll (Bind ys a)
-      | Set.null m -> return (ForAll (Bind ys a))
-      | otherwise -> fmap (forAll' ys) (forAll m a)
-      where m = xs Set.\\ ys
-            forAll' vs (ForAll (Bind vs' t)) = ForAll (Bind (vs `Set.union` vs') t)
-            forAll' vs t = ForAll (Bind vs t)
+forAll xs a
+  | Set.null ys = return a
+  | otherwise =
+    case positive a of
+      And as ->
+        fmap And (mapM (forAll xs) as)
 
-    Or as -> forAllOr xs [ (a, free a) | a <- as ]
+      ForAll (Bind zs a) ->
+        -- invariant: no variable bound twice on same path
+        forAll (Set.union ys zs) a
 
-    _ -> return (ForAll (Bind xs a))
+      Or as ->
+        forAllOr xs [ (a, free a) | a <- as ]
+
+      _ -> return (ForAll (Bind xs a))
+  where
+    -- no need to quantify over anything not used
+    ys = xs `Set.intersection` free a
 
 forAllOr :: Set Variable -> [(Form, Set Variable)] -> M Form
-forAllOr xs avss = do { y <- yes; forAll xs' (y \/ no) }
+forAllOr _  [] = return false
+forAllOr xs [(f, _)] = forAll xs f
+forAllOr xs fs
+  | Set.null splittable = return (ForAll (Bind xs (foldr (\/) false (map fst fs))))
+  | otherwise = do
+    let
+      -- Pick a variable to push inwards first
+      (x, splittable') = Set.deleteFindMin splittable
+      (bs1,bs2) = partition ((x `Set.member`) . snd) fs
+
+    -- (forall x. bs1) \/ bs2
+    f <- forAllOr splittable' [(f, Set.delete x vs) | (f, vs) <- bs1]
+    g <- forAllOr splittable' bs2
+    return (ForAll (Bind common (ForAll (Bind (Set.singleton x) f) \/ g)))
   where
-    v         = head (Set.toList xs)
-    xs'       = Set.delete v xs
-    (bs1,bs2) = partition ((v `Set.member`) . snd) avss
-    no        = orl [ b | (b,_) <- bs2 ]
-    body      = orl [ b | (b,_) <- bs1 ]
-    yes       = case bs1 of
-                  []      -> return (orl [])
-                  [(b,_)] -> forAll (Set.singleton v) b
-                  _       -> return (ForAll (Bind (Set.singleton v) body))
-    orl       = foldr (\/) false
+    splittable = xs Set.\\ foldr1 Set.intersection (map snd fs)
+    common = xs Set.\\ splittable
 
 ----------------------------------------------------------------------
 -- removing equivalences
