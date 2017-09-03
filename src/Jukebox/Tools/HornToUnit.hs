@@ -33,7 +33,9 @@ import Control.Monad
 
 data HornFlags =
   HornFlags {
-    allowNonUnitConjectures :: Bool }
+    allowNonUnitConjectures :: Bool,
+    allowNonGroundConjectures :: Bool,
+    asymmetricEncoding :: Bool }
   deriving Show
 
 hornFlags :: OptionParser HornFlags
@@ -41,13 +43,19 @@ hornFlags =
   inGroup "Horn clause encoding options" $
   HornFlags <$>
     bool "non-unit-conjectures"
-      ["Allow conjectures to be non-unit clauses (on by default)."]
-      True
+      ["Allow conjectures to be non-unit clauses (off by default)."]
+      False <*>
+    bool "non-ground-conjectures"
+      ["Allow conjectures to be non-ground clauses (off by default)."]
+      False <*>
+    bool "asymmetric-encoding"
+      ["Use an alternative, asymmetric encoding (off by default)."]
+      False
 
 hornToUnit :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
 hornToUnit flags prob =
   eliminateHornClauses $
-  eliminateNonUnitConjectures flags $
+  eliminateUnsuitableConjectures flags $
   eliminatePredicates prob
 
 eliminatePredicates :: Problem Clause -> Problem Clause
@@ -64,19 +72,20 @@ eliminatePredicates prob =
       true <- newFunction "true" [] bool
       return (bool, true :@: [])
 
-eliminateNonUnitConjectures :: HornFlags -> Problem Clause -> Problem Clause
-eliminateNonUnitConjectures flags prob
-  | allowNonUnitConjectures flags = prob
-  | null nucs = prob
+eliminateUnsuitableConjectures :: HornFlags -> Problem Clause -> Problem Clause
+eliminateUnsuitableConjectures flags prob
+  | null bad = prob
   | otherwise =
-    normals ++ map (fmap addConjecture) nucs ++
+    good ++ map (fmap addConjecture) bad ++
     [Input { tag = "goal", kind = Ax NegatedConjecture, source = Unknown,
              what = clause [Neg (a :=: b)] }]
   where
-    (nucs, normals) = partition nonUnitConjecture prob
+    (bad, good) = partition unsuitable prob
 
-    nonUnitConjecture c =
-      all (not . pos) ls && length ls /= 1
+    unsuitable c =
+      all (not . pos) ls &&
+      ((not (allowNonUnitConjectures flags) && length ls /= 1) ||
+       (not (allowNonGroundConjectures flags) && not (ground ls)))
       where
         ls = toLiterals (what c)
 
@@ -102,34 +111,38 @@ eliminateHornClauses prob = do
 
     encode [] (Pos l) = l
     encode (Neg (t :=: u):ls) l =
-      ifeq ty1 ty2 :@: [t, u, v] :=:
-      ifeq ty1 ty2 :@: [t, u, w]
+      if size v < size w then
+        ifeq ty1 ty2 :@: [t, u, w, v] :=: v
+      else
+        ifeq ty1 ty2 :@: [t, u, v, w] :=: w
       where
         v :=: w = encode ls l
         ty1 = typ t
         ty2 = typ v
     
-    axiom (ifeq@(_ ::: FunType [ty1, _, ty2] _)) =
+    axiom (ifeq@(_ ::: FunType [ty1, _, ty2, _] _)) =
       Input {
         tag = "ifeq_axiom",
         kind = Ax Axiom,
         source = Unknown,
-        what = clause [Pos (ifeq :@: [x, x, y] :=: y)] }
+        what = clause [Pos (ifeq :@: [x, x, y, z] :=: y)] }
       where
         x = Var (xvar ::: ty1)
         y = Var (yvar ::: ty2)
+        z = Var (zvar ::: ty2)
     
     ifeq ty1 ty2 =
       variant ifeqName [name ty1, name ty2] :::
-        FunType [ty1, ty1, ty2] ty2
+        FunType [ty1, ty1, ty2, ty2] ty2
 
     isIfeq f =
       isJust $ do
         (x, _) <- unvariant (name f)
         guard (x == ifeqName)
 
-    (ifeqName, xvar, yvar) = run prob $ \_ -> do
+    (ifeqName, xvar, yvar, zvar) = run prob $ \_ -> do
       ifeqName <- newName "$ifeq"
       xvar <- newName "X"
       yvar <- newName "Y"
-      return (ifeqName, xvar, yvar)
+      zvar <- newName "Z"
+      return (ifeqName, xvar, yvar, zvar)
