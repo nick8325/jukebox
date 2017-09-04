@@ -54,7 +54,7 @@ hornFlags =
 
 hornToUnit :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
 hornToUnit flags prob =
-  eliminateHornClauses $
+  eliminateHornClauses flags $
   eliminateUnsuitableConjectures flags $
   eliminatePredicates prob
 
@@ -97,8 +97,8 @@ eliminateUnsuitableConjectures flags prob
       b <- newFunction "b" [] token
       return (a :@: [], b :@: [])
 
-eliminateHornClauses :: Problem Clause -> Either (Input Clause) (Problem Clause)
-eliminateHornClauses prob = do
+eliminateHornClauses :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
+eliminateHornClauses flags prob = do
   prob <- mapM elim1 prob
   return (prob ++ map axiom (usort (filter isIfeq (functions prob))))
   where
@@ -111,7 +111,9 @@ eliminateHornClauses prob = do
 
     encode [] (Pos l) = l
     encode (Neg (t :=: u):ls) l =
-      if size v < size w then
+      if not (asymmetricEncoding flags) then
+        ifeq ty1 ty2 :@: [t, u, v] :=: ifeq ty1 ty2 :@: [t, u, w]
+      else if size v < size w then
         ifeq ty1 ty2 :@: [t, u, w, v] :=: v
       else
         ifeq ty1 ty2 :@: [t, u, v, w] :=: w
@@ -120,12 +122,16 @@ eliminateHornClauses prob = do
         ty1 = typ t
         ty2 = typ v
     
-    axiom (ifeq@(_ ::: FunType [ty1, _, ty2, _] _)) =
+    axiom (ifeq@(_ ::: FunType (ty1:_:ty2:_) _)) =
       Input {
         tag = "ifeq_axiom",
         kind = Ax Axiom,
         source = Unknown,
-        what = clause [Pos (ifeq :@: [x, x, y, z] :=: y)] }
+        what =
+          if asymmetricEncoding flags then
+            clause [Pos (ifeq :@: [x, x, y, z] :=: y)]
+          else
+            clause [Pos (ifeq :@: [x, x, y] :=: y)]}
       where
         x = Var (xvar ::: ty1)
         y = Var (yvar ::: ty2)
@@ -133,7 +139,10 @@ eliminateHornClauses prob = do
     
     ifeq ty1 ty2 =
       variant ifeqName [name ty1, name ty2] :::
-        FunType [ty1, ty1, ty2, ty2] ty2
+        if asymmetricEncoding flags then
+          FunType [ty1, ty1, ty2, ty2] ty2
+        else
+          FunType [ty1, ty1, ty2] ty2
 
     isIfeq f =
       isJust $ do
