@@ -100,11 +100,9 @@ argNums = arg "<nums>" "expected a number list" $ \x ->
     nums (n:"..":m:",":ns) = ([read n .. read m] ++) `fmap` nums ns
     nums _                 = Nothing
 
-argOption :: [String] -> ArgParser String
-argOption as = arg ("<" ++ concat (intersperse " | " as) ++ ">") "expected an argument" elts
-  where
-    elts x | x `elem` as = Just x
-           | otherwise   = Nothing
+argOption :: [(String, a)] -> ArgParser a
+argOption as =
+  arg ("<" ++ concat (intersperse " | " (map fst as)) ++ ">") "expected an argument" (`lookup` as)
 
 argList :: [String] -> ArgParser [String]
 argList as = arg ("<" ++ concat (intersperse " | " as) ++ ">*") "expected an argument" $ \x ->

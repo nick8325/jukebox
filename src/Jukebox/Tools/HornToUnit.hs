@@ -28,14 +28,21 @@ import Jukebox.Name
 import Jukebox.Options
 import Jukebox.Utils
 import Data.List
-import Data.Maybe
 import Control.Monad
+import qualified Data.Set as Set
+import Control.Monad.Trans.RWS
+import Control.Monad.Trans.List
+import Control.Monad.Trans.Class
 
 data HornFlags =
   HornFlags {
     allowNonUnitConjectures :: Bool,
     allowNonGroundConjectures :: Bool,
-    asymmetricEncoding :: Bool }
+    allowCompoundConjectures :: Bool,
+    encoding :: Encoding }
+  deriving Show
+
+data Encoding = Symmetric | Asymmetric1 | Asymmetric2
   deriving Show
 
 hornFlags :: OptionParser HornFlags
@@ -48,9 +55,19 @@ hornFlags =
     bool "non-ground-conjectures"
       ["Allow conjectures to be non-ground clauses (off by default)."]
       False <*>
-    bool "asymmetric-encoding"
-      ["Use an alternative, asymmetric encoding (off by default)."]
-      False
+    bool "compound-conjectures"
+      ["Allow conjectures to be compound terms (on by default)."]
+      True <*>
+    encoding
+  where
+    encoding =
+      flag "conditional-encoding"
+        ["Which method to use to encode conditionals (asymmetric2 by default)."]
+        Asymmetric2
+        (argOption
+          [("symmetric", Symmetric),
+           ("asymmetric1", Asymmetric1),
+           ("asymmetric2", Asymmetric2)])
 
 hornToUnit :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
 hornToUnit flags prob =
@@ -84,7 +101,8 @@ eliminateUnsuitableConjectures flags prob
 
     unsuitable c =
       all (not . pos) ls &&
-      ((not (allowNonUnitConjectures flags) && length ls /= 1) ||
+      ((not (allowCompoundConjectures flags) && or [size t > 1 | t <- terms ls]) ||
+       (not (allowNonUnitConjectures flags) && length ls /= 1) ||
        (not (allowNonGroundConjectures flags) && not (ground ls)))
       where
         ls = toLiterals (what c)
@@ -99,59 +117,65 @@ eliminateUnsuitableConjectures flags prob
 
 eliminateHornClauses :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
 eliminateHornClauses flags prob = do
-  prob <- mapM elim1 prob
-  return (prob ++ map axiom (usort (filter isIfeq (functions prob))))
+  (prob, funs) <- evalRWST (mapM elim1 prob) () 0
+  return (map toInput (usort funs) ++ concat prob)
   where
+    fresh base = lift $ do
+      n <- get
+      put $! n+1
+      return (variant base [name (show n)])
+
+    elim1 :: Input Clause -> RWST () [Atomic] Int (Either (Input Clause)) [Input Clause]
     elim1 c =
       case partition pos (toLiterals (what c)) of
-        ([], _) -> Right c
-        ([l], ls) ->
-          Right c { what = clause [Pos (encode ls l)] }
-        _ -> Left c
+        ([], _) -> return [c]
+        ([Pos l], ls) -> runListT $ do
+          l <- foldM encode l ls
+          return c { what = clause [Pos l] }
+        _ -> lift $ Left c
 
-    encode [] (Pos l) = l
-    encode (Neg (t :=: u):ls) l =
-      if not (asymmetricEncoding flags) then
-        ifeq ty1 ty2 :@: [t, u, v] :=: ifeq ty1 ty2 :@: [t, u, w]
-      else if size v < size w then
-        ifeq ty1 ty2 :@: [t, u, w, v] :=: v
-      else
-        ifeq ty1 ty2 :@: [t, u, v, w] :=: w
-      where
-        v :=: w = encode ls l
-        ty1 = typ t
-        ty2 = typ v
-    
-    axiom (ifeq@(_ ::: FunType (ty1:_:ty2:_) _)) =
+    encode :: Atomic -> Literal -> ListT (RWST () [Atomic] Int (Either (Input Clause))) Atomic
+    encode (c :=: d) (Neg (a :=: b)) =
+      let
+        ty1 = typ a
+        ty2 = typ c
+        x = Var (xvar ::: ty1)
+        y = Var (yvar ::: ty2)
+        z = Var (zvar ::: ty2)
+      in case encoding flags of
+        Symmetric -> do
+          let ifeq = variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2] ty2
+          axiom (ifeq :@: [x, x, y] :=: y)
+          return (ifeq :@: [a, b, c] :=: ifeq :@: [a, b, d])
+        Asymmetric1 -> do
+          let
+            ifeq = variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2
+          (c :=: d) <- return (swap size (c :=: d))
+          axiom (ifeq :@: [x, x, y, z] :=: y)
+          return (ifeq :@: [a, b, c, d] :=: d)
+        Asymmetric2 -> do
+          ifeqName <- fresh ifeqName
+          let
+            vs = Set.toList (Set.unions (map free [a, b, c, d]))
+            ifeq = ifeqName ::: FunType (ty1:map typ vs) ty2
+            app t = ifeq :@: (t:map Var vs)
+          msum $ map return [app a :=: c, app b :=: d]
+
+    swap f (t :=: u) =
+      if f t >= f u then (t :=: u) else (u :=: t)
+
+    axiom l = lift $ tell [l]
+
+    toInput l =
       Input {
         tag = "ifeq_axiom",
         kind = Ax Axiom,
         source = Unknown,
-        what =
-          if asymmetricEncoding flags then
-            clause [Pos (ifeq :@: [x, x, y, z] :=: y)]
-          else
-            clause [Pos (ifeq :@: [x, x, y] :=: y)]}
-      where
-        x = Var (xvar ::: ty1)
-        y = Var (yvar ::: ty2)
-        z = Var (zvar ::: ty2)
-    
-    ifeq ty1 ty2 =
-      variant ifeqName [name ty1, name ty2] :::
-        if asymmetricEncoding flags then
-          FunType [ty1, ty1, ty2, ty2] ty2
-        else
-          FunType [ty1, ty1, ty2] ty2
-
-    isIfeq f =
-      isJust $ do
-        (x, _) <- unvariant (name f)
-        guard (x == ifeqName)
+        what = clause [Pos l] }
 
     (ifeqName, xvar, yvar, zvar) = run prob $ \_ -> do
       ifeqName <- newName "$ifeq"
-      xvar <- newName "X"
-      yvar <- newName "Y"
-      zvar <- newName "Z"
+      xvar <- newName "A"
+      yvar <- newName "B"
+      zvar <- newName "C"
       return (ifeqName, xvar, yvar, zvar)

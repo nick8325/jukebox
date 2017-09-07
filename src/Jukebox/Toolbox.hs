@@ -251,14 +251,13 @@ toFof clausify scheme f = do
 schemeBox :: OptionParser Scheme
 schemeBox =
   inGroup "Options for encoding types" $
-  choose <$>
   flag "encoding"
     ["Which type encoding to use (guards by default)."]
-    "guards"
-    (argOption ["guards", "tags"])
+    (const guards)
+    (argOption
+      [("guards", const guards),
+       ("tags", tags)])
   <*> tagsFlags
-  where choose "guards" _flags = guards
-        choose "tags" flags = tags flags
 
 ----------------------------------------------------------------------
 -- Analyse monotonicity.
@@ -290,13 +289,10 @@ guessModelBox =
   inGroup "Options for the model guesser:" $
   (\expansive univ prob -> return (guessModel expansive univ prob))
     <$> expansive <*> universe
-  where universe = choose <$>
-                   flag "universe"
+  where universe = flag "universe"
                    ["Which universe to find the model in (peano by default)."]
-                   "peano"
-                   (argOption ["peano", "trees"])
-        choose "peano" = Peano
-        choose "trees" = Trees
+                   Peano
+                   (argOption [("peano", Peano), ("trees", Trees)])
         expansive = manyFlags "expansive"
                     ["Allow a function to construct 'new' terms in its base case."]
                     (arg "<function>" "expected a function name" Just)
