@@ -47,8 +47,9 @@ data Tool =
     description :: String,
     pipeline :: OptionParser (IO ()) }
 
-tools = [fof, cnf, smt, monotonox, guessmodel, hornToUnit]
-internal = [guessmodel]
+tools = external ++ internal
+external = [fof, cnf, smt, monotonox, hornToUnit]
+internal = [guessmodel, parse]
 
 fof =
   Tool "fof" "Translate a problem from TFF (typed) to FOF (untyped)" $
@@ -95,3 +96,9 @@ hornToUnit =
        oneConjectureBox =>>=
        hornToUnitBox =>>=
        printClausesBox)
+
+parse =
+  Tool "parse" "Parse the problem and exit (internal use)" $
+    forAllFilesBox <*>
+      (readProblemBox =>>=
+       pure (const (return ())))
