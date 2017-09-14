@@ -4,6 +4,7 @@ module Main where
 import Control.Monad
 import Jukebox.Options
 import Jukebox.Toolbox
+import Jukebox.Form
 #if __GLASGOW_HASKELL__ < 710
 import Control.Applicative
 import Data.Monoid
@@ -95,7 +96,12 @@ hornToUnit =
        clausifyBox =>>=
        oneConjectureBox =>>=
        hornToUnitBox =>>=
-       printClausesBox)
+       (printAnswerOr <$> printClausesBox))
+  where
+    printAnswerOr _ (Left answer) = do
+      mapM_ putStrLn (answerSZS answer)
+    printAnswerOr printClauses (Right clauses) =
+      printClauses clauses
 
 parse =
   Tool "parse" "Parse the problem and exit (internal use)" $

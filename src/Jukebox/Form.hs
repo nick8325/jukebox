@@ -270,13 +270,13 @@ data CNF =
   CNF {
     axioms :: [Input Clause],
     conjectures :: [[Input Clause]],
-    satisfiable :: Answer,
-    unsatisfiable :: Answer }
+    satisfiable :: Maybe Model -> Answer,
+    unsatisfiable :: Maybe CNFRefutation -> Answer }
 
 toCNF :: [Input Clause] -> [[Input Clause]] -> CNF
 toCNF axioms [] = CNF axioms [[]] (Sat Satisfiable) (Unsat Unsatisfiable)
 toCNF axioms [conjecture] = CNF axioms [conjecture] (Sat CounterSatisfiable) (Unsat Theorem)
-toCNF axioms conjectures = CNF axioms conjectures (NoAnswer GaveUp) (Unsat Theorem)
+toCNF axioms conjectures = CNF axioms conjectures (\_ -> NoAnswer GaveUp) (Unsat Theorem)
 
 newtype Clause = Clause (Bind [Literal])
 
@@ -311,25 +311,47 @@ data AxKind =
   NegatedConjecture deriving (Eq, Ord)
 data ConjKind = Conjecture | Question deriving (Eq, Ord)
 
-data Answer = Sat SatReason | Unsat UnsatReason | NoAnswer NoAnswerReason
+data Answer = Sat SatReason (Maybe Model) | Unsat UnsatReason (Maybe CNFRefutation) | NoAnswer NoAnswerReason
   deriving (Eq, Ord)
 
 data NoAnswerReason = GaveUp | Timeout deriving (Eq, Ord, Show)
 data SatReason = Satisfiable | CounterSatisfiable deriving (Eq, Ord, Show)
 data UnsatReason = Unsatisfiable | Theorem deriving (Eq, Ord, Show)
+type Model = [String]
+type CNFRefutation = [String]
 
 instance Show Answer where
-  show (Sat reason) = show reason
-  show (Unsat reason) = show reason
+  show (Sat reason _) = show reason
+  show (Unsat reason _) = show reason
   show (NoAnswer x) = show x
 
 explainAnswer :: Answer -> String
-explainAnswer (Sat Satisfiable) = "the axioms are consistent"
-explainAnswer (Sat CounterSatisfiable) = "the conjecture is false"
-explainAnswer (Unsat Unsatisfiable) = "the axioms are contradictory"
-explainAnswer (Unsat Theorem) = "the conjecture is true"
+explainAnswer (Sat Satisfiable _) = "the axioms are consistent"
+explainAnswer (Sat CounterSatisfiable _) = "the conjecture is false"
+explainAnswer (Unsat Unsatisfiable _) = "the axioms are contradictory"
+explainAnswer (Unsat Theorem _) = "the conjecture is true"
 explainAnswer (NoAnswer GaveUp) = "couldn't solve the problem"
 explainAnswer (NoAnswer Timeout) = "ran out of time while solving the problem"
+
+answerSZS :: Answer -> [String]
+answerSZS answer =
+  ["% SZS status " ++ show answer] ++
+  case answerJustification answer of
+    Nothing -> []
+    Just strs -> [""] ++ strs
+
+answerJustification :: Answer -> Maybe [String]
+answerJustification (Sat _ (Just model)) =
+  Just $
+    ["% SZS output start Model"] ++
+    model ++
+    ["% SZS output end Model"]
+answerJustification (Unsat _ (Just refutation)) =
+  Just $
+    ["% SZS output start CNFRefutation"] ++
+    refutation ++
+    ["% SZS output end CNFRefutation"]
+answerJustification _ = Nothing
 
 data Input a = Input
   { tag    :: Tag,
@@ -587,6 +609,12 @@ funOcc f x = getSum (occ x)
 
 isFof :: Symbolic a => a -> Bool
 isFof f = length (types' f) <= 1
+
+eraseTypes :: Symbolic a => a -> a
+eraseTypes x =
+  case types' x of
+    (ty:_) -> mapType (\ty' -> if ty' == O then ty' else ty) x
+    [] -> x
 
 uniqueNames :: Symbolic a => a -> NameM a
 uniqueNames t = evalStateT (aux Map.empty t) (Map.fromList [(x, t) | x ::: t <- Set.toList (free t)])

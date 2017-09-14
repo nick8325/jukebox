@@ -66,10 +66,10 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
         funMap = Map.fromList [(show (name x), x) | x <- functions prob]
         result = lines str
         status = head $
-          [Sat Satisfiable | "# SZS status Satisfiable" <- result] ++
-          [Sat CounterSatisfiable | "# SZS status CounterSatisfiable" <- result] ++
-          [Unsat Unsatisfiable | "# SZS status Unsatisfiable" <- result] ++
-          [Unsat Theorem | "# SZS status Theorem" <- result] ++
+          [Sat Satisfiable Nothing | "# SZS status Satisfiable" <- result] ++
+          [Sat CounterSatisfiable Nothing | "# SZS status CounterSatisfiable" <- result] ++
+          [Unsat Unsatisfiable Nothing | "# SZS status Unsatisfiable" <- result] ++
+          [Unsat Theorem Nothing | "# SZS status Theorem" <- result] ++
           [NoAnswer Timeout | "# SZS status ResourceOut" <- result] ++
           [NoAnswer Timeout | "# SZS status Timeout" <- result] ++
           [NoAnswer Timeout | "# SZS status MemyOut" <- result] ++

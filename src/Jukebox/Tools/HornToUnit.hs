@@ -27,9 +27,11 @@ import Jukebox.Form
 import Jukebox.Name
 import Jukebox.Options
 import Jukebox.Utils
+import qualified Jukebox.Sat as Sat
 import Data.List
 import Control.Monad
 import qualified Data.Set as Set
+import qualified Data.Map.Strict as Map
 import Control.Monad.Trans.RWS
 import Control.Monad.Trans.List
 import Control.Monad.Trans.Class
@@ -69,8 +71,10 @@ hornFlags =
            ("asymmetric1", Asymmetric1),
            ("asymmetric2", Asymmetric2)])
 
-hornToUnit :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
+hornToUnit :: HornFlags -> Problem Clause -> IO (Either (Input Clause) (Either Answer (Problem Clause)))
 hornToUnit flags prob =
+  sequence $
+  fmap (encodeTypesSmartly (isFof prob)) $
   eliminateHornClauses flags $
   eliminateUnsuitableConjectures flags $
   eliminatePredicates prob
@@ -179,3 +183,43 @@ eliminateHornClauses flags prob = do
       yvar <- newName "B"
       zvar <- newName "C"
       return (ifeqName, xvar, yvar, zvar)
+
+-- Soundly encode types, but try to erase them if possible.
+-- Based on the observation that if the input problem is untyped,
+-- erasure is sound unless:
+--   * the problem is satisfiable
+--   * but the only model is of size 1.
+-- We therefore check if there is a model of size 1. This is easy
+-- (the term structure collapses), and if so, we return the SZS
+-- status directly instead.
+encodeTypesSmartly :: Bool -> Problem Clause -> IO (Either Answer (Problem Clause))
+encodeTypesSmartly True prob = do
+  -- Problem was originally FOF
+  sat <- hasSizeOneModel prob
+  if sat then
+    return $ Left $
+      Sat Satisfiable $ Just
+       ["There is a model where all terms are equal, ![X,Y]:X=Y."]
+    else return (Right (eraseTypes prob))
+encodeTypesSmartly False prob =
+  -- Problem was originally TFF
+  return (Right prob)
+
+-- Check if a problem has a model of size 1.
+-- Done by erasing all terms from the problem.
+hasSizeOneModel :: Problem Clause -> IO Bool
+hasSizeOneModel p = do
+  s <- Sat.newSolver
+  let funs = functions p
+  lits <- replicateM (length funs) (Sat.newLit s)
+  let
+    funMap = Map.fromList (zip funs lits)
+    transClause (Clause (Bind _ ls)) =
+      map transLit ls
+    transLit (Pos a) = transAtom a
+    transLit (Neg a) = Sat.neg (transAtom a)
+    transAtom (Tru (p :@: _)) =
+      Map.findWithDefault undefined p funMap
+    transAtom (_ :=: _) = Sat.true
+  mapM_ (Sat.addClause s . transClause) (map what p)
+  Sat.solve s [] <* Sat.deleteSolver s

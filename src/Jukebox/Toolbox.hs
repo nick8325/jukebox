@@ -205,10 +205,11 @@ forAllConjecturesBox = forAllConjectures <$> tstpFlags
 forAllConjectures :: TSTPFlags -> Solver -> CNF -> IO ()
 forAllConjectures (TSTPFlags tstp) solve CNF{..} = do
   todo <- newIORef (return ())
-  loop 1 todo conjectures
-  where loop _ todo [] =
-          result todo unsatisfiable
-        loop i todo (c:cs) = do
+  loop 1 todo conjectures Nothing
+  -- XXX fix this to properly combine refutations from parts
+  where loop _ todo [] mref =
+          result todo (unsatisfiable mref)
+        loop i todo (c:cs) _ = do
           when multi $ do
             join (readIORef todo)
             writeIORef todo (return ())
@@ -217,14 +218,14 @@ forAllConjectures (TSTPFlags tstp) solve CNF{..} = do
             putStrLn $ "Partial result (" ++ part i ++ "): " ++ show answer
             putStrLn ""
           case answer of
-            Sat _ -> result todo satisfiable
-            Unsat _ -> loop (i+1) todo cs
+            Sat _ mmodel -> result todo (satisfiable mmodel)
+            Unsat _ mref -> loop (i+1) todo cs mref
             NoAnswer x -> result todo (NoAnswer x)
         multi = length conjectures > 1
         part i = show i ++ "/" ++ show (length conjectures)
         result todo x = do
           when tstp $ do
-            putStrLn ("% SZS status " ++ show x)
+            mapM_ putStrLn (answerSZS x)
             putStrLn ""
           join (readIORef todo)
           putStrLn ("RESULT: " ++ show x ++ " (" ++ explainAnswer x ++ ").")
@@ -312,12 +313,13 @@ printInferredBox = pure $ \(prob, rep) -> do
 ----------------------------------------------------------------------
 -- Translate Horn problems to unit equality.
 
-hornToUnitBox :: OptionParser (Problem Clause -> IO (Problem Clause))
+hornToUnitBox :: OptionParser (Problem Clause -> IO (Either Answer (Problem Clause)))
 hornToUnitBox = hornToUnitIO <$> hornFlags
 
-hornToUnitIO :: HornFlags -> Problem Clause -> IO (Problem Clause)
-hornToUnitIO flags prob =
-  case hornToUnit flags prob of
+hornToUnitIO :: HornFlags -> Problem Clause -> IO (Either Answer (Problem Clause))
+hornToUnitIO flags prob = do
+  res <- hornToUnit flags prob
+  case res of
     Left clause -> do
       mapM_ (hPutStrLn stderr) [
         "Expected a Horn problem, but the input file contained",
