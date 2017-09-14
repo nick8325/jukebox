@@ -93,6 +93,17 @@ instance Named [Char] where
 instance Named Name where
   name = id
 
+-- Get all names, including those only used as part of a variant.
+allNames :: Named a => a -> [Name]
+allNames x = gather [name x] []
+  where
+    gather [] xs = xs
+    gather (x:xs) ys =
+      sub x (x:gather xs ys)
+    sub (Variant x xs _) ys =
+      gather (x:xs) ys
+    sub _ ys = ys
+
 variant :: (Named a, Named b) => a -> [b] -> Name
 variant x xs =
   Variant (name x) (map name xs) defaultRenamer

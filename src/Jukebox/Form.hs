@@ -537,7 +537,7 @@ termsAndBinders term bind = DList.toList . aux where
 
 names :: Symbolic a => a -> [Name]
 names = usort . termsAndBinders term bind where
-  term t = return (name t) `mappend` return (name (typ t))
+  term t = DList.fromList (allNames t) `mappend` DList.fromList (allNames (typ t))
 
   bind :: Symbolic a => Bind a -> [Name]
   bind (Bind vs _) = map name (Set.toList vs)
