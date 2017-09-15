@@ -612,9 +612,7 @@ isFof f = length (types' f) <= 1
 
 eraseTypes :: Symbolic a => a -> a
 eraseTypes x =
-  case types' x of
-    (ty:_) -> mapType (\ty' -> if ty' == O then ty' else ty) x
-    [] -> x
+  mapType (\ty -> if ty == O then ty else indType) x
 
 uniqueNames :: Symbolic a => a -> NameM a
 uniqueNames t = evalStateT (aux Map.empty t) (Map.fromList [(x, t) | x ::: t <- Set.toList (free t)])
