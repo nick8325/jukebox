@@ -17,11 +17,15 @@ Description:
   encoding types) and clausify problems (both typed and untyped).
 License: BSD3
 License-file: LICENSE
-extra-source-files: src/errors.h
+extra-source-files: src/errors.h gcc-static-libstdc++
 
 flag minisat
   Description: Use minisat. Required for monotonicity inference.
   Default: True
+
+flag static-cxx
+  description: Build a binary which statically links against libstdc++.
+  default: False
 
 source-repository head
   type:     git
@@ -72,3 +76,6 @@ Executable jukebox
   Main-is: executable/Main.hs
   Build-depends: base >= 4 && < 5, jukebox
   ghc-options: -W -fno-warn-incomplete-patterns
+
+  if flag(static-cxx)
+    ghc-options: -pgml ./gcc-static-libstdc++
