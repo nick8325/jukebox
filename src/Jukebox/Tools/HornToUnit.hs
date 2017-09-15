@@ -72,12 +72,17 @@ hornFlags =
            ("asymmetric2", Asymmetric2)])
 
 hornToUnit :: HornFlags -> Problem Clause -> IO (Either (Input Clause) (Either Answer (Problem Clause)))
-hornToUnit flags prob =
-  sequence $
-  fmap (encodeTypesSmartly (isFof prob)) $
-  eliminateHornClauses flags $
-  eliminateUnsuitableConjectures flags $
-  eliminatePredicates prob
+hornToUnit flags prob = do
+  res <- encodeTypesSmartly prob
+  return $
+    case res of
+      Left ans ->
+        Right (Left ans)
+      Right enc ->
+        fmap (Right . enc) $
+        eliminateHornClauses flags $
+        eliminateUnsuitableConjectures flags $
+        eliminatePredicates prob
 
 eliminatePredicates :: Problem Clause -> Problem Clause
 eliminatePredicates prob =
@@ -192,18 +197,17 @@ eliminateHornClauses flags prob = do
 -- We therefore check if there is a model of size 1. This is easy
 -- (the term structure collapses), and if so, we return the SZS
 -- status directly instead.
-encodeTypesSmartly :: Bool -> Problem Clause -> IO (Either Answer (Problem Clause))
-encodeTypesSmartly True prob = do
-  -- Problem was originally FOF
-  sat <- hasSizeOneModel prob
-  if sat then
-    return $ Left $
-      Sat Satisfiable $ Just
-       ["There is a model where all terms are equal, ![X,Y]:X=Y."]
-    else return (Right (eraseTypes prob))
-encodeTypesSmartly False prob =
-  -- Problem was originally TFF
-  return (Right prob)
+encodeTypesSmartly :: Problem Clause -> IO (Either Answer (Problem Clause -> Problem Clause))
+encodeTypesSmartly prob
+  | isFof prob = do
+    sat <- hasSizeOneModel prob
+    if sat then
+      return $ Left $
+        Sat Satisfiable $ Just
+         ["There is a model where all terms are equal, ![X,Y]:X=Y."]
+      else return (Right eraseTypes)
+  | otherwise =
+    return (Right id)
 
 -- Check if a problem has a model of size 1.
 -- Done by erasing all terms from the problem.
