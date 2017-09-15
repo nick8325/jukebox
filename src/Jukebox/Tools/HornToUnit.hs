@@ -55,8 +55,8 @@ hornFlags =
       ["Allow conjectures to be non-unit clauses (off by default)."]
       False <*>
     bool "non-ground-conjectures"
-      ["Allow conjectures to be non-ground clauses (off by default)."]
-      False <*>
+      ["Allow conjectures to be non-ground clauses (on by default)."]
+      True <*>
     bool "compound-conjectures"
       ["Allow conjectures to be compound terms (on by default)."]
       True <*>
