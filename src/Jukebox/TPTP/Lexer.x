@@ -119,7 +119,7 @@ instance Show Keyword where
   show x =
     case x of {
       Normal -> "normal";
-      Thf -> "thf"; Tff -> "tff"; Fof -> "fof"; Cnf -> "cnf";
+      Thf -> "thf"; Tff -> "tff"; Fof -> "fof"; Tcf -> "tcf"; Cnf -> "cnf";
       Axiom -> "axiom"; Hypothesis -> "hypothesis"; Definition -> "definition";
       Assumption -> "assumption"; Lemma -> "lemma"; Theorem -> "theorem";
       Conjecture -> "conjecture"; NegatedConjecture -> "negated_conjecture";
