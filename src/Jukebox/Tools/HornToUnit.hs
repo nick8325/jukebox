@@ -45,7 +45,7 @@ data HornFlags =
   deriving Show
 
 data Encoding = Symmetric | Asymmetric1 | Asymmetric2
-  deriving Show
+  deriving (Eq, Show)
 
 hornFlags :: OptionParser HornFlags
 hornFlags =
