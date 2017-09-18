@@ -1,30 +1,14 @@
 * Change formula representation:
-  - Bool/Int/Real/Nat as constructors for Type
-  - Builtins as constructors for Function
-  - Get rid of ::: - use Typed and Named instance for e.g. Function instead
-  Possible problem: what happens to functions like $plus when we translate
-  to FOF? Can we always do type substitution e.g. turning $rat to $i?
-  Could possible keep ::: instead.
-  - See if some of the Name constructors (e.g. Integer) can be got rid of.
-* Fix memory consumption with CSR etc
-* Guess-model: skolemise problem first
-* Type inference
-* Support for non-formula inputs, e.g. domain size restrictions
-  (produced by type inference) or interpreted domains?
-* Add $distinct, $answer.
-* Make GuessModel work with conjecture and existentials.
-* Make E interface preserve names and print out satisfiability status.
-* Add Equinox interface (including model finding)
-* Put GuessModel refinement loop in Haskell code
+    - Bool/Int/Real/Nat as constructors for Type
+    - Builtins as constructors for Function
+    - Get rid of ::: - use Typed and Named instance for e.g. Function instead
 
-* Allow some terms to have fixed types?? (like distinct objects etc.)
+    Possible problem: what happens to functions like $plus when we translate
+    to FOF? Can we always do type substitution e.g. turning $rat to $i?
+    Maybe all builtins have to be allowed at all types.
+
+* Add $distinct, $answer.
+* Allow some terms to have fixed types (like distinct objects etc.)
   These should be preserved by type inference.
 
-* Similarly, we have certain clauses that shouldn't be printed out.
-  e.g. $distinct for distinct objects,
-  declaring the type $i,
-  declaring functions at type $i.
-  Is there a uniform way to deal with this?
-
-* Make = a predicate? Would need to have some way of
-  pattern-matching on it.
+* Put together CNFRefutations properly when proving multiple conjectures.
