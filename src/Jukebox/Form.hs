@@ -607,6 +607,15 @@ funOcc f x = getSum (occ x)
         f == g = Sum 1
       | otherwise = mempty
 
+funsOcc :: Symbolic a => a -> Map Function Int
+funsOcc =
+  Map.fromList . map f . group . sort . termsAndBinders term mempty
+  where
+    term (f :@: _) = return f
+    term _ = mempty
+
+    f xs@(x:_) = (x, length xs)
+
 isFof :: Symbolic a => a -> Bool
 isFof f = length (types' f) <= 1
 
