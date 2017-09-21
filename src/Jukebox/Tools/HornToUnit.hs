@@ -41,6 +41,7 @@ data HornFlags =
     allowNonUnitConjectures :: Bool,
     allowNonGroundConjectures :: Bool,
     allowCompoundConjectures :: Bool,
+    dropNonHorn :: Bool,
     encoding :: Encoding }
   deriving Show
 
@@ -60,6 +61,9 @@ hornFlags =
     bool "compound-conjectures"
       ["Allow conjectures to be compound terms (on by default)."]
       True <*>
+    bool "drop-non-horn"
+      ["Silently drop non-Horn clauses from input problem (off by default)."]
+      False <*>
     encoding
   where
     encoding =
@@ -141,7 +145,11 @@ eliminateHornClauses flags prob = do
         ([Pos l], ls) -> runListT $ do
           l <- foldM encode l ls
           return c { what = clause [Pos l] }
-        _ -> lift $ Left c
+        _ ->
+          if dropNonHorn flags then
+            return []
+          else
+            lift $ Left c
 
     encode :: Atomic -> Literal -> ListT (RWST () [Atomic] Int (Either (Input Clause))) Atomic
     encode (c :=: d) (Neg (a :=: b)) =
