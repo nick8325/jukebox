@@ -68,8 +68,8 @@ hornFlags =
   where
     encoding =
       flag "conditional-encoding"
-        ["Which method to use to encode conditionals (asymmetric2 by default)."]
-        Asymmetric2
+        ["Which method to use to encode conditionals (asymmetric1 by default)."]
+        Asymmetric1
         (argOption
           [("symmetric", Symmetric),
            ("asymmetric1", Asymmetric1),
