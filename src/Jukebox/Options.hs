@@ -102,11 +102,11 @@ argNums = arg "<nums>" "expected a number list" $ \x ->
 
 argOption :: [(String, a)] -> ArgParser a
 argOption as =
-  arg ("<" ++ concat (intersperse " | " (map fst as)) ++ ">") "expected an argument" (`lookup` as)
+  argOptionWith "one" "or" "" (map fst as) (`lookup` as)
 
 argList :: [String] -> ArgParser [String]
-argList as = arg ("<" ++ concat (intersperse " | " as) ++ ">*") "expected an argument" $ \x ->
-  elts $ x ++ ","
+argList as =
+  argOptionWith "several" "and" "*" as $ \x -> elts (x ++ ",")
   where
     elts []              = Just []
     elts s | w `elem` as = (w:) `fmap` elts r
@@ -115,6 +115,17 @@ argList as = arg ("<" ++ concat (intersperse " | " as) ++ ">*") "expected an arg
         r = tail (dropWhile (/= ',') s)
     
     elts _ = Nothing
+
+argOptionWith :: String -> String -> String -> [String] -> (String -> Maybe a) -> ArgParser a
+argOptionWith one or suff opts p =
+  arg ("<" ++ intercalate " | " opts ++ ">" ++ suff)
+    ("expected " ++ one ++ " of " ++ list) p
+  where
+    list =
+      case opts of
+        [] -> "<empty list>" -- ??
+        _ ->
+          intercalate ", " (init opts) ++ " " ++ or ++ " " ++ last opts
 
 -- A parser that always fails but produces an error message (useful for --help etc.)
 argUsage :: ExitCode -> [String] -> ArgParser a
