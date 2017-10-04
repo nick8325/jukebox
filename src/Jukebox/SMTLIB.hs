@@ -86,7 +86,7 @@ keywords =
     , "select"
     , "subset", "union", "intersect"
     -- CVC4:
-    , "concat", "member"
+    , "concat", "member", "singleton"
     ] ++ map snd renamings
 
 renamings :: [(String, String)]
@@ -192,7 +192,9 @@ pPrintForm :: Form -> Doc
 pPrintForm (Literal (Pos l)) = pPrintAtomic l
 pPrintForm (Literal (Neg l)) = sexp ["not", pPrintAtomic l]
 pPrintForm (Not f) = sexp ["not", pPrintForm f]
+pPrintForm (And []) = text "true"
 pPrintForm (And ts) = sexp ("and":map pPrintForm ts)
+pPrintForm (Or []) = text "false"
 pPrintForm (Or ts) = sexp ("or":map pPrintForm ts)
 pPrintForm (Equiv t u) = sexp ["=", pPrintForm t, pPrintForm u]
 pPrintForm (Connective Implies t u) = sexp ["=>", pPrintForm t, pPrintForm u]
