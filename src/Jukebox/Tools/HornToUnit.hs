@@ -42,6 +42,8 @@ data HornFlags =
     allowNonGroundConjectures :: Bool,
     allowCompoundConjectures :: Bool,
     dropNonHorn :: Bool,
+    passivise :: Bool,
+    multi :: Bool,
     encoding :: Encoding }
   deriving Show
 
@@ -63,6 +65,12 @@ hornFlags =
       True <*>
     bool "drop-non-horn"
       ["Silently drop non-Horn clauses from input problem (off by default)."]
+      False <*>
+    bool "passivise"
+      ["Encode problem so as to get fewer critical pairs (off by default)."]
+      False <*>
+    bool "multi"
+      ["Encode multiple left-hand sides at once (off by default)."]
       False <*>
     encoding
   where
@@ -86,7 +94,37 @@ hornToUnit flags prob = do
         fmap (Right . enc) $
         eliminateHornClauses flags $
         eliminateUnsuitableConjectures flags $
-        eliminatePredicates prob
+        eliminatePredicates $
+        if passivise flags then passiviseClauses prob else prob
+
+passiviseClauses :: Problem Clause -> Problem Clause
+passiviseClauses prob =
+  [ c { what = clause ls' }
+  | (n, c@Input{what = Clause (Bind _ ls)}) <- zip [0..] prob,
+    ls' <- cls n ls ]
+  where
+    cls n ls =
+      case partition pos ls of
+        (ps, ns) | length ns >= 2 ->
+          let
+            ns' = zipWith (toPred ls n) [0..] ns
+          in
+            [(map Neg ns' ++ ps)] ++
+            [[n, Pos n'] | (n, n') <- zip ns ns']
+        _ ->
+          [ls]
+
+    toPred :: [Literal] -> Int -> Int -> Literal -> Atomic
+    toPred ls m n l =
+      Tru (p :@: map Var vs)
+      where
+        p =
+          variant "$p" [fresh, name m, name n]
+            ::: FunType (map typ vs) O
+        vs = intersect (vars (delete l ls)) (vars l)
+
+    fresh = run_ prob $
+      newName "fresh"
 
 eliminatePredicates :: Problem Clause -> Problem Clause
 eliminatePredicates prob =
@@ -142,6 +180,10 @@ eliminateHornClauses flags prob = do
     elim1 c =
       case partition pos (toLiterals (what c)) of
         ([], _) -> return [c]
+        ([Pos l], ls)
+          | encoding flags == Asymmetric2 && multi flags -> runListT $ do
+            l <- encodeAsymm2 l ls
+            return c { what = clause [Pos l] }
         ([Pos l], ls) -> runListT $ do
           l <- foldM encode l ls
           return c { what = clause [Pos l] }
@@ -150,6 +192,22 @@ eliminateHornClauses flags prob = do
             return []
           else
             lift $ Left c
+
+    encodeAsymm2 :: Atomic -> [Literal] -> ListT (RWST () [Atomic] Int (Either (Input Clause))) Atomic
+    encodeAsymm2 l ls = do
+      ifeqName <- fresh ifeqName
+      let
+        vs = Set.toList (Set.unions (map free (l:map the ls)))
+        lhs (t :=: _) = t
+        rhs (_ :=: u) = u
+        ifeq =
+          ifeqName :::
+            FunType (map (typ . lhs . the) ls ++ map typ vs)
+              (typ (lhs l))
+        app ts = ifeq :@: (ts ++ map Var vs)
+      msum $ map return [
+        app (map (lhs . the) ls) :=: lhs l,
+        app (map (rhs . the) ls) :=: rhs l]
 
     encode :: Atomic -> Literal -> ListT (RWST () [Atomic] Int (Either (Input Clause))) Atomic
     encode (c :=: d) (Neg (a :=: b)) =
@@ -190,7 +248,7 @@ eliminateHornClauses flags prob = do
         source = Unknown,
         what = clause [Pos l] }
 
-    (ifeqName, xvar, yvar, zvar) = run prob $ \_ -> do
+    (ifeqName, xvar, yvar, zvar) = run_ prob $ do
       ifeqName <- newName "$ifeq"
       xvar <- newName "A"
       yvar <- newName "B"
