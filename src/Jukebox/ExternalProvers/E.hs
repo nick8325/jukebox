@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs #-}
 module Jukebox.ExternalProvers.E where
 
-import Jukebox.Form hiding (tag, Or)
+import Jukebox.Form hiding (tag, Or, run_)
 import Jukebox.Name
 import Jukebox.Options
 import Control.Applicative hiding (Const)

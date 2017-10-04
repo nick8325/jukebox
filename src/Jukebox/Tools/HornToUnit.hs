@@ -97,7 +97,7 @@ eliminatePredicates prob =
     elim1 (Tru ((p ::: FunType tys _) :@: ts)) =
       ((p ::: FunType tys bool) :@: ts) :=: true
 
-    (bool, true) = run prob $ \_ -> do
+    (bool, true) = run_ prob $ do
       bool <- newType "bool"
       true <- newFunction "true" [] bool
       return (bool, true :@: [])
@@ -122,7 +122,7 @@ eliminateUnsuitableConjectures flags prob
 
     addConjecture c = clause (Pos (a :=: b):toLiterals c)
 
-    (a, b) = run prob $ \_ -> do
+    (a, b) = run_ prob $ do
       token <- newType "token"
       a <- newFunction "a" [] token
       b <- newFunction "b" [] token

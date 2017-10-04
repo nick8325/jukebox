@@ -90,6 +90,12 @@ class Named a where
 instance Named [Char] where
   name = Fixed . Basic . intern
 
+instance Named Integer where
+  name n = name ("n" ++ show n)
+
+instance Named Int where
+  name = name . toInteger
+
 instance Named Name where
   name = id
 

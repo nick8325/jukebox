@@ -7,7 +7,7 @@ import Jukebox.TPTP.Parse.Core as TPTP.Parse.Core
 import Jukebox.TPTP.Parsec as TPTP.Parsec
 import Jukebox.TPTP.Lexer
 import Jukebox.Name
-import Jukebox.Form
+import Jukebox.Form hiding (run_)
 import qualified Data.Map.Strict as Map
 import Data.List
 #if __GLASGOW_HASKELL__ < 710

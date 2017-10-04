@@ -567,6 +567,9 @@ names = usort . termsAndBinders term bind where
 run :: Symbolic a => a -> (a -> NameM b) -> b
 run x f = runNameM (names x) (f x)
 
+run_ :: Symbolic a => a -> NameM b -> b
+run_ x mx = run x (const mx)
+
 types :: Symbolic a => a -> [Type]
 types = usort . termsAndBinders term bind where
   term t = return (typ t)
