@@ -218,16 +218,23 @@ eliminateHornClauses flags prob = do
         y = Var (yvar ::: ty2)
         z = Var (zvar ::: ty2)
       in case encoding flags of
+        -- ifeq(x, x, y) = y
+        -- ifeq(a, b, c) = ifeq(a, b, d)
         Symmetric -> do
           let ifeq = variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2] ty2
           axiom (ifeq :@: [x, x, y] :=: y)
           return (ifeq :@: [a, b, c] :=: ifeq :@: [a, b, d])
+        -- ifeq(x, x, y, z) = y
+        -- ifeq(a, b, c, d) = d
         Asymmetric1 -> do
           let
             ifeq = variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2
           (c :=: d) <- return (swap size (c :=: d))
           axiom (ifeq :@: [x, x, y, z] :=: y)
           return (ifeq :@: [a, b, c, d] :=: d)
+        -- f(a, sigma) = c
+        -- f(b, sigma) = d
+        -- where sigma = FV(a, b, c, d)
         Asymmetric2 -> do
           ifeqName <- fresh ifeqName
           let
