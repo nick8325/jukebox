@@ -86,7 +86,7 @@ keywords =
     , "select"
     , "subset", "union", "intersect"
     -- CVC4:
-    , "concat", "member", "singleton"
+    , "concat", "member", "singleton", "card"
     ] ++ map snd renamings
 
 renamings :: [(String, String)]
