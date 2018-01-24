@@ -106,7 +106,7 @@ passiviseClauses prob =
   where
     cls n ls =
       case partition pos ls of
-        (ps, ns) | length ns >= 2 ->
+        (ps, ns) | length ns >= 1 ->
           let
             ns' = zipWith (toPred ls n) [0..] ns
           in
