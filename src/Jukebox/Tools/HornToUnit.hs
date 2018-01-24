@@ -47,7 +47,7 @@ data HornFlags =
     encoding :: Encoding }
   deriving Show
 
-data Encoding = Symmetric | Asymmetric1 | Asymmetric2
+data Encoding = Symmetric | Asymmetric1 | Asymmetric2 | Asymmetric3
   deriving (Eq, Show)
 
 hornFlags :: OptionParser HornFlags
@@ -81,7 +81,8 @@ hornFlags =
         (argOption
           [("symmetric", Symmetric),
            ("asymmetric1", Asymmetric1),
-           ("asymmetric2", Asymmetric2)])
+           ("asymmetric2", Asymmetric2),
+           ("asymmetric3", Asymmetric3)])
 
 hornToUnit :: HornFlags -> Problem Clause -> IO (Either (Input Clause) (Either Answer (Problem Clause)))
 hornToUnit flags prob = do
@@ -242,6 +243,17 @@ eliminateHornClauses flags prob = do
             ifeq = ifeqName ::: FunType (ty1:map typ vs) ty2
             app t = ifeq :@: (t:map Var vs)
           msum $ map return [app a :=: c, app b :=: d]
+        -- f(a, b, sigma) = c
+        -- f(x, x, sigma) = d
+        -- where sigma = FV(c, d)
+        Asymmetric3 -> do
+          ifeqName <- fresh ifeqName
+          let
+            vs = Set.toList (Set.unions (map free [c, d]))
+            ifeq = ifeqName ::: FunType (ty1:ty1:map typ vs) ty2
+            app t u = ifeq :@: (t:u:map Var vs)
+            x = Var (xvar ::: ty1)
+          msum $ map return [app a b :=: c, app x x :=: d]
 
     swap f (t :=: u) =
       if f t >= f u then (t :=: u) else (u :=: t)
