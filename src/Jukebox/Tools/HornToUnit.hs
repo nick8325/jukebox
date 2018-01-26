@@ -43,6 +43,7 @@ data HornFlags =
     allowCompoundConjectures :: Bool,
     dropNonHorn :: Bool,
     passivise :: Bool,
+    passivise2 :: Bool,
     multi :: Bool,
     encoding :: Encoding }
   deriving Show
@@ -68,6 +69,9 @@ hornFlags =
       False <*>
     bool "passivise"
       ["Encode problem so as to get fewer critical pairs (off by default)."]
+      False <*>
+    bool "passivise2"
+      ["Encode problem so as to get fewer critical pairs (alternative method, off by default)."]
       False <*>
     bool "multi"
       ["Encode multiple left-hand sides at once (off by default)."]
@@ -177,6 +181,14 @@ eliminateHornClauses flags prob = do
       put $! n+1
       return (variant base [name (show n)])
 
+    passiveFresh (x ::: ty)
+      | passivise2 flags = fmap (::: ty) (fresh x)
+      | otherwise = return (x ::: ty)
+
+    passivise (Var x) = Var x
+    passivise ((f ::: ty) :@: ts) =
+      (variant f [passiveName] ::: ty) :@: map passivise ts
+
     elim1 :: Input Clause -> RWST () [Atomic] Int (Either (Input Clause)) [Input Clause]
     elim1 c =
       case partition pos (toLiterals (what c)) of
@@ -222,38 +234,58 @@ eliminateHornClauses flags prob = do
         -- ifeq(x, x, y) = y
         -- ifeq(a, b, c) = ifeq(a, b, d)
         Symmetric -> do
-          let ifeq = variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2] ty2
-          axiom (ifeq :@: [x, x, y] :=: y)
-          return (ifeq :@: [a, b, c] :=: ifeq :@: [a, b, d])
+          ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2] ty2)
+          if passivise2 flags then do
+            axiom (ifeq :@: [x, x, passivise c] :=: c)
+            axiom (ifeq :@: [x, x, passivise d] :=: d)
+            return (ifeq :@: [a, b, passivise c] :=: ifeq :@: [a, b, passivise d])
+           else do
+            axiom (ifeq :@: [x, x, y] :=: y)
+            return (ifeq :@: [a, b, c] :=: ifeq :@: [a, b, d])
         -- ifeq(x, x, y, z) = y
         -- ifeq(a, b, c, d) = d
         Asymmetric1 -> do
-          let
-            ifeq = variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2
+          ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2)
           (c :=: d) <- return (swap size (c :=: d))
-          axiom (ifeq :@: [x, x, y, z] :=: y)
-          return (ifeq :@: [a, b, c, d] :=: d)
+          if passivise2 flags then do
+            axiom (ifeq :@: [x, x, passivise c, passivise d] :=: c)
+            return (ifeq :@: [a, b, passivise c, passivise d] :=: d)
+           else do
+            axiom (ifeq :@: [x, x, y, z] :=: y)
+            return (ifeq :@: [a, b, c, d] :=: d)
         -- f(a, sigma) = c
         -- f(b, sigma) = d
         -- where sigma = FV(a, b, c, d)
         Asymmetric2 -> do
           ifeqName <- fresh ifeqName
+          (a :=: b) <- return (swap size (a :=: b))
+          (c :=: d) <- return (swap size (c :=: d))
           let
-            vs = Set.toList (Set.unions (map free [a, b, c, d]))
+            vs =
+              if passivise2 flags then
+                map passivise [a, b, c, d]
+              else
+                map Var (Set.toList (Set.unions (map free [a, b, c, d])))
             ifeq = ifeqName ::: FunType (ty1:map typ vs) ty2
-            app t = ifeq :@: (t:map Var vs)
-          msum $ map return [app a :=: c, app b :=: d]
+            app t = ifeq :@: (t:vs)
+          axiom (app a :=: c)
+          return (app b :=: d)
         -- f(a, b, sigma) = c
         -- f(x, x, sigma) = d
         -- where sigma = FV(c, d)
         Asymmetric3 -> do
           ifeqName <- fresh ifeqName
           let
-            vs = Set.toList (Set.unions (map free [c, d]))
+            vs =
+              if passivise2 flags then
+                map passivise [c, d]
+              else
+                map Var (Set.toList (Set.unions (map free [c, d])))
             ifeq = ifeqName ::: FunType (ty1:ty1:map typ vs) ty2
-            app t u = ifeq :@: (t:u:map Var vs)
+            app t u = ifeq :@: (t:u:vs)
             x = Var (xvar ::: ty1)
-          msum $ map return [app a b :=: c, app x x :=: d]
+          axiom (app x x :=: c)
+          return (app a b :=: d)
 
     swap f (t :=: u) =
       if f t >= f u then (t :=: u) else (u :=: t)
@@ -267,12 +299,13 @@ eliminateHornClauses flags prob = do
         source = Unknown,
         what = clause [Pos l] }
 
-    (ifeqName, xvar, yvar, zvar) = run_ prob $ do
+    (ifeqName, passiveName, xvar, yvar, zvar) = run_ prob $ do
       ifeqName <- newName "$ifeq"
+      passiveName <- newName "$passive"
       xvar <- newName "A"
       yvar <- newName "B"
       zvar <- newName "C"
-      return (ifeqName, xvar, yvar, zvar)
+      return (ifeqName, passiveName, xvar, yvar, zvar)
 
 -- Soundly encode types, but try to erase them if possible.
 -- Based on the observation that if the input problem is untyped,
