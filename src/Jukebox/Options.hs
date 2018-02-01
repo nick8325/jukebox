@@ -354,10 +354,14 @@ justify name help = ["  " ++ name] ++ map ("    " ++) help
 -- Running the parser.
 
 parseCommandLine :: String -> OptionParser a -> IO a
-parseCommandLine description p = do
+parseCommandLine description p =
+  parseCommandLineWithExtraArgs [] description p
+
+parseCommandLineWithExtraArgs :: [String] -> String -> OptionParser a -> IO a
+parseCommandLineWithExtraArgs args0 description p = do
   name <- getProgName
   args <- getArgs
-  parseCommandLineWithArgs name args description p
+  parseCommandLineWithArgs name (args0 ++ args) description p
 
 parseCommandLineWithArgs :: String -> [String] -> String -> OptionParser a -> IO a
 parseCommandLineWithArgs name args description p = do

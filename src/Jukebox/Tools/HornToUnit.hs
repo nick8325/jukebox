@@ -38,13 +38,15 @@ import Control.Monad.Trans.Class
 
 data HornFlags =
   HornFlags {
-    allowNonUnitConjectures :: Bool,
+    allowConjunctiveConjectures :: Bool,
+    allowDisjunctiveConjectures :: Bool,
     allowNonGroundConjectures :: Bool,
     allowCompoundConjectures :: Bool,
     dropNonHorn :: Bool,
     passivise :: Bool,
     passivise2 :: Bool,
     multi :: Bool,
+    smaller :: Bool,
     encoding :: Encoding }
   deriving Show
 
@@ -55,9 +57,12 @@ hornFlags :: OptionParser HornFlags
 hornFlags =
   inGroup "Horn clause encoding options" $
   HornFlags <$>
-    bool "non-unit-conjectures"
-      ["Allow conjectures to be non-unit clauses (off by default)."]
-      False <*>
+    bool "conjunctive-conjectures"
+      ["Allow conjectures to be conjunctions of equations (on by default)."]
+      True <*>
+    bool "disjunctive-conjectures"
+      ["Allow conjectures to be disjunctions of equations (on by default)."]
+      True <*>
     bool "non-ground-conjectures"
       ["Allow conjectures to be non-ground clauses (on by default)."]
       True <*>
@@ -75,6 +80,9 @@ hornFlags =
       False <*>
     bool "multi"
       ["Encode multiple left-hand sides at once (off by default)."]
+      False <*>
+    bool "smaller"
+      ["'choose smaller' (experimental)"]
       False <*>
     encoding
   where
@@ -99,6 +107,7 @@ hornToUnit flags prob = do
         fmap (Right . enc) $
         eliminateHornClauses flags $
         eliminateUnsuitableConjectures flags $
+        eliminateConjunctiveConjectures flags $
         eliminatePredicates $
         if passivise flags then passiviseClauses prob else prob
 
@@ -145,6 +154,29 @@ eliminatePredicates prob =
       true <- newFunction "true" [] bool
       return (bool, true :@: [])
 
+eliminateConjunctiveConjectures :: HornFlags -> Problem Clause -> Problem Clause
+eliminateConjunctiveConjectures flags prob
+  | allowConjunctiveConjectures flags = prob
+  | otherwise =
+    map elim prob
+    where
+      elim inp
+        | all (not . pos) ls && length ls /= 1 =
+          inp{what = clause [Neg $ (tuple tys :@: ts) :=: (tuple tys :@: us)]}
+        where
+          ls = toLiterals (what inp)
+          ts = [t | l <- ls, let Neg (t :=: _) = l]
+          us = [u | l <- ls, let Neg (_ :=: u) = l]
+          tys = map typ ts
+      elim inp = inp
+
+      tuple = run_ prob $ do
+        tupleType <- newName "tuple"
+        tuple <- newName "tuple"
+        return $ \args ->
+          variant tuple args :::
+          FunType args (Type (variant tupleType args))
+
 eliminateUnsuitableConjectures :: HornFlags -> Problem Clause -> Problem Clause
 eliminateUnsuitableConjectures flags prob
   | null bad = prob
@@ -155,10 +187,12 @@ eliminateUnsuitableConjectures flags prob
   where
     (bad, good) = partition unsuitable prob
 
+    ngoals = length $ filter (all (not . pos) . toLiterals . what) prob
+
     unsuitable c =
       all (not . pos) ls &&
       ((not (allowCompoundConjectures flags) && or [size t > 1 | t <- terms ls]) ||
-       (not (allowNonUnitConjectures flags) && length ls /= 1) ||
+       (not (allowDisjunctiveConjectures flags) && ngoals > 1) ||
        (not (allowNonGroundConjectures flags) && not (ground ls)))
       where
         ls = toLiterals (what c)
@@ -166,9 +200,9 @@ eliminateUnsuitableConjectures flags prob
     addConjecture c = clause (Pos (a :=: b):toLiterals c)
 
     (a, b) = run_ prob $ do
-      token <- newType "token"
-      a <- newFunction "a" [] token
-      b <- newFunction "b" [] token
+      token <- newType "$token"
+      a <- newFunction "$a" [] token
+      b <- newFunction "$b" [] token
       return (a :@: [], b :@: [])
 
 eliminateHornClauses :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
@@ -248,7 +282,7 @@ eliminateHornClauses flags prob = do
           ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2)
           (c :=: d) <- return (swap size (c :=: d))
           if passivise2 flags then do
-            axiom (ifeq :@: [x, x, passivise c, passivise d] :=: c)
+            axiom (ifeq :@: [x, x, passivise c, y] :=: c)
             return (ifeq :@: [a, b, passivise c, passivise d] :=: d)
            else do
             axiom (ifeq :@: [x, x, y, z] :=: y)
@@ -268,13 +302,18 @@ eliminateHornClauses flags prob = do
                 map Var (Set.toList (Set.unions (map free [a, b, c, d])))
             ifeq = ifeqName ::: FunType (ty1:map typ vs) ty2
             app t = ifeq :@: (t:vs)
-          axiom (app a :=: c)
-          return (app b :=: d)
+          if smaller flags then do
+            axiom (app b :=: d)
+            return (app a :=: c)
+           else do
+            axiom (app a :=: c)
+            return (app b :=: d)
         -- f(a, b, sigma) = c
         -- f(x, x, sigma) = d
         -- where sigma = FV(c, d)
         Asymmetric3 -> do
           ifeqName <- fresh ifeqName
+          (c :=: d) <- return (swap size (c :=: d))
           let
             vs =
               if passivise2 flags then
@@ -288,6 +327,7 @@ eliminateHornClauses flags prob = do
           return (app a b :=: d)
 
     swap f (t :=: u) =
+      (\(t :=: u) -> if smaller flags then u :=: t else t :=: u) $
       if f t >= f u then (t :=: u) else (u :=: t)
 
     axiom l = lift $ tell [l]
