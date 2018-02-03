@@ -107,7 +107,7 @@ hornToUnit flags prob = do
         fmap (Right . enc) $
         eliminateHornClauses flags $
         eliminateUnsuitableConjectures flags $
-        eliminateConjunctiveConjectures flags $
+        eliminateMultiplePreconditions flags $
         eliminatePredicates $
         if passivise flags then passiviseClauses prob else prob
 
@@ -154,19 +154,19 @@ eliminatePredicates prob =
       true <- newFunction "true" [] bool
       return (bool, true :@: [])
 
-eliminateConjunctiveConjectures :: HornFlags -> Problem Clause -> Problem Clause
-eliminateConjunctiveConjectures flags prob
-  | allowConjunctiveConjectures flags = prob
+eliminateMultiplePreconditions :: HornFlags -> Problem Clause -> Problem Clause
+eliminateMultiplePreconditions flags prob
   | otherwise =
     map elim prob
     where
       elim inp
-        | all (not . pos) ls && length ls /= 1 =
-          inp{what = clause [Neg $ (tuple tys :@: ts) :=: (tuple tys :@: us)]}
+        | length negs /= 1 &&
+          if null poss then not (allowConjunctiveConjectures flags) else multi flags =
+          inp{what = clause (Neg ((tuple tys :@: ts) :=: (tuple tys :@: us)):poss)}
         where
-          ls = toLiterals (what inp)
-          ts = [t | l <- ls, let Neg (t :=: _) = l]
-          us = [u | l <- ls, let Neg (_ :=: u) = l]
+          (poss, negs) = partition pos (toLiterals (what inp))
+          ts = [t | l <- negs, let Neg (t :=: _) = l]
+          us = [u | l <- negs, let Neg (_ :=: u) = l]
           tys = map typ ts
       elim inp = inp
 
@@ -227,10 +227,6 @@ eliminateHornClauses flags prob = do
     elim1 c =
       case partition pos (toLiterals (what c)) of
         ([], _) -> return [c]
-        ([Pos l], ls)
-          | encoding flags == Asymmetric2 && multi flags -> runListT $ do
-            l <- encodeAsymm2 l ls
-            return c { what = clause [Pos l] }
         ([Pos l], ls) -> runListT $ do
           l <- foldM encode l ls
           return c { what = clause [Pos l] }
@@ -239,22 +235,6 @@ eliminateHornClauses flags prob = do
             return []
           else
             lift $ Left c
-
-    encodeAsymm2 :: Atomic -> [Literal] -> ListT (RWST () [Atomic] Int (Either (Input Clause))) Atomic
-    encodeAsymm2 l ls = do
-      ifeqName <- fresh ifeqName
-      let
-        vs = Set.toList (Set.unions (map free (l:map the ls)))
-        lhs (t :=: _) = t
-        rhs (_ :=: u) = u
-        ifeq =
-          ifeqName :::
-            FunType (map (typ . lhs . the) ls ++ map typ vs)
-              (typ (lhs l))
-        app ts = ifeq :@: (ts ++ map Var vs)
-      msum $ map return [
-        app (map (lhs . the) ls) :=: lhs l,
-        app (map (rhs . the) ls) :=: rhs l]
 
     encode :: Atomic -> Literal -> ListT (RWST () [Atomic] Int (Either (Input Clause))) Atomic
     encode (c :=: d) (Neg (a :=: b)) =
