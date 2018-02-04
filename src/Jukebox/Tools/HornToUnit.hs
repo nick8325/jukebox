@@ -44,7 +44,6 @@ data HornFlags =
     allowCompoundConjectures :: Bool,
     dropNonHorn :: Bool,
     passivise :: Bool,
-    passivise2 :: Bool,
     multi :: Bool,
     smaller :: Bool,
     encoding :: Encoding }
@@ -75,26 +74,23 @@ hornFlags =
     bool "passivise"
       ["Encode problem so as to get fewer critical pairs (off by default)."]
       False <*>
-    bool "passivise2"
-      ["Encode problem so as to get fewer critical pairs (alternative method, off by default)."]
-      False <*>
     bool "multi"
       ["Encode multiple left-hand sides at once (off by default)."]
       False <*>
     bool "smaller"
-      ["'choose smaller' (experimental)"]
+      ["Swap ordering of certain equations (off by default)"]
       False <*>
     encoding
   where
     encoding =
       flag "conditional-encoding"
-        ["Which method to use to encode conditionals (asymmetric1 by default)."]
+        ["Which method to use to encode conditionals (if-then-else by default)."]
         Asymmetric1
         (argOption
-          [("symmetric", Symmetric),
-           ("asymmetric1", Asymmetric1),
-           ("asymmetric2", Asymmetric2),
-           ("asymmetric3", Asymmetric3)])
+          [("if-then", Symmetric),
+           ("if-then-else", Asymmetric1),
+           ("fresh", Asymmetric2),
+           ("if", Asymmetric3)])
 
 hornToUnit :: HornFlags -> Problem Clause -> IO (Either (Input Clause) (Either Answer (Problem Clause)))
 hornToUnit flags prob = do
@@ -108,37 +104,7 @@ hornToUnit flags prob = do
         eliminateHornClauses flags $
         eliminateUnsuitableConjectures flags $
         eliminateMultiplePreconditions flags $
-        eliminatePredicates $
-        if passivise flags then passiviseClauses prob else prob
-
-passiviseClauses :: Problem Clause -> Problem Clause
-passiviseClauses prob =
-  [ c { what = clause ls' }
-  | (n, c@Input{what = Clause (Bind _ ls)}) <- zip [0..] prob,
-    ls' <- cls n ls ]
-  where
-    cls n ls =
-      case partition pos ls of
-        (ps, ns) | length ns >= 1 ->
-          let
-            ns' = zipWith (toPred ls n) [0..] ns
-          in
-            [(map Neg ns' ++ ps)] ++
-            [[n, Pos n'] | (n, n') <- zip ns ns']
-        _ ->
-          [ls]
-
-    toPred :: [Literal] -> Int -> Int -> Literal -> Atomic
-    toPred ls m n l =
-      Tru (p :@: map Var vs)
-      where
-        p =
-          variant "$p" [fresh, name m, name n]
-            ::: FunType (map typ vs) O
-        vs = intersect (vars (delete l ls)) (vars l)
-
-    fresh = run_ prob $
-      newName "fresh"
+        eliminatePredicates prob
 
 eliminatePredicates :: Problem Clause -> Problem Clause
 eliminatePredicates prob =
@@ -216,12 +182,12 @@ eliminateHornClauses flags prob = do
       return (variant base [name (show n)])
 
     passiveFresh (x ::: ty)
-      | passivise2 flags = fmap (::: ty) (fresh x)
+      | passivise flags = fmap (::: ty) (fresh x)
       | otherwise = return (x ::: ty)
 
-    passivise (Var x) = Var x
-    passivise ((f ::: ty) :@: ts) =
-      (variant f [passiveName] ::: ty) :@: map passivise ts
+    passive (Var x) = Var x
+    passive ((f ::: ty) :@: ts) =
+      (variant f [passiveName] ::: ty) :@: map passive ts
 
     elim1 :: Input Clause -> RWST () [Atomic] Int (Either (Input Clause)) [Input Clause]
     elim1 c =
@@ -249,10 +215,10 @@ eliminateHornClauses flags prob = do
         -- ifeq(a, b, c) = ifeq(a, b, d)
         Symmetric -> do
           ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2] ty2)
-          if passivise2 flags then do
-            axiom (ifeq :@: [x, x, passivise c] :=: c)
-            axiom (ifeq :@: [x, x, passivise d] :=: d)
-            return (ifeq :@: [a, b, passivise c] :=: ifeq :@: [a, b, passivise d])
+          if passivise flags then do
+            axiom (ifeq :@: [x, x, passive c] :=: c)
+            axiom (ifeq :@: [x, x, passive d] :=: d)
+            return (ifeq :@: [a, b, passive c] :=: ifeq :@: [a, b, passive d])
            else do
             axiom (ifeq :@: [x, x, y] :=: y)
             return (ifeq :@: [a, b, c] :=: ifeq :@: [a, b, d])
@@ -261,9 +227,9 @@ eliminateHornClauses flags prob = do
         Asymmetric1 -> do
           ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2)
           (c :=: d) <- return (swap size (c :=: d))
-          if passivise2 flags then do
-            axiom (ifeq :@: [x, x, passivise c, y] :=: c)
-            return (ifeq :@: [a, b, passivise c, passivise d] :=: d)
+          if passivise flags then do
+            axiom (ifeq :@: [x, x, passive c, y] :=: c)
+            return (ifeq :@: [a, b, passive c, passive d] :=: d)
            else do
             axiom (ifeq :@: [x, x, y, z] :=: y)
             return (ifeq :@: [a, b, c, d] :=: d)
@@ -276,8 +242,8 @@ eliminateHornClauses flags prob = do
           (c :=: d) <- return (swap size (c :=: d))
           let
             vs =
-              if passivise2 flags then
-                map passivise [a, b, c, d]
+              if passivise flags then
+                map passive [a, b, c, d]
               else
                 map Var (Set.toList (Set.unions (map free [a, b, c, d])))
             ifeq = ifeqName ::: FunType (ty1:map typ vs) ty2
@@ -296,8 +262,8 @@ eliminateHornClauses flags prob = do
           (c :=: d) <- return (swap size (c :=: d))
           let
             vs =
-              if passivise2 flags then
-                map passivise [c, d]
+              if passivise flags then
+                map passive [c, d]
               else
                 map Var (Set.toList (Set.unions (map free [c, d])))
             ifeq = ifeqName ::: FunType (ty1:ty1:map typ vs) ty2
