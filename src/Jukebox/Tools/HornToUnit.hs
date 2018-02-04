@@ -269,8 +269,8 @@ eliminateHornClauses flags prob = do
             ifeq = ifeqName ::: FunType (ty1:ty1:map typ vs) ty2
             app t u = ifeq :@: (t:u:vs)
             x = Var (xvar ::: ty1)
-          axiom (app x x :=: d)
-          return (app a b :=: c)
+          axiom (app x x :=: c)
+          return (app a b :=: d)
 
     swap f (t :=: u) =
       (\(t :=: u) -> if smaller flags then u :=: t else t :=: u) $
