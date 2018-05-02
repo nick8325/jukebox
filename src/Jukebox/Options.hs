@@ -16,8 +16,8 @@ import System.IO
 #if __GLASGOW_HASKELL__ < 710
 import Control.Applicative
 import Data.Monoid
-import Data.Semigroup(Semigroup(..))
 #endif
+import Data.Semigroup(Semigroup(..))
 
 ----------------------------------------------------------------------
 -- A parser of some kind annotated with a help text of some kind
