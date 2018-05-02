@@ -4,6 +4,7 @@ module Jukebox.TPTP.Print(prettyShow, prettyNames, showClauses, pPrintClauses, s
        where
 
 #include "errors.h"
+import Prelude hiding ((<>))
 import Data.Char
 import Data.Maybe
 import Text.PrettyPrint.HughesPJ

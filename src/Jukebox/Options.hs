@@ -16,6 +16,7 @@ import System.IO
 #if __GLASGOW_HASKELL__ < 710
 import Control.Applicative
 import Data.Monoid
+import Data.Semigroup(Semigroup(..))
 #endif
 
 ----------------------------------------------------------------------
@@ -34,8 +35,11 @@ instance (Monoid d, Applicative p) => Applicative (Annotated d p) where
 
 instance (Monoid d, Monoid (p a)) => Monoid (Annotated d p a) where
   mempty = Annotated mempty mempty
-  Annotated d p `mappend` Annotated d' p' =
-    Annotated (d `mappend` d') (p `mappend` p')
+  mappend = (<>)
+
+instance (Semigroup d, Semigroup (p a)) => Semigroup (Annotated d p a) where
+  Annotated d p <> Annotated d' p' =
+    Annotated (d <> d') (p <> p')
 
 ----------------------------------------------------------------------
 -- The ArgParser type: parsing of single flags.
