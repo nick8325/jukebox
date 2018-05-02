@@ -33,7 +33,7 @@ instance (Monoid d, Applicative p) => Applicative (Annotated d p) where
   Annotated d f <*> Annotated d' x =
     Annotated (d `mappend` d') (f <*> x)
 
-instance (Monoid d, Monoid (p a)) => Monoid (Annotated d p a) where
+instance (Semigroup d, Monoid d, Semigroup (p a), Monoid (p a)) => Monoid (Annotated d p a) where
   mempty = Annotated mempty mempty
   mappend = (<>)
 
