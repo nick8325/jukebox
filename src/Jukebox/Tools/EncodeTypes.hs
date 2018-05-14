@@ -99,7 +99,7 @@ tagsFlags =
 tags :: Bool -> Scheme
 tags moreAxioms = Scheme
   { makeFunction = \ty ->
-      newFunction ("$to_" ++ base ty) [ty] ty,
+      newFunction ("$$to_" ++ base ty) [ty] ty,
     scheme1 = tags1 moreAxioms }
 
 tags1 :: Bool -> (Type -> Bool) -> (Type -> Function) -> Scheme1
@@ -147,7 +147,7 @@ tagsExists mono ty f
 guards :: Scheme
 guards = Scheme
   { makeFunction = \ty ->
-      newFunction ("$is_" ++ base ty) [ty] O,
+      newFunction ("$$is_" ++ base ty) [ty] O,
     scheme1 = guards1 }
 
 guards1 :: (Type -> Bool) -> (Type -> Function) -> Scheme1
