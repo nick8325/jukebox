@@ -29,6 +29,7 @@ import Jukebox.Options
 import Jukebox.Utils
 import qualified Jukebox.Sat as Sat
 import Data.List
+import Data.Maybe
 import Control.Monad
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
@@ -43,6 +44,7 @@ data HornFlags =
     allowNonGroundConjectures :: Bool,
     allowCompoundConjectures :: Bool,
     dropNonHorn :: Bool,
+    nonHornToOr :: Bool,
     passivise :: Bool,
     multi :: Bool,
     smaller :: Bool,
@@ -70,6 +72,9 @@ hornFlags =
       True <*>
     bool "drop-non-horn"
       ["Silently drop non-Horn clauses from input problem (off by default)."]
+      False <*>
+    bool "non-horn-to-or"
+      ["Partially encode non-Horn clauses using 'or' (off by default)."]
       False <*>
     bool "passivise"
       ["Encode problem so as to get fewer critical pairs (off by default)."]
@@ -100,25 +105,66 @@ hornToUnit flags prob = do
       Left ans ->
         Right (Left ans)
       Right enc ->
-        fmap (Right . enc) $
-        eliminateHornClauses flags $
-        eliminateUnsuitableConjectures flags $
-        eliminateMultiplePreconditions flags $
-        eliminatePredicates prob
+        let
+          (x, bool, true, false, or, equals) = run_ prob $ do
+            x <- newName "X"
+            bool <- newType "bool"
+            true <- newFunction "true" [] bool
+            false <- newFunction "false" [] bool
+            or <- newFunction "or" [bool, bool] bool
+            equals <- newName "equals"
+            return (x, bool, true :@: [], false :@: [], \t u -> or :@: [t, u],
+                    \t u -> (variant equals [typ t] ::: FunType [typ t, typ u] bool) :@: [t, u])
+        in
+          fmap (Right . enc) $
+          eliminateHornClauses flags $
+          eliminateUnsuitableConjectures flags $
+          eliminateMultiplePreconditions flags $
+          eliminatePredicates bool true $
+          encodeNonHorn flags x bool equals true false or prob
 
-eliminatePredicates :: Problem Clause -> Problem Clause
-eliminatePredicates prob =
+encodeNonHorn :: HornFlags -> Name -> Type -> (Term -> Term -> Term) -> Term -> Term -> (Term -> Term -> Term) -> Problem Clause -> Problem Clause
+encodeNonHorn flags xname bool equals true false or prob
+  | not (nonHornToOr flags) = prob
+  | otherwise =
+    let (prob', axioms) = evalRWS (mapM encode prob) () () in
+    map toInput axioms ++ prob'
+  where
+    toInput ls =
+      Input "non_horn_axiom" (Ax Axiom) Unknown (clause ls)
+    encode inp =
+      case partition pos (toLiterals (what inp)) of
+        ([], _) -> return inp
+        ([_], _) -> return inp
+        (ps, ns) -> do
+          let
+            toTerm (Tru p) = p
+            toTerm (t :=: u) = equals t u
+            p = foldr1 or (map (toTerm . the) ps)
+            x ty = Var (variant xname [0 :: Int] ::: ty)
+            y ty = Var (variant xname [1 :: Int] ::: ty)
+            z ty = Var (variant xname [2 :: Int] ::: ty)
+          tell [[Pos $ or (x bool) (y bool) :=: or (y bool) (x bool)],
+                [Pos $ or (x bool) (or (y bool) (z bool)) :=: or (or (x bool) (y bool)) (z bool)],
+                [Pos $ or false (x bool) :=: x bool],
+                [Pos $ or true (x bool) :=: true]]
+          forM_ ps $ \l ->
+            case l of
+              Pos (t :=: _) ->
+                let ty = typ t in
+                tell [[Pos $ Tru $ equals (x ty) (x ty)],
+                      [Neg $ Tru $ equals (x ty) (y ty), Pos $ x ty :=: y ty]]
+              _ -> return ()
+          return inp { what = clause (Pos (Tru p):ns) }
+
+eliminatePredicates :: Type -> Term -> Problem Clause -> Problem Clause
+eliminatePredicates bool true prob =
   map (fmap elim) prob
   where
     elim = clause . map (fmap elim1) . toLiterals
     elim1 (t :=: u) = t :=: u
     elim1 (Tru ((p ::: FunType tys _) :@: ts)) =
       ((p ::: FunType tys bool) :@: ts) :=: true
-
-    (bool, true) = run_ prob $ do
-      bool <- newType "$$bool"
-      true <- newFunction "$$true" [] bool
-      return (bool, true :@: [])
 
 eliminateMultiplePreconditions :: HornFlags -> Problem Clause -> Problem Clause
 eliminateMultiplePreconditions flags prob
@@ -166,9 +212,9 @@ eliminateUnsuitableConjectures flags prob
     addConjecture c = clause (Pos (a :=: b):toLiterals c)
 
     (a, b) = run_ prob $ do
-      token <- newType "$$token"
-      a <- newFunction "$$a" [] token
-      b <- newFunction "$$b" [] token
+      token <- newType "token"
+      a <- newFunction "a" [] token
+      b <- newFunction "b" [] token
       return (a :@: [], b :@: [])
 
 eliminateHornClauses :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
@@ -286,8 +332,8 @@ eliminateHornClauses flags prob = do
         what = clause [Pos l] }
 
     (ifeqName, passiveName, xvar, yvar, zvar) = run_ prob $ do
-      ifeqName <- newName "$$ifeq"
-      passiveName <- newName "$$passive"
+      ifeqName <- newName "ifeq"
+      passiveName <- newName "passive"
       xvar <- newName "A"
       yvar <- newName "B"
       zvar <- newName "C"
