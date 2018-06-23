@@ -189,12 +189,12 @@ eliminateHornClauses flags prob = do
     passive ((f ::: ty) :@: ts) =
       (variant f [passiveName] ::: ty) :@: map passive ts
 
-    elim1 :: Input Clause -> RWST () [Atomic] Int (Either (Input Clause)) [Input Clause]
+    elim1 :: Input Clause -> RWST () [(String, Atomic)] Int (Either (Input Clause)) [Input Clause]
     elim1 c =
       case partition pos (toLiterals (what c)) of
         ([], _) -> return [c]
         ([Pos l], ls) -> runListT $ do
-          l <- foldM encode l ls
+          l <- foldM (encode (tag c)) l ls
           return c { what = clause [Pos l] }
         _ ->
           if dropNonHorn flags then
@@ -202,8 +202,8 @@ eliminateHornClauses flags prob = do
           else
             lift $ Left c
 
-    encode :: Atomic -> Literal -> ListT (RWST () [Atomic] Int (Either (Input Clause))) Atomic
-    encode (c :=: d) (Neg (a :=: b)) =
+    encode :: String -> Atomic -> Literal -> ListT (RWST () [(String, Atomic)] Int (Either (Input Clause))) Atomic
+    encode tag (c :=: d) (Neg (a :=: b)) =
       let
         ty1 = typ a
         ty2 = typ c
@@ -216,28 +216,28 @@ eliminateHornClauses flags prob = do
         Symmetric -> do
           ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2] ty2)
           if passivise flags then do
-            axiom (ifeq :@: [x, x, passive c] :=: c)
-            axiom (ifeq :@: [x, x, passive d] :=: d)
+            axiom (tag, ifeq :@: [x, x, passive c] :=: c)
+            axiom (tag, ifeq :@: [x, x, passive d] :=: d)
             return (ifeq :@: [a, b, passive c] :=: ifeq :@: [a, b, passive d])
            else do
-            axiom (ifeq :@: [x, x, y] :=: y)
+            axiom ("ifeq_axiom", ifeq :@: [x, x, y] :=: y)
             return (ifeq :@: [a, b, c] :=: ifeq :@: [a, b, d])
         -- ifeq(x, x, y, z) = y
         -- ifeq(a, b, c, d) = d
         Asymmetric1 -> do
-          ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2)
+          ifeq <- passiveFresh (variant freshName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2)
           (c :=: d) <- return (swap size (c :=: d))
           if passivise flags then do
-            axiom (ifeq :@: [x, x, passive c, y] :=: c)
+            axiom ("ifeq_axiom", ifeq :@: [x, x, passive c, y] :=: c)
             return (ifeq :@: [a, b, passive c, passive d] :=: d)
            else do
-            axiom (ifeq :@: [x, x, y, z] :=: y)
+            axiom ("ifeq_axiom", ifeq :@: [x, x, y, z] :=: y)
             return (ifeq :@: [a, b, c, d] :=: d)
         -- f(a, sigma) = c
         -- f(b, sigma) = d
         -- where sigma = FV(a, b, c, d)
         Asymmetric2 -> do
-          ifeqName <- fresh ifeqName
+          ifeqName <- fresh freshName
           (a :=: b) <- return (swap size (a :=: b))
           (c :=: d) <- return (swap size (c :=: d))
           let
@@ -249,16 +249,16 @@ eliminateHornClauses flags prob = do
             ifeq = ifeqName ::: FunType (ty1:map typ vs) ty2
             app t = ifeq :@: (t:vs)
           if smaller flags then do
-            axiom (app b :=: d)
+            axiom (tag, app b :=: d)
             return (app a :=: c)
            else do
-            axiom (app a :=: c)
+            axiom (tag, app a :=: c)
             return (app b :=: d)
         -- f(a, b, sigma) = c
         -- f(x, x, sigma) = d
         -- where sigma = FV(c, d)
         Asymmetric3 -> do
-          ifeqName <- fresh ifeqName
+          ifeqName <- fresh freshName
           (c :=: d) <- return (swap size (c :=: d))
           let
             vs =
@@ -269,7 +269,7 @@ eliminateHornClauses flags prob = do
             ifeq = ifeqName ::: FunType (ty1:ty1:map typ vs) ty2
             app t u = ifeq :@: (t:u:vs)
             x = Var (xvar ::: ty1)
-          axiom (app x x :=: c)
+          axiom (tag, app x x :=: c)
           return (app a b :=: d)
 
     swap f (t :=: u) =
@@ -278,20 +278,21 @@ eliminateHornClauses flags prob = do
 
     axiom l = lift $ tell [l]
 
-    toInput l =
+    toInput (tag, l) =
       Input {
-        tag = "ifeq_axiom",
+        tag = tag,
         kind = Ax Axiom,
         source = Unknown,
         what = clause [Pos l] }
 
-    (ifeqName, passiveName, xvar, yvar, zvar) = run_ prob $ do
+    (ifeqName, freshName, passiveName, xvar, yvar, zvar) = run_ prob $ do
       ifeqName <- newName "$$ifeq"
+      freshName <- newName "$$fresh"
       passiveName <- newName "$$passive"
       xvar <- newName "A"
       yvar <- newName "B"
       zvar <- newName "C"
-      return (ifeqName, passiveName, xvar, yvar, zvar)
+      return (ifeqName, freshName, passiveName, xvar, yvar, zvar)
 
 -- Soundly encode types, but try to erase them if possible.
 -- Based on the observation that if the input problem is untyped,
