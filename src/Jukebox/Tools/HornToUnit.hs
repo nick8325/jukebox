@@ -225,7 +225,7 @@ eliminateHornClauses flags prob = do
         -- ifeq(x, x, y, z) = y
         -- ifeq(a, b, c, d) = d
         Asymmetric1 -> do
-          ifeq <- passiveFresh (variant freshName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2)
+          ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2)
           (c :=: d) <- return (swap size (c :=: d))
           if passivise flags then do
             axiom ("ifeq_axiom", ifeq :@: [x, x, passive c, y] :=: c)
