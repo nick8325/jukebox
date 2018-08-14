@@ -49,7 +49,7 @@ data Tool =
     pipeline :: OptionParser (IO ()) }
 
 tools = external ++ internal
-external = [fof, cnf, uncnf, smt, monotonox, hornToUnit]
+external = [fof, cnf, uncnf, smt, monotonox, hornToUnit, inferTypes]
 internal = [guessmodel, parse]
 
 fof =
@@ -87,6 +87,16 @@ uncnf =
     forAllFilesBox <*>
       (readProblemBox =>>=
        printProblemBox)
+
+inferTypes =
+  Tool "infer-types" "Infer types" $
+    forAllFilesBox <*>
+      (readProblemBox =>>=
+       clausifyBox =>>=
+       oneConjectureBox =>>=
+       inferBox =>>=
+       printInferredBox =>>=
+       printClausesBox)
 
 guessmodel =
   Tool "guessmodel" "Guess an infinite model (internal use)" $

@@ -30,6 +30,7 @@ inferTypes prob = do
       | v <- vars prob ]
   
   let tyMap = Map.fromList $
+              [(name O, O)] ++
               concat [ res:args | (args, res) <- Map.elems funMap ] ++
               [ ty | ty <- Map.elems varMap ]
   
