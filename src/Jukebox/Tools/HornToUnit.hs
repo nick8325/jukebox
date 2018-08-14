@@ -116,8 +116,8 @@ eliminatePredicates prob =
       ((p ::: FunType tys bool) :@: ts) :=: true
 
     (bool, true) = run_ prob $ do
-      bool <- newType "$$bool"
-      true <- newFunction "$$true" [] bool
+      bool <- newType (withLabel "bool" (name "bool"))
+      true <- newFunction (withLabel "true" (name "true")) [] bool
       return (bool, true :@: [])
 
 eliminateMultiplePreconditions :: HornFlags -> Problem Clause -> Problem Clause
@@ -137,8 +137,8 @@ eliminateMultiplePreconditions flags prob
       elim inp = inp
 
       tuple = run_ prob $ do
-        tupleType <- newName "tuple"
-        tuple <- newName "tuple"
+        tupleType <- newName (withLabel "tuple" (name "tuple"))
+        tuple <- newName (withLabel "tuple" (name "tuple"))
         return $ \args ->
           variant tuple args :::
           FunType args (Type (variant tupleType args))
@@ -166,9 +166,9 @@ eliminateUnsuitableConjectures flags prob
     addConjecture c = clause (Pos (a :=: b):toLiterals c)
 
     (a, b) = run_ prob $ do
-      token <- newType "$$token"
-      a <- newFunction "$$a" [] token
-      b <- newFunction "$$b" [] token
+      token <- newType (withLabel "token" (name "token"))
+      a <- newFunction (withLabel "token_a" (name "a")) [] token
+      b <- newFunction (withLabel "token_b" (name "b")) [] token
       return (a :@: [], b :@: [])
 
 eliminateHornClauses :: HornFlags -> Problem Clause -> Either (Input Clause) (Problem Clause)
@@ -286,9 +286,9 @@ eliminateHornClauses flags prob = do
         what = clause [Pos l] }
 
     (ifeqName, freshName, passiveName, xvar, yvar, zvar) = run_ prob $ do
-      ifeqName <- newName "$$ifeq"
-      freshName <- newName "$$fresh"
-      passiveName <- newName "$$passive"
+      ifeqName <- newName (withLabel "ifeq" (name "ifeq"))
+      freshName <- newName (withLabel "fresh" (name "fresh"))
+      passiveName <- newName (withLabel "passive" (name "passive"))
       xvar <- newName "A"
       yvar <- newName "B"
       zvar <- newName "C"

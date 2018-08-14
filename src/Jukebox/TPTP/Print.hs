@@ -230,9 +230,9 @@ instance Pretty Term where
     pPrint v
   pPrint ((f ::: _) :@: []) =
     case f of
-      Fixed Integer{} -> text (show f)
-      Fixed Rational{} -> text (show f)
-      Fixed Real{} -> text (show f)
+      Fixed Integer{} _ -> text (show f)
+      Fixed Rational{} _ -> text (show f)
+      Fixed Real{} _ -> text (show f)
       _ -> text (escapeAtom (show f))
   pPrint ((f ::: _) :@: ts) =
     text (escapeAtom (show f)) <>
@@ -337,15 +337,15 @@ prettyNames x0 = mapName replace x
     add used names =
       foldr add1 (Map.empty, used) names
 
-    add1 (Fixed xs) (scope, used) =
+    add1 (Fixed xs _) (scope, used) =
       (scope, Set.insert (show xs) used)
-    add1 x@(Unique _ base f) (scope, used) =
+    add1 x@(Unique _ base _ f) (scope, used) =
       addWith base f x (scope, used)
     add1 x@(Variant y _ f) (scope, used) =
       addWith (base y) f x (scope, used)
 
     addWith base f x (scope, used) =
-      (Map.insert x (name winner) scope,
+      (Map.insert x (withMaybeLabel (label x) (name winner)) scope,
        Set.insert winner (Set.fromList taken `Set.union` used))
       where
         cands = [f base n | n <- [0..]]
@@ -359,6 +359,6 @@ prettyNames x0 = mapName replace x
         [ ty | Type ty <- types x ]
     (globalsScope, globalsUsed) = add fixed globals
 
-    fixed = Set.fromList [ show xs | Fixed xs <- names x ]
+    fixed = Set.fromList [ show xs | Fixed xs _ <- names x ]
 
     x = run x0 uniqueNames

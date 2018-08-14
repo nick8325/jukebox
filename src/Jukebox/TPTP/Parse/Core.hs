@@ -52,7 +52,7 @@ initialState mfile =
     (Map.fromList [(show (name ty), ty) | ty <- [intType, ratType, realType]])
     (Map.fromList
        [ (fun,
-          [Fixed (Overloaded (intern fun) (intern (show (name kind)))) ::: ty
+          [Fixed (Overloaded (intern fun) (intern (show (name kind)))) Nothing ::: ty
           | (kind, ty) <- tys ])
        | (fun, tys) <- funs ])
    where
@@ -79,7 +79,7 @@ initialState mfile =
 initialStateFrom :: Maybe String -> [Name] -> Map String Type -> Map String [Function] -> ParseState
 initialStateFrom mfile xs tys fs = MkState mfile [] tys fs Map.empty n
   where
-    n = maximum (0:[succ m | Unique m _ _ <- xs])
+    n = maximum (0:[succ m | Unique m _ _ _ <- xs])
 
 instance Stream TokenStream Token where
   primToken (At _ (Cons Eof _)) _ok err _fatal = err
@@ -436,7 +436,7 @@ instance TermLike Term where
     case Map.lookup x ctx of
       Just v -> return (Var v)
       Nothing -> do
-        let v = Unique (n+1) x defaultRenamer ::: indType
+        let v = Unique (n+1) x Nothing defaultRenamer ::: indType
         putState (MkState mfile p t f (Map.insert x v ctx) (n+1))
         return (Var v)
   var _ ctx = do
@@ -489,7 +489,7 @@ term mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
 
     {-# INLINE constant #-}
     constant x ty =
-      fromThing (Term ((Fixed x ::: FunType [] ty) :@: []))
+      fromThing (Term ((Fixed x Nothing ::: FunType [] ty) :@: []))
 
 literal, unitary, quantified, formula ::
   FormulaLike a => Mode -> Map String Variable -> Parser a
@@ -567,7 +567,7 @@ binder mode = do
              type_ } <|> return indType
   MkState mfile p t f v n <- getState
   putState (MkState mfile p t f v (n+1))
-  return (Unique n x defaultRenamer ::: ty)
+  return (Unique n x Nothing defaultRenamer ::: ty)
 
 -- Parse a type
 type_ :: Parser Type

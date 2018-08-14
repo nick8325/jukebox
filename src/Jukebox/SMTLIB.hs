@@ -141,9 +141,9 @@ pPrintDecls prob =
     builtIn x =
       (show (name x) /= "individual" && show (name x) `elem` map snd renamings) ||
       case name x of
-        Fixed Integer{} -> True
-        Fixed Rational{} -> True
-        Fixed Real{} -> True
+        Fixed Integer{} _ -> True
+        Fixed Rational{} _ -> True
+        Fixed Real{} _ -> True
         _ -> False
 
     typeDecl O = empty
@@ -158,10 +158,10 @@ sexp :: [Doc] -> Doc
 sexp = parens . fsep
 
 pPrintName :: Name -> Doc
-pPrintName (Fixed (Integer n)) = pPrint n
-pPrintName (Fixed (Rational n)) =
+pPrintName (Fixed (Integer n) _) = pPrint n
+pPrintName (Fixed (Rational n) _) =
   sexp ["/", pPrint (numerator n), pPrint (denominator n)]
-pPrintName (Fixed (Real n)) =
+pPrintName (Fixed (Real n) _) =
   sexp ["/", pPrint (numerator n), pPrint (denominator n)]
 pPrintName x = text . escape . show $ x
   where

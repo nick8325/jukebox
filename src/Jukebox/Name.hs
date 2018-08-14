@@ -13,8 +13,8 @@ import Control.Applicative
 #endif
 
 data Name =
-    Fixed !FixedName
-  | Unique {-# UNPACK #-} !Int64 String Renamer
+    Fixed !FixedName (Maybe String)
+  | Unique {-# UNPACK #-} !Int64 String (Maybe String) Renamer
   | Variant !Name ![Name] Renamer
 
 data FixedName =
@@ -31,9 +31,27 @@ data Renaming = Renaming [String] String
 base :: Named a => a -> String
 base x =
   case name x of
-    Fixed x -> show x
-    Unique _ xs _ -> xs
+    Fixed x _ -> show x
+    Unique _ xs _ _ -> xs
     Variant x _ _ -> base x
+
+label :: Named a => a -> Maybe String
+label x =
+  case name x of
+    Fixed _ x -> x
+    Unique _ _ x _ -> x
+    Variant x _ _ -> label x
+
+hasLabel :: Named a => String -> a -> Bool
+hasLabel l x = label x == Just l
+
+withMaybeLabel :: Maybe String -> Name -> Name
+withMaybeLabel l (Fixed x _) = Fixed x l
+withMaybeLabel l (Unique x xs _ f) = Unique x xs l f
+withMaybeLabel l (Variant x xs r) = Variant (withMaybeLabel l x) xs r
+
+withLabel :: String -> Name -> Name
+withLabel l x = withMaybeLabel (Just l) x
 
 instance Show FixedName where
   show (Basic xs) = unintern xs
@@ -45,8 +63,8 @@ instance Show FixedName where
 renamer :: Named a => a -> Renamer
 renamer x =
   case name x of
-    Fixed _ -> defaultRenamer
-    Unique _ _ f -> f
+    Fixed _ _ -> defaultRenamer
+    Unique _ _ _ f -> f
     Variant _ _ f -> f
 
 defaultRenamer :: Renamer
@@ -58,8 +76,8 @@ defaultRenamer xs n = Renaming [] $ xs ++ sep ++ show (n+1)
       | otherwise = ""
 
 withRenamer :: Name -> Renamer -> Name
-Fixed x `withRenamer` _ = Fixed x
-Unique n xs _ `withRenamer` f = Unique n xs f
+Fixed x l `withRenamer` _ = Fixed x l
+Unique n xs l _ `withRenamer` f = Unique n xs l f
 Variant x xs _ `withRenamer` f = Variant x xs f
 
 instance Eq Name where
@@ -71,13 +89,21 @@ instance Ord Name where
 -- It's important that FixedNames come first so that they get added
 -- first to the used names list in Jukebox.TPTP.Print.prettyRename.
 compareName :: Name -> Either FixedName (Either Int64 (Name, [Name]))
-compareName (Fixed xs) = Left xs
-compareName (Unique n _ _) = Right (Left n)
+compareName (Fixed xs _) = Left xs
+compareName (Unique n _ _ _) = Right (Left n)
 compareName (Variant x xs _) = Right (Right (x, xs))
 
 instance Show Name where
-  show (Fixed x) = show x
-  show (Unique n xs f) = ys ++ "@" ++ show n
+  show (Fixed x ml) =
+    show x ++
+    case ml of
+      Nothing -> ""
+      Just l -> "[" ++ l ++ "]"
+  show (Unique n xs ml f) =
+    ys ++ "@" ++ show n ++
+    case ml of
+      Nothing -> ""
+      Just l -> "[" ++ l ++ "]"
     where
       Renaming _ ys = f xs 0
   show (Variant x xs _) =
@@ -88,7 +114,7 @@ class Named a where
   name :: a -> Name
 
 instance Named [Char] where
-  name = Fixed . Basic . intern
+  name x = Fixed (Basic (intern x)) Nothing
 
 instance Named Integer where
   name n = name ("n" ++ show n)
@@ -138,7 +164,7 @@ newtype NameM a =
 
 runNameM :: [Name] -> NameM a -> a
 runNameM xs m =
-  evalState (unNameM m) (maximum (0:[ succ n | Unique n _ _ <- xs ]))
+  evalState (unNameM m) (maximum (0:[ succ n | Unique n _ _ _ <- xs ]))
 
 newName :: Named a => a -> NameM Name
 newName x = NameM $ do
@@ -146,4 +172,4 @@ newName x = NameM $ do
   let idx' = idx+1
   when (idx' < 0) $ error "Name.newName: too many names"
   put $! idx'
-  return $! Unique idx' (base x) (renamer x)
+  return $! Unique idx' (base x) (label x) (renamer x)
