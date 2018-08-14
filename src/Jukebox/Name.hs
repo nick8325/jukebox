@@ -94,11 +94,7 @@ compareName (Unique n _ _ _) = Right (Left n)
 compareName (Variant x xs _) = Right (Right (x, xs))
 
 instance Show Name where
-  show (Fixed x ml) =
-    show x ++
-    case ml of
-      Nothing -> ""
-      Just l -> "[" ++ l ++ "]"
+  show (Fixed x _) = show x
   show (Unique n xs ml f) =
     ys ++ "@" ++ show n ++
     case ml of
