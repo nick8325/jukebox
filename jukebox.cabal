@@ -19,10 +19,6 @@ License: BSD3
 License-file: LICENSE
 extra-source-files: src/errors.h gcc-static-libstdc++
 
-flag minisat
-  Description: Use minisat. Required for monotonicity inference.
-  Default: True
-
 flag static-cxx
   description: Build a binary which statically links against libstdc++.
   default: False
@@ -33,21 +29,12 @@ source-repository head
 
 Library
   Build-depends: base >= 4 && < 5, array, transformers >= 0.4.0.0, directory,
-    filepath, pretty >= 1.1.2.0, symbol, dlist, process, containers, uglymemo
+    filepath, pretty >= 1.1.2.0, symbol, dlist, process, containers, uglymemo,
+    minisat
   if !impl(ghc >= 8.0)
     Build-depends: semigroups
   if impl(ghc >= 8.6)
     extensions: NoMonadFailDesugaring
-  if flag(minisat)
-    Build-depends: minisat
-    Exposed-modules:
-      Jukebox.Sat
-      Jukebox.Sat.ThreeValued
-      Jukebox.Sat.Equality
-      Jukebox.Sat.Minimise
-      Jukebox.Sat.Easy
-  else
-    cpp-options: -DNO_MINISAT
   ghc-options: -W -fno-warn-incomplete-patterns
   Build-tools: alex
   Hs-source-dirs: src
@@ -58,6 +45,11 @@ Library
     Jukebox.Options
     Jukebox.ExternalProvers.E
     Jukebox.ExternalProvers.SPASS
+    Jukebox.Sat
+    Jukebox.Sat.ThreeValued
+    Jukebox.Sat.Equality
+    Jukebox.Sat.Minimise
+    Jukebox.Sat.Easy
     Jukebox.SMTLIB
     Jukebox.Toolbox
     Jukebox.Tools.Clausify
