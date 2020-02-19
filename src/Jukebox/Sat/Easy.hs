@@ -77,7 +77,7 @@ modelValue :: Ord a => a -> Sat1 a Bool
 modelValue x = do
   s <- Sat1 ask
   l <- var x
-  Just b <- liftIO (MiniSat.modelValue s l)
+  ~(Just b) <- liftIO (MiniSat.modelValue s l)
   return b
 
 addForm :: Ord a => Form a -> Sat1 a ()

@@ -1,10 +1,11 @@
-{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances, TypeFamilies #-}
+{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances, TypeFamilies, CPP #-}
 {-# OPTIONS_GHC -funfolding-creation-threshold=10000 -funfolding-use-threshold=10000 #-}
 module Jukebox.TPTP.Parsec where
 
 import Control.Applicative
 import Control.Monad
 import Data.List
+import Control.Monad.Fail
 
 -- Parser type and monad instances
 
@@ -35,6 +36,13 @@ instance Monad (Parsec a) where
   return x = Parsec (\ok err inp exp -> ok x err inp exp)
   {-# INLINE (>>=) #-}
   x >>= f = Parsec (\ok err inp exp  -> runParsec x (\y err inp exp -> runParsec (f y) ok err inp exp) err inp exp)
+
+#if __GLASGOW_HASKELL__ < 808
+  {-# INLINE fail #-}
+  fail _ = parseError []
+#endif
+
+instance MonadFail (Parsec a) where
   {-# INLINE fail #-}
   fail _ = parseError []
 

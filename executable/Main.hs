@@ -32,7 +32,12 @@ main = do
     ["help"] -> help
     ["--help"] -> help
     ["--version"] ->
-      putStrLn $ "Jukebox version " ++ VERSION_jukebox
+      putStrLn $ "Jukebox version " ++
+#ifdef VERSION_jukebox
+      VERSION_jukebox
+#else
+      "unknown"
+#endif
     (('-':_):_) -> usage "Expected a tool name as first argument"
     (arg:args) ->
       case [tool | tool <- tools, name tool == arg] of
