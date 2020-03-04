@@ -126,8 +126,8 @@ eliminateMultiplePreconditions flags prob
     map elim prob
     where
       elim inp
-        | length negs /= 1 &&
-          if null poss then not (allowConjunctiveConjectures flags) else multi flags =
+        | (null poss && length negs /= 1 && not (allowConjunctiveConjectures flags)) ||
+          (not (null poss) && length negs > 1 && multi flags) =
           inp{what = clause (Neg ((tuple tys :@: ts) :=: (tuple tys :@: us)):poss)}
         where
           (poss, negs) = partition pos (toLiterals (what inp))
