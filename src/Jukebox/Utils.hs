@@ -31,4 +31,4 @@ popen prog args inp = do
   hFlush stdin
   hClose stdin
   code <- waitForProcess pid
-  fmap (code,) (hGetContents stdout) <* hClose stdout
+  fmap (code,) (hGetContents stdout)
