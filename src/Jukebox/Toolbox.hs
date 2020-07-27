@@ -107,7 +107,6 @@ readTPTPFileBox = readTPTPFile <$> findFileFlags
 
 readTPTPFile :: [FilePath] -> FilePath -> IO String
 readTPTPFile dirs path = do
-  print (dirs, path)
   mfile <- findFileTPTP dirs path
   case mfile of
     Nothing -> do
