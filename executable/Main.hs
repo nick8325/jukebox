@@ -54,7 +54,7 @@ data Tool =
     pipeline :: OptionParser (IO ()) }
 
 tools = external ++ internal
-external = [fof, cnf, uncnf, smt, monotonox, hornToUnit, inferTypes]
+external = [fof, cnf, uncnf, smt, monotonox, hornToUnit, inferTypes, cat]
 internal = [guessmodel, parse]
 
 fof =
@@ -129,3 +129,9 @@ parse =
     forAllFilesBox <*>
       (readProblemBox =>>=
        pure (const (return ())))
+
+cat =
+  Tool "cat" "Find a file and print it out verbatim." $
+    forAllFilesBox <*>
+      (readTPTPFileBox =>>=
+       writeFileBox)

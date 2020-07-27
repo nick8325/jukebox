@@ -1,5 +1,5 @@
 -- Components ("boxes") which can be put together to make tools.
-{-# LANGUAGE RecordWildCards, CPP #-}
+{-# LANGUAGE RecordWildCards, CPP, ScopedTypeVariables #-}
 module Jukebox.Toolbox where
 
 import Jukebox.Options
@@ -16,6 +16,7 @@ import Jukebox.Tools.InferTypes
 import Jukebox.Tools.HornToUnit
 import System.Exit
 import System.IO
+import Control.Exception
 import Jukebox.TPTP.FindFile
 import qualified Data.Map.Strict as Map
 import qualified Jukebox.SMTLIB as SMT
@@ -97,6 +98,25 @@ forAllFiles [] _ = do
   hPutStrLn stderr "You can use \"-\" to read from standard input."
   exitWith (ExitFailure 1)
 forAllFiles xs f = mapM_ f xs
+
+----------------------------------------------------------------------
+-- Read in a single file without parsing it.
+
+readTPTPFileBox :: OptionParser (FilePath -> IO String)
+readTPTPFileBox = readTPTPFile <$> findFileFlags
+
+readTPTPFile :: [FilePath] -> FilePath -> IO String
+readTPTPFile dirs path = do
+  print (dirs, path)
+  mfile <- findFileTPTP dirs path
+  case mfile of
+    Nothing -> do
+      hPutStrLn stderr ("File '" ++ path ++ "' not found")
+      exitWith (ExitFailure 1)
+    Just file ->
+      readFile file `catch` \(e :: IOException) -> do
+        hPrint stderr e
+        exitWith (ExitFailure 1)
 
 ----------------------------------------------------------------------
 -- Read in a single problem.
