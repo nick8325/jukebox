@@ -17,6 +17,7 @@ module Jukebox.TPTP.Lexer(
 import Data.Word
 import Data.Char
 import Data.Ratio
+import Codec.Binary.UTF8.String
 }
 
 $alpha = [a-zA-Z0-9_]
@@ -216,8 +217,8 @@ readDigits f xs = f ys zs
 data TokenStream = At {-# UNPACK #-} !Pos !Contents
 data Contents = Cons !Token TokenStream
 
-scan xs = go (Input (Pos 1 1) '\n' xs)
-  where go inp@(Input pos _ xs) =
+scan xs = go (Input (Pos 1 1) '\n' [] xs)
+  where go inp@(Input pos _ _ xs) =
           case alexScan inp 0 of
                 AlexEOF -> let t = At pos (Cons Eof t) in t
                 AlexError _ -> let t = At pos (Cons Error t) in t
@@ -225,20 +226,19 @@ scan xs = go (Input (Pos 1 1) '\n' xs)
                 AlexToken inp' len act ->
                   At pos (act (take len xs) `Cons` go inp')
 
-data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char String
+data AlexInput = Input {-# UNPACK #-} !Pos {-# UNPACK #-} !Char [Word8] String
 
 alexInputPrevChar :: AlexInput -> Char
-alexInputPrevChar (Input _ c _) = c
+alexInputPrevChar (Input _ c _ _) = c
 
 {-# INLINE alexGetByte #-}
 alexGetByte :: AlexInput -> Maybe (Word8,AlexInput)
-alexGetByte i = fmap f (alexGetChar i)
-  where f (c, i') = (fromIntegral (ord c), i')
-{-# INLINE alexGetChar #-}
-alexGetChar :: AlexInput -> Maybe (Char,AlexInput)
-alexGetChar (Input p _ (x:xs)) =
-  Just (x, Input (advance p x) x xs)
-alexGetChar _ = Nothing
+alexGetByte (Input pos prev (b:bs) xs) =
+  Just (b, Input pos prev bs xs)
+alexGetByte (Input pos _ [] (x:xs)) =
+  case encodeChar x of
+    b:bs -> Just (b, Input (advance pos x) x bs xs)
+alexGetByte (Input _ _ [] []) = Nothing
 
 {-# INLINE advance #-}
 advance :: Pos -> Char -> Pos
