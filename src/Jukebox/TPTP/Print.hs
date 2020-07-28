@@ -18,6 +18,7 @@ import Jukebox.Name
 import Jukebox.Utils
 import Text.PrettyPrint.HughesPJClass
 import Control.Monad.Trans.State.Strict
+import Data.Symbol
 
 pPrintClauses :: Problem Clause -> Doc
 pPrintClauses prob0
@@ -204,10 +205,10 @@ instance Pretty Name where
   pPrint = text . show
 
 instance Show L.Token where
-  show L.Atom{L.tokenName = x} = escapeAtom x
+  show L.Atom{L.tokenName = x} = escapeAtom (unintern x)
   show L.Defined{L.defined = x} = show x
-  show L.Var{L.tokenName = x} = x
-  show L.DistinctObject{L.tokenName = x} = quote '"' x
+  show L.Var{L.tokenName = x} = unintern x
+  show L.DistinctObject{L.tokenName = x} = quote '"' (unintern x)
   show L.Number{L.value = x} = show x
   show L.Punct{L.kind = x} = show x
   show L.Eof = "end of file"
@@ -340,7 +341,7 @@ prettyNames x0 = mapName replace x
     add1 (Fixed xs _) (scope, used) =
       (scope, Set.insert (show xs) used)
     add1 x@(Unique _ base _ f) (scope, used) =
-      addWith base f x (scope, used)
+      addWith (unintern base) f x (scope, used)
     add1 x@(Variant y _ f) (scope, used) =
       addWith (base y) f x (scope, used)
 

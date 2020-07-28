@@ -3,7 +3,7 @@
 -- Roughly taken from the TPTP syntax reference
 {
 {-# OPTIONS_GHC -O2 -fno-warn-deprecated-flags #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, OverloadedStrings #-}
 module Jukebox.TPTP.Lexer(
   scan,
   Pos(..),
@@ -18,6 +18,7 @@ import Data.Word
 import Data.Char
 import Data.Ratio
 import Codec.Binary.UTF8.String
+import Data.Symbol
 }
 
 $alpha = [a-zA-Z0-9_]
@@ -71,11 +72,11 @@ $white+ ;
 -- Atoms with funny quoted names (here we diverge from the official
 -- syntax, which only allows the escape sequences \\ and \' in quoted
 -- atoms: we allow \ to be followed by any printable character)
-"'"  @quoted+ "'" { Atom Normal . unquote }
+"'"  @quoted+ "'" { Atom Normal . copy . unquote }
 -- Vars are easy :)
 [A-Z][$alpha]* { Var . copy }
 -- Distinct objects, which are double-quoted
-\" @dquoted+  \" { DistinctObject . unquote }
+\" @dquoted+  \" { DistinctObject . copy . unquote }
 -- Numbers
 [\+\-]? @num/($anything # $alpha) { Number . read }
 [\+\-]? @num\/@pnum { Rational . readRational }
@@ -98,10 +99,10 @@ $white+ ;
 
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
-data Token = Atom { keyword :: !Keyword, tokenName :: !String }
+data Token = Atom { keyword :: !Keyword, tokenName :: {-# UNPACK #-} !Symbol }
            | Defined { defined :: !Defined  }
-           | Var { tokenName :: !String }
-           | DistinctObject { tokenName :: !String }
+           | Var { tokenName :: {-# UNPACK #-} !Symbol }
+           | DistinctObject { tokenName :: {-# UNPACK #-} !Symbol }
            | Number { value :: !Integer }
            | Rational { ratValue :: !Rational }
            | Real { ratValue :: !Rational }
@@ -152,25 +153,28 @@ data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
            | Subtype | SequentArrow -- THF
              deriving (Eq, Ord)
 
+showPunct :: Punct -> Symbol
+showPunct x =
+  case x of {
+    LParen -> "("; RParen -> ")"; LBrack -> "["; RBrack -> "]";
+    Comma -> ","; Dot -> "."; Or -> "|"; And -> "&"; Not -> "~";
+    Iff -> "<=>"; Implies -> "=>"; Follows -> "<="; Xor -> "<~>";
+    Nor -> "~|"; Nand -> "~&"; Eq -> "="; Neq -> "!="; ForAll -> "!";
+    Exists -> "?"; Let -> ":="; Colon -> ":"; Times -> "*"; Plus -> "+";
+    FunArrow -> ">"; Lambda -> "^"; Apply -> "@"; ForAllLam -> "!!";
+    ExistsLam -> "??"; Some -> "@+"; The -> "@-"; Subtype -> "<<";
+    SequentArrow -> "-->"; DependentProduct -> "!>"; DependentSum -> "?*";
+    LetTerm -> ":-" }
+
 instance Show Punct where
-  show x =
-    case x of {
-      LParen -> "("; RParen -> ")"; LBrack -> "["; RBrack -> "]";
-      Comma -> ","; Dot -> "."; Or -> "|"; And -> "&"; Not -> "~";
-      Iff -> "<=>"; Implies -> "=>"; Follows -> "<="; Xor -> "<~>";
-      Nor -> "~|"; Nand -> "~&"; Eq -> "="; Neq -> "!="; ForAll -> "!";
-      Exists -> "?"; Let -> ":="; Colon -> ":"; Times -> "*"; Plus -> "+";
-      FunArrow -> ">"; Lambda -> "^"; Apply -> "@"; ForAllLam -> "!!";
-      ExistsLam -> "??"; Some -> "@+"; The -> "@-"; Subtype -> "<<";
-      SequentArrow -> "-->"; DependentProduct -> "!>"; DependentSum -> "?*";
-      LetTerm -> ":-" }
+  show = unintern . showPunct
 
 p x = const (Punct x)
 k x = Atom x . copy
 d x = const (Defined x)
 
-copy :: String -> String
-copy = id
+copy :: String -> Symbol
+copy = intern
 
 unquote :: String -> String
 unquote (_:x)

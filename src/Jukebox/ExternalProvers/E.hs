@@ -14,6 +14,7 @@ import Jukebox.TPTP.Lexer hiding (Normal, keyword, Axiom, Var, Theorem)
 import Data.Maybe
 import qualified Data.Map.Strict as Map
 import Data.Map(Map)
+import Data.Symbol
 
 data EFlags = EFlags {
   eprover :: String,
@@ -62,8 +63,8 @@ runE flags prob
 
 extractAnswer :: Symbolic a => a -> String -> Either Answer [Term]
 extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
-  where varMap = Map.fromList [(show (name x), x) | x <- vars prob]
-        funMap = Map.fromList [(show (name x), x) | x <- functions prob]
+  where varMap = Map.fromList [(intern (show (name x)), x) | x <- vars prob]
+        funMap = Map.fromList [(intern (show (name x)), x) | x <- functions prob]
         result = lines str
         status = head $
           [Sat Satisfiable Nothing | "# SZS status Satisfiable" <- result] ++
@@ -97,5 +98,5 @@ extractAnswer prob str = fromMaybe (Left status) (fmap Right answer)
         terms =
           bracks (term `sepBy1` punct Comma)
           <|> return []
-        lookup :: Ord a => Map String a -> String -> a
+        lookup :: Map Symbol a -> Symbol -> a
         lookup m x = Map.findWithDefault (error "runE: result from E mentions free names") x m

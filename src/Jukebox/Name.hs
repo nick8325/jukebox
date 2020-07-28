@@ -14,7 +14,7 @@ import Control.Applicative
 
 data Name =
     Fixed !FixedName (Maybe String)
-  | Unique {-# UNPACK #-} !Int64 String (Maybe String) Renamer
+  | Unique {-# UNPACK #-} !Int64 {-# UNPACK #-} !Symbol (Maybe String) Renamer
   | Variant !Name ![Name] Renamer
 
 data FixedName =
@@ -32,7 +32,7 @@ base :: Named a => a -> String
 base x =
   case name x of
     Fixed x _ -> show x
-    Unique _ xs _ _ -> xs
+    Unique _ xs _ _ -> unintern xs
     Variant x _ _ -> base x
 
 label :: Named a => a -> Maybe String
@@ -101,7 +101,7 @@ instance Show Name where
       Nothing -> ""
       Just l -> "[" ++ l ++ "]"
     where
-      Renaming _ ys = f xs 0
+      Renaming _ ys = f (unintern xs) 0
   show (Variant x xs _) =
     "variant(" ++ show x ++
       concat [", " ++ show x | x <- xs] ++ ")"
@@ -110,7 +110,10 @@ class Named a where
   name :: a -> Name
 
 instance Named [Char] where
-  name x = Fixed (Basic (intern x)) Nothing
+  name x = name (intern x)
+
+instance Named Symbol where
+  name x = Fixed (Basic x) Nothing
 
 instance Named Integer where
   name n = name ("n" ++ show n)
@@ -168,4 +171,4 @@ newName x = NameM $ do
   let idx' = idx+1
   when (idx' < 0) $ error "Name.newName: too many names"
   put $! idx'
-  return $! Unique idx' (base x) (label x) (renamer x)
+  return $! Unique idx' (intern (base x)) (label x) (renamer x)

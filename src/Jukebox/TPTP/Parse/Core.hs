@@ -35,9 +35,9 @@ import qualified Jukebox.Name as Name
 data ParseState =
   MkState (Maybe String)           -- filename
           ![Input Form]            -- problem being constructed, inputs are in reverse order
-          !(Map String Type)       -- types in scope
-          !(Map String [Function]) -- functions in scope
-          !(Map String Variable)   -- variables in scope, for CNF
+          !(Map Symbol Type)       -- types in scope
+          !(Map Symbol [Function]) -- functions in scope
+          !(Map Symbol Variable)   -- variables in scope, for CNF
           !Int64                   -- unique supply
 type Parser = Parsec ParsecState
 type ParsecState = UserState ParseState TokenStream
@@ -49,9 +49,9 @@ data IncludeStatement = Include String (Maybe [Tag]) deriving Show
 initialState :: Maybe String -> ParseState
 initialState mfile =
   initialStateFrom mfile []
-    (Map.fromList [(show (name ty), ty) | ty <- [intType, ratType, realType]])
+    (Map.fromList [(intern (show (name ty)), ty) | ty <- [intType, ratType, realType]])
     (Map.fromList
-       [ (fun,
+       [ (intern fun,
           [Fixed (Overloaded (intern fun) (intern (show (name kind)))) Nothing ::: ty
           | (kind, ty) <- tys ])
        | (fun, tys) <- funs ])
@@ -76,7 +76,7 @@ initialState mfile =
        fun ["$to_rat"]  (\ty -> FunType [ty] ratType) ++
        fun ["$to_real"] (\ty -> FunType [ty] realType)
 
-initialStateFrom :: Maybe String -> [Name] -> Map String Type -> Map String [Function] -> ParseState
+initialStateFrom :: Maybe String -> [Name] -> Map Symbol Type -> Map Symbol [Function] -> ParseState
 initialStateFrom mfile xs tys fs = MkState mfile [] tys fs Map.empty n
   where
     n = maximum (0:[succ m | Unique m _ _ _ <- xs])
@@ -277,7 +277,7 @@ kind = do
 
 -- A formula name.
 tag :: Parser Tag
-tag = atom <|> fmap show number <?> "clause name"
+tag = fmap unintern atom <|> fmap show number <?> "clause name"
 
 -- An include declaration.
 include :: Parser IncludeStatement
@@ -287,7 +287,7 @@ include = do
     name <- atom <?> "quoted filename"
     clauses <- do { punct Comma
                   ; fmap Just (bracks (sepBy1 tag (punct Comma))) } <|> return Nothing
-    return (Include name clauses)
+    return (Include (unintern name) clauses)
   punct Dot
   return res
 
@@ -298,12 +298,12 @@ newFormula input = do
   MkState mfile p t f v n <- getState
   putState (MkState mfile (input:p) t f v n)
   
-newFunction :: String -> FunType -> Parser Function
+newFunction :: Symbol -> FunType -> Parser Function
 newFunction name ty = do
   fs <- lookupFunction ty name
   case [ f | f <- fs, rhs f == ty ] of
     [] ->
-      fatalError $ "Constant " ++ name ++
+      fatalError $ "Constant " ++ unintern name ++
                    " was declared to have type " ++ prettyShow ty ++
                    " but already has type " ++ showTypes (map rhs fs)
     (f:_) -> return f
@@ -312,7 +312,7 @@ showTypes :: [FunType] -> String
 showTypes = intercalate " and " . map prettyShow
 
 {-# INLINE applyFunction #-}
-applyFunction :: String -> [Term] -> Type -> Parser Term
+applyFunction :: Symbol -> [Term] -> Type -> Parser Term
 applyFunction name args res = do
   fs <- lookupFunction (FunType (replicate (length args) indType) res) name
   case [ f | f <- fs, funArgs f == map typ args ] of
@@ -336,7 +336,7 @@ typeError fs@(f@(x ::: _):_) args' = do
                    " of type " ++ intercalate ", " (map (prettyShow . typ) args')
 
 {-# INLINE lookupType #-}
-lookupType :: String -> Parser Type
+lookupType :: Symbol -> Parser Type
 lookupType xs = do
   MkState mfile p t f v n <- getState
   case Map.lookup xs t of
@@ -347,7 +347,7 @@ lookupType xs = do
     Just ty -> return ty
 
 {-# INLINE lookupFunction #-}
-lookupFunction :: FunType -> String -> Parser [Name ::: FunType]
+lookupFunction :: FunType -> Symbol -> Parser [Name ::: FunType]
 lookupFunction def x = do
   MkState mfile p t f v n <- getState
   case Map.lookup x f of
@@ -376,14 +376,14 @@ fof = formula Untyped Map.empty
 -- A thing is either a term or a formula, or a literal that we don't know
 -- if it should be a term or a formula. Instead of a separate formula-parser
 -- and term-parser we have a combined thing-parser.
-data Thing = Apply !String ![Term]
+data Thing = Apply !Symbol ![Term]
            | Term !Term
            | Formula !Form
 
 instance Show Thing where
-  show (Apply f []) = f
+  show (Apply f []) = unintern f
   show (Apply f args) =
-    f ++
+    unintern f ++
       case args of
         [] -> ""
         args -> prettyShow args
@@ -407,9 +407,9 @@ class TermLike a where
   -- Convert from a Thing.
   fromThing :: Thing -> Parser a
   -- Parse a variable occurrence as a term on its own, if that's allowed.
-  var :: Mode -> Map String Variable -> Parser a
+  var :: Mode -> Map Symbol Variable -> Parser a
   -- A parser for this type.
-  parser :: Mode -> Map String Variable -> Parser a
+  parser :: Mode -> Map Symbol Variable -> Parser a
 
 data Mode = Typed | Untyped | NoQuantification
 
@@ -443,7 +443,7 @@ instance TermLike Term where
     x <- variable
     case Map.lookup x ctx of
       Just v -> return (Var v)
-      Nothing -> fatalError $ "unbound variable " ++ x
+      Nothing -> fatalError $ "unbound variable " ++ unintern x
 
 instance TermLike Thing where
   fromThing = return
@@ -460,7 +460,7 @@ instance FormulaLike Thing where fromFormula = Formula
 
 -- An atomic expression.
 {-# INLINEABLE term #-}
-term :: TermLike a => Mode -> Map String Variable -> Parser a
+term :: TermLike a => Mode -> Map Symbol Variable -> Parser a
 term mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
   where
     {-# INLINE function #-}
@@ -492,7 +492,7 @@ term mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
       fromThing (Term ((Fixed x Nothing ::: FunType [] ty) :@: []))
 
 literal, unitary, quantified, formula ::
-  FormulaLike a => Mode -> Map String Variable -> Parser a
+  FormulaLike a => Mode -> Map Symbol Variable -> Parser a
 {-# INLINE literal #-}
 literal mode ctx = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
@@ -529,7 +529,7 @@ quantified mode ctx = do
   q <- (punct L.ForAll >> return ForAll) <|>
        (punct L.Exists >> return Exists)
   vars <- bracks (sepBy1 (binder mode) (punct Comma))
-  let ctx' = foldl' (\m v -> Map.insert (Name.base (Name.name v)) v m) ctx vars
+  let ctx' = foldl' (\m v -> Map.insert (intern (Name.base (Name.name v))) v m) ctx vars
   punct Colon
   rest <- unitary mode ctx' :: Parser Form
   return (fromFormula (q (Bind (Set.fromList vars) rest)))
