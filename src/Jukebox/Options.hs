@@ -18,6 +18,7 @@ import Control.Applicative
 import Data.Monoid
 #endif
 import Data.Semigroup(Semigroup(..))
+import Control.Monad
 
 ----------------------------------------------------------------------
 -- A parser of some kind annotated with a help text of some kind
@@ -158,7 +159,7 @@ flagExpert f = flagMode f == ExpertMode
 -- it doesn't matter what order we write the options in,
 -- and because f and x might understand the same flags.
 data ParParser a = ParParser
-  { val :: IO a, -- impure so we can put system information in our options records
+  { val :: Either Error (IO a), -- impure so we can put system information in our options records
     peek :: [String] -> ParseResult a }
 
 data ParseResult a
@@ -177,9 +178,9 @@ instance Functor ParParser where
   fmap f x = pure f <*> x
 
 instance Applicative ParParser where
-  pure x = ParParser (return x) (const (pure x))
+  pure x = ParParser (Right (return x)) (const (pure x))
   ParParser v p <*> ParParser v' p' =
-    ParParser (v <*> v') (\xs -> p xs <*> p' xs)
+    ParParser (liftM2 (<*>) v v') (\xs -> p xs <*> p' xs)
 
 instance Functor ParseResult where
   fmap f x = pure f <*> x
@@ -196,15 +197,15 @@ instance Applicative ParseResult where
   No f <*> No x = No (f <*> x)
 
 runPar :: ParParser a -> [String] -> Either Error (IO a)
-runPar p [] = Right (val p)
+runPar p [] = val p
 runPar p xs@(x:_) =
   case peek p xs of
     Yes n p' -> runPar p' (drop n xs)
     No _ -> Left (Mistake ("Didn't recognise option " ++ x))
     Error err -> Left err
 
-await :: (String -> Bool) -> a -> (String -> [String] -> ParseResult a) -> ParParser a
-await p def par = ParParser (return def) f
+await :: (String -> Bool) -> Either Error a -> (String -> [String] -> ParseResult a) -> ParParser a
+await p def par = ParParser (return <$> def) f
   where f (x:xs) | p x =
           case par x xs of
             Yes n r -> Yes (n+1) r
@@ -228,14 +229,14 @@ primFlag ::
   -- The argument parser is given the option name.
   a -> ArgParser (String -> a) -> OptionParser a
 primFlag name help p combine def (Annotated desc (SeqParser args f)) =
-  Annotated [desc'] (await p def (g Right))
+  Annotated [desc'] (await p (Right def) (g Right))
   where desc' = Flag name "General options" NormalMode help (unwords desc)
         g comb x xs =
           case f xs >>= comb . ($ x) of
             Left (Mistake err) -> Error (Mistake ("Error in option --" ++ name ++ ": " ++ err))
             Left (Usage code err) -> Error (Usage code err)
             Right y ->
-              Yes args (await p y (g (combine y)))
+              Yes args (await p (Right y) (g (combine y)))
 
 ----------------------------------------------------------------------
 -- Combinators for building OptionParsers.
@@ -267,15 +268,19 @@ bool name help def =
 
 -- A parser that reads all file names from the command line.
 filenames :: OptionParser [String]
-filenames = Annotated [] (from [])
-  where from xs = await p xs (f xs)
-        p x = not ("-" `isPrefixOf` x) || x == "-"
-        f xs y _ = Yes 0 (from (xs ++ [y]))
+filenames = Annotated [] (await p (Left err) (f []))
+  where p x = not ("-" `isPrefixOf` x) || x == "-"
+        f xs y _ = Yes 0 (let ys = xs ++ [y] in await p (Right ys) (f ys))
+
+        err =
+          Usage (ExitFailure 1)
+            ["No input files specified! Try --help.",
+             "You can use \"-\" to read from standard input."]
 
 -- Take a value from the environment.
 io :: IO a -> OptionParser a
 io m = Annotated [] p
-  where p = ParParser m (const (No p))
+  where p = ParParser (Right m) (const (No p))
 
 -- Change the group associated with a set of flags.
 inGroup :: String -> OptionParser a -> OptionParser a

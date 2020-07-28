@@ -93,10 +93,6 @@ forAllFilesBox :: OptionParser ((FilePath -> IO ()) -> IO ())
 forAllFilesBox = forAllFiles <$> filenames
 
 forAllFiles :: [FilePath] -> (FilePath -> IO ()) -> IO ()
-forAllFiles [] _ = do
-  hPutStrLn stderr "No input files specified! Try --help."
-  hPutStrLn stderr "You can use \"-\" to read from standard input."
-  exitWith (ExitFailure 1)
 forAllFiles xs f = mapM_ f xs
 
 ----------------------------------------------------------------------
