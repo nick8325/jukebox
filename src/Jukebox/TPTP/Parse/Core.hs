@@ -175,7 +175,7 @@ punct' p = satisfy p'
 {-# INLINE punct #-}
 punct k = punct' (== k) <?> "'" ++ show k ++ "'"
 {-# INLINE operator #-}
-operator = punct' p <?> "operator"
+operator q = punct' (\x -> p x && q x) <?> "operator"
   where
     p Dot = True
     p Colon = True
@@ -367,6 +367,11 @@ lookupFunction def x = do
       return [decl]
     Just fs -> return fs
 
+getFunctions :: Parser (Map Symbol [Function])
+getFunctions = do
+  MkState _ _ _ f _ _ <- getState
+  return f
+
 -- Parsing formulae.
 
 cnf, tff, fof :: Parser Form
@@ -500,21 +505,50 @@ atomic mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
 
 unary :: TermLike a => Mode -> Map Symbol Variable -> Parser a
 unary mode ctx =
-  atomic mode ctx <|> do
-    Punct p <- operator
-    arg <- atomic mode ctx :: Parser Term
-    fromThing (Apply (showPunct p) [arg])
+  prefix <|> do
+    t <- atomic mode ctx :: Parser Thing
+    maybePostfix t
+  where
+    prefix :: TermLike a => Parser a
+    prefix = do
+      p <- prefixOperator
+      arg <- prefix <|> atomic mode ctx :: Parser Term
+      fromThing (Apply p [arg])
+    maybePostfix, postfix :: TermLike a => Thing -> Parser a
+    maybePostfix t = postfix t <|> fromThing t
+    postfix t = do
+      p <- postfixOperator
+      arg <- fromThing t :: Parser Term
+      maybePostfix (Apply p [arg])
 
 term :: TermLike a => Mode -> Map Symbol Variable -> Parser a
 term mode ctx = do
   t <- unary mode ctx :: Parser Thing
   let
     binop = do
-      Punct p <- operator
+      p <- infixOperator
       lhs <- fromThing t :: Parser Term
       rhs <- unary mode ctx :: Parser Term
-      fromThing (Apply (showPunct p) [lhs, rhs])
+      fromThing (Apply p [lhs, rhs])
   binop <|> fromThing t
+
+postfixOperator :: Parser Symbol
+postfixOperator = do
+  funcs <- getFunctions
+  Punct p <- operator (isPostfix funcs)
+  return (intern ('_':show p))
+
+prefixOperator :: Parser Symbol
+prefixOperator = do
+  funcs <- getFunctions
+  Punct p <- operator (not . isPostfix funcs)
+  return (showPunct p)
+
+infixOperator :: Parser Symbol
+infixOperator = prefixOperator -- we don't syntactically distinguish them
+
+isPostfix :: Map Symbol [Function] -> Punct -> Bool
+isPostfix ctx p = intern ('_':show p) `Map.member` ctx
 
 literal, unitary, quantified, formula ::
   TermLike a => Mode -> Map Symbol Variable -> Parser a
