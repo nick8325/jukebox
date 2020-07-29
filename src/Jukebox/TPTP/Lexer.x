@@ -9,6 +9,7 @@ module Jukebox.TPTP.Lexer(
   Pos(..),
   Token(..),
   Punct(..),
+  showPunct,
   Defined(..),
   Keyword(..),
   TokenStream(..),
@@ -27,6 +28,7 @@ $anything = [. \n]
 @dquoted = ($printable # [\\\"]) | \\ $printable
 @pnum = [1-9][0-9]*
 @num  = 0 | @pnum
+@operator = [^\%\(\)\[\]\,\&\|\~\?\!\$'"a-zA-Z0-9_$white]
 
 tokens :-
 -- Comments and whitespace
@@ -92,10 +94,7 @@ $white+ ;
 ":-" { p LetTerm }
 -- Operators (TFF)
 ":" { p Colon }    "*"   { p Times }   "+"  { p Plus }     ">"  { p FunArrow }
--- Operators (THF)
-"^"  { p Lambda } "@" { p Apply }  "!!" { p ForAllLam }  "??"  { p ExistsLam }
-"@+" { p Some }   "@-" { p The }   "<<" { p Subtype }    "-->" { p SequentArrow }
-"!>" { p DependentProduct }        "?*" { p DependentSum }
+@operator+ { \s -> p (Other (copy s)) s }
 
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
@@ -148,9 +147,7 @@ data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
            | Or | And | Not | Iff | Implies | Follows | Xor | Nor | Nand
            | Eq | Neq | ForAll | Exists | Let | LetTerm -- FOF
            | Colon | Times | Plus | FunArrow -- TFF
-           | Lambda | Apply | ForAllLam | ExistsLam
-           | DependentProduct | DependentSum | Some | The
-           | Subtype | SequentArrow -- THF
+           | Other {-# UNPACK #-} !Symbol -- user-defined
              deriving (Eq, Ord)
 
 showPunct :: Punct -> Symbol
@@ -161,10 +158,7 @@ showPunct x =
     Iff -> "<=>"; Implies -> "=>"; Follows -> "<="; Xor -> "<~>";
     Nor -> "~|"; Nand -> "~&"; Eq -> "="; Neq -> "!="; ForAll -> "!";
     Exists -> "?"; Let -> ":="; Colon -> ":"; Times -> "*"; Plus -> "+";
-    FunArrow -> ">"; Lambda -> "^"; Apply -> "@"; ForAllLam -> "!!";
-    ExistsLam -> "??"; Some -> "@+"; The -> "@-"; Subtype -> "<<";
-    SequentArrow -> "-->"; DependentProduct -> "!>"; DependentSum -> "?*";
-    LetTerm -> ":-" }
+    FunArrow -> ">"; LetTerm -> ":-"; Other x -> x }
 
 instance Show Punct where
   show = unintern . showPunct

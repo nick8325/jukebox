@@ -20,7 +20,7 @@ import Data.Symbol
 
 import Jukebox.TPTP.Lexer hiding
   (Pos, Error, Include, Var, Type, Not, ForAll,
-   Exists, And, Or, Type, Apply, Implies, Follows, Xor, Nand, Nor,
+   Exists, And, Or, Type, Implies, Follows, Xor, Nand, Nor,
    Rational, Real, NegatedConjecture, Question,
    Axiom, Hypothesis, Definition, Assumption, Lemma, Theorem, NegatedConjecture,
    Conjecture, Question,
@@ -174,6 +174,16 @@ punct' p = satisfy p'
         p' _ = False
 {-# INLINE punct #-}
 punct k = punct' (== k) <?> "'" ++ show k ++ "'"
+{-# INLINE operator #-}
+operator = punct' p <?> "operator"
+  where
+    p Dot = True
+    p Colon = True
+    p Times = True
+    p Plus = True
+    p FunArrow = True
+    p (Other _) = True
+    p _ = False
 {-# INLINE defined' #-}
 defined' p = fmap L.defined (satisfy p')
   where p' Defined { L.defined = d } = p d
@@ -395,7 +405,7 @@ instance Show Thing where
 -- the error messages are better). For that reason, our parser is
 -- parametrised on the type of thing you want to parse. We have two
 -- main parsers:
---   * 'term' parses an atomic expression
+--   * 'term' parses a term or predicate
 --   * 'formula' parses an arbitrary expression
 -- You can instantiate 'term' for Term, Form or Thing; in each case
 -- you get an appropriate parser. You can instantiate 'formula' for
@@ -408,6 +418,8 @@ class TermLike a where
   fromThing :: Thing -> Parser a
   -- Parse a variable occurrence as a term on its own, if that's allowed.
   var :: Mode -> Map Symbol Variable -> Parser a
+  -- Parse the input as a formula, if that's allowed.
+  parseFormula :: Parser Form -> Parser a
   -- A parser for this type.
   parser :: Mode -> Map Symbol Variable -> Parser a
 
@@ -420,6 +432,7 @@ instance TermLike Form where
   fromThing (Formula f) = return f
   -- A variable itself is not a valid formula.
   var _ _ = mzero
+  parseFormula = id
   parser = formula
 
 instance TermLike Term where
@@ -427,6 +440,7 @@ instance TermLike Term where
   fromThing (Apply x xs) = applyFunction x xs indType
   fromThing (Term t) = return t
   fromThing (Formula _) = mzero
+  parseFormula _ = mzero
   parser = term
 
   {-# INLINE var #-}
@@ -448,20 +462,13 @@ instance TermLike Term where
 instance TermLike Thing where
   fromThing = return
   var mode ctx = fmap Term (var mode ctx)
+  parseFormula = fmap Formula
   parser = formula
 
--- Types that can represent formulae. These are the types on which
--- you can use 'formula'.
-class TermLike a => FormulaLike a where
-  fromFormula :: Form -> a
-
-instance FormulaLike Form where fromFormula = id
-instance FormulaLike Thing where fromFormula = Formula
-
 -- An atomic expression.
-{-# INLINEABLE term #-}
-term :: TermLike a => Mode -> Map Symbol Variable -> Parser a
-term mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
+{-# INLINEABLE atomic #-}
+atomic :: TermLike a => Mode -> Map Symbol Variable -> Parser a
+atomic mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
   where
     {-# INLINE function #-}
     function = do
@@ -491,18 +498,36 @@ term mode ctx = function <|> var mode ctx <|> num <|> parens (parser mode ctx)
     constant x ty =
       fromThing (Term ((Fixed x Nothing ::: FunType [] ty) :@: []))
 
+unary :: TermLike a => Mode -> Map Symbol Variable -> Parser a
+unary mode ctx =
+  atomic mode ctx <|> do
+    Punct p <- operator
+    arg <- atomic mode ctx :: Parser Term
+    fromThing (Apply (showPunct p) [arg])
+
+term :: TermLike a => Mode -> Map Symbol Variable -> Parser a
+term mode ctx = do
+  t <- unary mode ctx :: Parser Thing
+  let
+    binop = do
+      Punct p <- operator
+      lhs <- fromThing t :: Parser Term
+      rhs <- unary mode ctx :: Parser Term
+      fromThing (Apply (showPunct p) [lhs, rhs])
+  binop <|> fromThing t
+
 literal, unitary, quantified, formula ::
-  FormulaLike a => Mode -> Map Symbol Variable -> Parser a
+  TermLike a => Mode -> Map Symbol Variable -> Parser a
 {-# INLINE literal #-}
 literal mode ctx = true <|> false <|> binary <?> "literal"
   where {-# INLINE true #-}
-        true = do { defined DTrue; return (fromFormula (And [])) }
+        true = parseFormula $ do { defined DTrue; return (And []) }
         {-# INLINE false #-}
-        false = do { defined DFalse; return (fromFormula (Or [])) }
+        false = parseFormula $ do { defined DFalse; return (Or []) }
         binary = do
           x <- term mode ctx :: Parser Thing
           let {-# INLINE f #-}
-              f p sign = do
+              f p sign = parseFormula $ do
                punct p
                lhs <- fromThing x :: Parser Term
                rhs <- term mode ctx :: Parser Term
@@ -514,25 +539,25 @@ literal mode ctx = true <|> false <|> binary <?> "literal"
                when (typ lhs == O) $
                  fatalError $ "Type error in equality '" ++ prettyShow (prettyNames form) ++
                  "': can't use equality on predicate (use <=> or <~> instead)"
-               return (fromFormula form)
+               return form
           f Eq Pos <|> f Neq Neg <|> fromThing x
 
 {-# INLINEABLE unitary #-}
 unitary mode ctx = negation <|> quantified mode ctx <|> literal mode ctx
   where {-# INLINE negation #-}
-        negation = do
+        negation = parseFormula $ do
           punct L.Not
-          fmap (fromFormula . Not) (unitary mode ctx :: Parser Form)
+          fmap Not $ unitary mode ctx
 
 {-# INLINE quantified #-}
-quantified mode ctx = do
+quantified mode ctx = parseFormula $ do
   q <- (punct L.ForAll >> return ForAll) <|>
        (punct L.Exists >> return Exists)
   vars <- bracks (sepBy1 (binder mode) (punct Comma))
   let ctx' = foldl' (\m v -> Map.insert (intern (Name.base (Name.name v))) v m) ctx vars
   punct Colon
   rest <- unitary mode ctx' :: Parser Form
-  return (fromFormula (q (Bind (Set.fromList vars) rest)))
+  return (q (Bind (Set.fromList vars) rest))
 
 -- A general formula.
 {-# INLINEABLE formula #-}
@@ -540,11 +565,11 @@ formula mode ctx = do
   x <- unitary mode ctx :: Parser Thing
   let binop op t u = op [t, u]
       {-# INLINE connective #-}
-      connective p op = do
+      connective p op = parseFormula $ do
         punct p
         lhs <- fromThing x
         rhs <- formula mode ctx :: Parser Form
-        return (fromFormula (op lhs rhs))
+        return (op lhs rhs)
   connective L.And (binop And) <|> connective L.Or (binop Or) <|>
    connective Iff Equiv <|>
    connective L.Implies (Connective Implies) <|>
