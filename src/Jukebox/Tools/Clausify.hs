@@ -429,7 +429,7 @@ skolemName :: Named a => String -> a -> M Name
 skolemName prefix v = do
   s <- getName
   name <- lift (newName v)
-  return $ withRenamer name $ \str i ->
+  return $ withLabel "skolem" $ withRenamer name $ \str i ->
     Renaming [prefix ++ show (i+1)] $
       prefix ++ show (i+1) ++ concat [ "_" ++ t | t <- [s, str], not (null t) ]
 
