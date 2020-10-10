@@ -56,7 +56,7 @@ initialState mfile =
           | (kind, ty) <- tys ])
        | (fun, tys) <- funs ])
    where
-     overloads f = [(ty, f ty) | ty <- [intType, ratType, realType]]
+     overloads f = [(ty, f ty) | ty <- [intType, ratType, realType, indType]]
      fun xs f = [(x, overloads f) | x <- xs]
 
      funs =

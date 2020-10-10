@@ -82,7 +82,17 @@ translate scheme mono f =
                 fmap notInwards $ prepare $ nt f
       trType O = O
       trType _ = indType
-  in Form.run (translate1 scheme mono f') (return . mapType trType)
+      quoteNumbers tagName name
+        | isNumber name = name `variant` [tagName]
+        | otherwise = name
+      isNumber (Fixed (Integer _) _) = True
+      isNumber (Fixed (Rational _) _) = True
+      isNumber (Fixed (Real _) _) = True
+      isNumber _ = False
+
+  in Form.run (translate1 scheme mono f') $ \form -> do
+    name <- newName ""
+    return $ mapName (quoteNumbers name) $ mapType trType form
 
 -- Typing functions.
 
