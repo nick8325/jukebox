@@ -105,6 +105,26 @@ size :: Term -> Int
 size Var{} = 1
 size (_f :@: xs) = 1 + sum (map size xs)
 
+subterms :: Term -> [Term]
+subterms t =
+  t:
+  case t of
+    Var _ -> []
+    _f :@: ts -> concatMap subterms ts
+
+contexts :: Term -> [(Term, Term -> Term)]
+contexts t = ctxs t id
+  where
+    ctxs :: Term -> (Term -> Term) -> [(Term, Term -> Term)]
+    ctxs t k =
+      (t, k):
+      case t of
+        Var _ -> []
+        f :@: ts ->
+          concat
+          [ ctxs (ts !! i) (\u -> k (f :@: (take i ts ++ [u] ++ drop (i+1) ts)))
+          | i <- [0..length ts-1] ]
+
 ----------------------------------------------------------------------
 -- Literals
 
@@ -519,6 +539,19 @@ subst s t =
 
     generic :: Symbolic a => a -> a
     generic t = recursively (subst s) t
+
+match :: Term -> Term -> Maybe Subst
+match pat t = execStateT (matchM pat t) ids
+  where
+    matchM (Var x) t = do
+      sub <- get
+      case Map.lookup x sub of
+        Nothing -> put (sub |+| (x |=> t))
+        Just u | u == t -> return ()
+        _ -> mzero
+    matchM (f :@: ts) (g :@: us) | f == g =
+      zipWithM_ matchM ts us
+    matchM _ _ = mzero
 
 ----------------------------------------------------------------------
 -- Functions operating on symbolic terms
