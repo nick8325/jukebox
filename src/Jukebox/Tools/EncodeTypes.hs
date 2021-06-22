@@ -65,7 +65,7 @@ translate1 scheme mono f = Form.run f $ \inps -> do
         map (simplify . ForAll . bind) . split . simplify . foldr (/\) true $
           funcAxioms ++ typeAxioms
   return $
-    [ Input ("types" ++ show i) (Ax Axiom) (Inference "type_axiom" "esa" []) axiom | (axiom, i) <- zip axioms [1..] ] ++
+    [ Input ("types" ++ show i) (Ax Axiom) (inference "type_axiom" "esa" []) axiom | (axiom, i) <- zip axioms [1..] ] ++
     map (guard scheme1' mono') inps
 
 translate scheme mono f =
@@ -75,10 +75,10 @@ translate scheme mono f =
             let prepare f = fmap (foldr (/\) true) (run (withName tag (removeEquiv (simplify f))))
             case kind of
               Ax{} ->
-                fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
+                fmap (Input tag kind (inference "type_encoding" "esa" [inp])) $
                   prepare f
               Conj{} ->
-                fmap (Input tag kind (Inference "type_encoding" "esa" [inp])) $
+                fmap (Input tag kind (inference "type_encoding" "esa" [inp])) $
                 fmap notInwards $ prepare $ nt f
       trType O = O
       trType _ = indType

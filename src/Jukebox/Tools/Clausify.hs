@@ -63,7 +63,7 @@ clausify flags inps = Form.run inps (run . clausifyInputs [] [])
     do cs <-
          clausForm NegatedConjecture inp {
            what = nt a,
-           source = Inference "negate_conjecture" "cth" [inp] }
+           source = inference "negate_conjecture" "cth" [inp] }
        clausifyObligs theory (cs:obligs) inp as inps
 
   split' a | splitting flags = if null split_a then [true] else split_a
@@ -125,11 +125,11 @@ clausForm kind inp =
        noExistsPs      <- mapM removeExists                    . check $ noEquivPs
        noExpensiveOrPs <- fmap concat . mapM removeExpensiveOr . check $ noExistsPs
        noForAllPs      <- lift . mapM uniqueNames              . check $ noExpensiveOrPs
-       let !thm         = Input "skolemised" (Ax kind) (Inference "clausify" "esa" [inp]) (And noForAllPs)
+       let !thm         = Input "skolemised" (Ax kind) (inference "clausify" "esa" [inp]) (And noForAllPs)
            !cnf_        = concatMap cnf                        . check $ noForAllPs
            !simp        = simplifyCNF                          . check $ cnf_
            cs           = fmap clause                                  $ simp
-           inps         = [ Input (tag inp ++ i) (Ax kind) (Inference "clausify" "thm" [thm]) c
+           inps         = [ Input (tag inp ++ i) (Ax kind) (inference "clausify" "thm" [thm]) c
                           | (c, i) <- zip cs ("":
                                         [ '_':show i | i <- [1..] ]) ]
        return $! force . check                                         $ inps

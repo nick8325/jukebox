@@ -383,7 +383,24 @@ data Input a = Input
 data InputSource =
     Unknown
   | FromFile String Int
-  | Inference String String [Input Form]
+  | Inference String String [InputPlus Form]
+
+inference :: String -> String -> [Input Form] -> InputSource
+inference name status parents = Inference name status (map inputPlus parents)
+
+data InputPlus a = InputPlus
+  { inputNames     :: [Name],
+    inputFunctions :: [Function],
+    inputTypes     :: [Type],
+    inputValue     :: Input a }
+
+inputPlus :: Symbolic a => Input a -> InputPlus a
+inputPlus x =
+  InputPlus {
+    inputNames = names x,
+    inputFunctions = functions x,
+    inputTypes = types' x,
+    inputValue = x }
 
 type Problem a = [Input a]
 
@@ -580,22 +597,31 @@ termsAndBinders :: forall a b.
                    Symbolic a =>
                    (Term -> DList b) ->
                    (forall a. Symbolic a => Bind a -> [b]) ->
+                   (forall a. Symbolic a => Input a -> [b]) ->
                    a -> [b]
-termsAndBinders term bind = DList.toList . aux where
+termsAndBinders term bind inp = DList.toList . aux where
   aux :: Symbolic c => c -> DList b
   aux t =
     collect aux t `mplus`
     case typeOf t of
       Term -> term t
       Bind_ -> DList.fromList (bind t)
+      Input_ -> DList.fromList (inp t)
       _ -> mzero
 
 names :: Symbolic a => a -> [Name]
-names = usort . termsAndBinders term bind where
+names = usort . termsAndBinders term bind inp where
   term t = DList.fromList (allNames t) `mappend` DList.fromList (allNames (typ t))
 
   bind :: Symbolic a => Bind a -> [Name]
   bind (Bind vs _) = map name (Set.toList vs)
+
+  inp :: Symbolic a => Input a -> [Name]
+  inp (Input _ _ source _) =
+    case source of
+      Inference _ _ inps ->
+        concatMap inputNames inps
+      _ -> []
 
 run :: Symbolic a => a -> (a -> NameM b) -> b
 run x f = runNameM (names x) (f x)
@@ -604,21 +630,28 @@ run_ :: Symbolic a => a -> NameM b -> b
 run_ x mx = run x (const mx)
 
 types :: Symbolic a => a -> [Type]
-types = usort . termsAndBinders term bind where
+types = usort . termsAndBinders term bind inp where
   term t = return (typ t)
 
   bind :: Symbolic a => Bind a -> [Type]
   bind (Bind vs _) = map typ (Set.toList vs)
 
+  inp :: Symbolic a => Input a -> [Type]
+  inp (Input _ _ source _) =
+    case source of
+      Inference _ _ inps ->
+        concatMap inputTypes inps
+      _ -> []
+
 types' :: Symbolic a => a -> [Type]
 types' = filter (/= O) . types
 
 terms :: Symbolic a => a -> [Term]
-terms = usort . termsAndBinders term mempty where
+terms = usort . termsAndBinders term mempty mempty where
   term t = return t
 
 vars :: Symbolic a => a -> [Variable]
-vars = usort . termsAndBinders term bind where
+vars = usort . termsAndBinders term bind mempty where
   term (Var x) = return x
   term _ = mempty
 
@@ -626,9 +659,16 @@ vars = usort . termsAndBinders term bind where
   bind (Bind vs _) = Set.toList vs
 
 functions :: Symbolic a => a -> [Function]
-functions = usort . termsAndBinders term mempty where
+functions = usort . termsAndBinders term mempty inp where
   term (f :@: _) = return f
   term _ = mempty
+
+  inp :: Symbolic a => Input a -> [Function]
+  inp (Input _ _ source _) =
+    case source of
+      Inference _ _ inps ->
+        concatMap inputFunctions inps
+      _ -> []
 
 funOcc :: Symbolic a => Function -> a -> Int
 funOcc f x = getSum (occ x)
@@ -645,7 +685,7 @@ funOcc f x = getSum (occ x)
 
 funsOcc :: Symbolic a => a -> Map Function Int
 funsOcc =
-  Map.fromList . map f . group . sort . termsAndBinders term mempty
+  Map.fromList . map f . group . sort . termsAndBinders term mempty mempty
   where
     term (f :@: _) = return f
     term _ = mempty
@@ -742,12 +782,31 @@ mapName f0 = rename
       case typeOf t of
         Term -> term t
         Bind_ -> bind t
+        Input_ -> input t
         _ -> recursively rename t
 
     bind :: Symbolic a => Bind a -> Bind a
     bind (Bind vs t) =  Bind (Set.map var vs) (rename t)
     term (f :@: ts) = fun f :@: map term ts
     term (Var x) = Var (var x)
+
+    input :: Symbolic a => Input a -> Input a
+    input (Input name kind source what) =
+      Input name kind source' (rename what)
+      where
+        source' =
+          case source of
+            Inference inf status forms ->
+              Inference inf status (map inputPlus forms)
+            _ -> source
+
+    inputPlus  :: InputPlus Form -> InputPlus Form
+    inputPlus inp =
+      InputPlus {
+        inputNames = map f (inputNames inp),
+        inputFunctions = map fun (inputFunctions inp),
+        inputTypes = map type_ (inputTypes inp),
+        inputValue = input (inputValue inp) }
 
     var = memo $ \(x ::: ty) -> f x ::: type_ ty
     fun = memo $ \(x ::: FunType args res) ->

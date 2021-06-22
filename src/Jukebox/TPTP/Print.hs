@@ -69,43 +69,43 @@ pPrintProof prob =
     annot :: Input Form -> State (Int, Map (Kind, Form) Int) [(Input Form, (String, [Doc]))]
     annot inp
       -- Formula is identical to its parent
-      | Inference _ _ [inp'] <- source inp,
+      | Inference _ _ [InputPlus{inputValue = inp'}] <- source inp,
           let [p, q] = prettyNames [what inp, what inp'] in
           kind inp == kind inp' &&
           -- I have NO idea why this doesn't work without show here :(
           show p == show q =
             annot inp { source = source inp' }
-      | otherwise = do
-          mn <- findNumber inp
-          case mn of
-            Just _ ->
-              -- Already processed this formula
-              return []
-            Nothing -> do
-              let
-                ret k stuff = do
-                  res <- newNumber inp
-                  case res of
-                    Just n ->
-                      return [(inp { tag = clause n }, (k, stuff))]
-                    Nothing ->
-                      return []
+    annot inp = do
+      mn <- findNumber inp
+      case mn of
+        Just _ ->
+          -- Already processed this formula
+          return []
+        Nothing -> do
+          let
+            ret k stuff = do
+              res <- newNumber inp
+              case res of
+                Just n ->
+                  return [(inp { tag = clause n }, (k, stuff))]
+                Nothing ->
+                  return []
 
-              case source inp of
-                Unknown -> ret "plain" []
-                FromFile file _ ->
-                  ret (show (kind inp))
-                    [fun "file" [text (escapeAtom file), text (escapeAtom (tag inp))]]
-                Inference name status parents -> do
-                  -- Process all parents first
-                  rest <- mapM annot parents
-                  nums <- map fromJust <$> mapM findNumber parents
+          case source inp of
+            Unknown -> ret "plain" []
+            FromFile file _ ->
+              ret (show (kind inp))
+                [fun "file" [text (escapeAtom file), text (escapeAtom (tag inp))]]
+            Inference name status parents -> do
+              -- Process all parents first
+              rest <- mapM (annot . inputValue) parents
+              nums <- map fromJust <$> mapM (findNumber . inputValue) parents
 
-                  fmap (concat rest ++) $
-                    ret "plain"
-                      [fun "inference" [
-                        text name, list [fun "status" [text status]],
-                        list [text (clause n) | n <- nums]]]
+              fmap (concat rest ++) $
+                ret "plain"
+                  [fun "inference" [
+                    text name, list [fun "status" [text status]],
+                    list [text (clause n) | n <- nums]]]
 
 pPrintAnnotProof :: [(Input Form, (String, [Doc]))] -> Doc
 pPrintAnnotProof annots0 =
