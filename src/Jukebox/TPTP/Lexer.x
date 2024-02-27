@@ -19,7 +19,7 @@ import Data.Word
 import Data.Char
 import Data.Ratio
 import Codec.Binary.UTF8.String
-import Data.Symbol
+import qualified Data.Symbol as S
 }
 
 $alpha = [a-zA-Z0-9_]
@@ -98,10 +98,10 @@ $white+ ;
 
 {
 data Pos = Pos {-# UNPACK #-} !Word {-# UNPACK #-} !Word deriving Show
-data Token = Atom { keyword :: !Keyword, tokenName :: {-# UNPACK #-} !Symbol }
+data Token = Atom { keyword :: !Keyword, tokenName :: {-# UNPACK #-} !S.Symbol }
            | Defined { defined :: !Defined  }
-           | Var { tokenName :: {-# UNPACK #-} !Symbol }
-           | DistinctObject { tokenName :: {-# UNPACK #-} !Symbol }
+           | Var { tokenName :: {-# UNPACK #-} !S.Symbol }
+           | DistinctObject { tokenName :: {-# UNPACK #-} !S.Symbol }
            | Number { value :: !Integer }
            | Rational { ratValue :: !Rational }
            | Real { ratValue :: !Rational }
@@ -147,10 +147,10 @@ data Punct = LParen | RParen | LBrack | RBrack | Comma | Dot
            | Or | And | Not | Iff | Implies | Follows | Xor | Nor | Nand
            | Eq | Neq | ForAll | Exists | Let | LetTerm -- FOF
            | Colon | Times | Plus | FunArrow -- TFF
-           | Other {-# UNPACK #-} !Symbol -- user-defined
+           | Other {-# UNPACK #-} !S.Symbol -- user-defined
              deriving (Eq, Ord)
 
-showPunct :: Punct -> Symbol
+showPunct :: Punct -> S.Symbol
 showPunct x =
   case x of {
     LParen -> "("; RParen -> ")"; LBrack -> "["; RBrack -> "]";
@@ -161,14 +161,14 @@ showPunct x =
     FunArrow -> ">"; LetTerm -> ":-"; Other x -> x }
 
 instance Show Punct where
-  show = unintern . showPunct
+  show = S.unintern . showPunct
 
 p x = const (Punct x)
 k x = Atom x . copy
 d x = const (Defined x)
 
-copy :: String -> Symbol
-copy = intern
+copy :: String -> S.Symbol
+copy = S.intern
 
 unquote :: String -> String
 unquote (_:x)
