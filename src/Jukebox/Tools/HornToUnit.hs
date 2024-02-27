@@ -33,7 +33,6 @@ import Control.Monad
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
 import Control.Monad.Trans.RWS
-import Control.Monad.Trans.List
 import Control.Monad.Trans.Class
 
 data HornFlags =
@@ -176,7 +175,7 @@ eliminateHornClauses flags prob = do
   (prob, funs) <- evalRWST (mapM elim1 prob) () 0
   return (map toInput (usort funs) ++ concat prob)
   where
-    fresh base = lift $ do
+    fresh base = do
       n <- get
       put $! n+1
       return (variant base [name (show n)])
@@ -193,16 +192,16 @@ eliminateHornClauses flags prob = do
     elim1 c =
       case partition pos (toLiterals (what c)) of
         ([], _) -> return [c]
-        ([Pos l], ls) -> runListT $ do
+        ([Pos l], ls) -> do
           l <- foldM (encode (tag c)) l ls
-          return c { what = clause [Pos l] }
+          return [c { what = clause [Pos l] }]
         _ ->
           if dropNonHorn flags then
             return []
           else
             lift $ Left c
 
-    encode :: String -> Atomic -> Literal -> ListT (RWST () [(String, Atomic)] Int (Either (Input Clause))) Atomic
+    encode :: String -> Atomic -> Literal -> RWST () [(String, Atomic)] Int (Either (Input Clause)) Atomic
     encode tag (c :=: d) (Neg (a :=: b)) =
       let
         ty1 = typ a
@@ -226,7 +225,7 @@ eliminateHornClauses flags prob = do
         -- ifeq(a, b, c, d) = d
         Asymmetric1 -> do
           ifeq <- passiveFresh (variant ifeqName [name ty1, name ty2] ::: FunType [ty1, ty1, ty2, ty2] ty2)
-          (c :=: d) <- return (swap size (c :=: d))
+          ~(c :=: d) <- return (swap size (c :=: d))
           if passivise flags then do
             axiom ("ifeq_axiom", ifeq :@: [x, x, passive c, y] :=: c)
             return (ifeq :@: [a, b, passive c, passive d] :=: d)
@@ -238,8 +237,8 @@ eliminateHornClauses flags prob = do
         -- where sigma = FV(a, b, c, d)
         Asymmetric2 -> do
           ifeqName <- fresh freshName
-          (a :=: b) <- return (swap size (a :=: b))
-          (c :=: d) <- return (swap size (c :=: d))
+          ~(a :=: b) <- return (swap size (a :=: b))
+          ~(c :=: d) <- return (swap size (c :=: d))
           let
             vs =
               if passivise flags then
@@ -259,7 +258,7 @@ eliminateHornClauses flags prob = do
         -- where sigma = FV(c, d)
         Asymmetric3 -> do
           ifeqName <- fresh freshName
-          (c :=: d) <- return (swap size (c :=: d))
+          ~(c :=: d) <- return (swap size (c :=: d))
           let
             vs =
               if passivise flags then
@@ -276,7 +275,7 @@ eliminateHornClauses flags prob = do
       (\(t :=: u) -> if smaller flags then u :=: t else t :=: u) $
       if f t >= f u then (t :=: u) else (u :=: t)
 
-    axiom l = lift $ tell [l]
+    axiom l = tell [l]
 
     toInput (tag, l) =
       Input {
