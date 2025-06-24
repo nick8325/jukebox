@@ -327,6 +327,11 @@ toClause f = clause <$> cl f
 type Tag = String
 
 data Kind = Ax AxKind | Conj ConjKind deriving (Eq, Ord)
+
+isAxiom :: Kind -> Bool
+isAxiom (Ax _) = True
+isAxiom (Conj _) = False
+
 data AxKind =
   Axiom | Hypothesis | Definition | Assumption | Lemma | TheoremKind |
   NegatedConjecture deriving (Eq, Ord)

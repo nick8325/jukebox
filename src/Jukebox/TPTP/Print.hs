@@ -19,6 +19,7 @@ import Jukebox.Utils
 import Text.PrettyPrint.HughesPJClass
 import Control.Monad.Trans.State.Strict
 import Data.Symbol
+import Control.Monad
 
 pPrintClauses :: Problem Clause -> Doc
 pPrintClauses prob0
@@ -88,11 +89,10 @@ pPrintProof prob =
       | Inference _ _ [InputPlus{inputValue = inp'}] <- source inp,
           let p = prettyNames (what inp)
               q = prettyNames (what inp') in
-          kind inp == kind inp' &&
+          isAxiom (kind inp) == isAxiom (kind inp') &&
           -- I have NO idea why this doesn't work without show here :(
-          show p == show q &&
-          (isJust (ident inp) || not (isJust (ident inp'))) = -- don't lose an ident
-            annot inp { source = source inp' }
+          show p == show q =
+          annot inp { source = source inp', ident = ident inp `mplus` ident inp' }
     annot inp = do
       mn <- findNumber inp
       case mn of
