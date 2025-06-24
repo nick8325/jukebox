@@ -25,7 +25,7 @@ data Scheme1 = Scheme1 {
   }
 
 guard :: Scheme1 -> (Type -> Bool) -> Input Form -> Input Form
-guard scheme mono (Input t k info f) = Input t k info (aux (pos k) f)
+guard scheme mono (Input _ t k info f) = Input Nothing t k info (aux (pos k) f)
   where aux pos (ForAll (Bind vs f))
           | pos = forAll scheme (Bind vs (aux pos f))
           | otherwise = notInwards (exists scheme (Bind vs (Not (aux pos f))))
@@ -65,20 +65,20 @@ translate1 scheme mono f = Form.run f $ \inps -> do
         map (simplify . ForAll . bind) . split . simplify . foldr (/\) true $
           funcAxioms ++ typeAxioms
   return $
-    [ Input ("types" ++ show i) (Ax Axiom) (inference "type_axiom" "esa" []) axiom | (axiom, i) <- zip axioms [1..] ] ++
+    [ Input Nothing ("types" ++ show i) (Ax Axiom) (inference "type_axiom" "esa" []) axiom | (axiom, i) <- zip axioms [1..] ] ++
     map (guard scheme1' mono') inps
 
 translate scheme mono f =
   let f' =
         Form.run f $ \inps -> do
-          forM inps $ \inp@(Input tag kind _ f) -> do
+          forM inps $ \inp@(Input _ tag kind _ f) -> do
             let prepare f = fmap (foldr (/\) true) (run (withName tag (removeEquiv (simplify f))))
             case kind of
               Ax{} ->
-                fmap (Input tag kind (inference "type_encoding" "esa" [inp])) $
+                fmap (Input Nothing tag kind (inference "type_encoding" "esa" [inp])) $
                   prepare f
               Conj{} ->
-                fmap (Input tag kind (inference "type_encoding" "esa" [inp])) $
+                fmap (Input Nothing tag kind (inference "type_encoding" "esa" [inp])) $
                 fmap notInwards $ prepare $ nt f
       trType O = O
       trType _ = indType

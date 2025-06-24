@@ -171,4 +171,7 @@ newName x = NameM $ do
   let idx' = idx+1
   when (idx' < 0) $ error "Name.newName: too many names"
   put $! idx'
-  return $! Unique idx' (intern (base x)) (label x) (renamer x)
+  return $! unique x idx'
+
+unique :: Named a => a -> Int64 -> Name
+unique x n = Unique n (intern (base x)) (label x) (renamer x)

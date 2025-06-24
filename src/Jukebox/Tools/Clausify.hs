@@ -125,11 +125,11 @@ clausForm kind inp =
        noExistsPs      <- mapM removeExists                    . check $ noEquivPs
        noExpensiveOrPs <- fmap concat . mapM removeExpensiveOr . check $ noExistsPs
        noForAllPs      <- lift . mapM uniqueNames              . check $ noExpensiveOrPs
-       let !thm         = Input "skolemised" (Ax kind) (inference "clausify" "esa" [inp]) (And noForAllPs)
+       let !thm         = Input Nothing "skolemised" (Ax kind) (inference "clausify" "esa" [inp]) (And noForAllPs)
            !cnf_        = concatMap cnf                        . check $ noForAllPs
            !simp        = simplifyCNF                          . check $ cnf_
            cs           = fmap clause                                  $ simp
-           inps         = [ Input (tag inp ++ i) (Ax kind) (inference "clausify" "thm" [thm]) c
+           inps         = [ Input Nothing (tag inp ++ i) (Ax kind) (inference "clausify" "thm" [thm]) c
                           | (c, i) <- zip cs ("":
                                         [ '_':show i | i <- [1..] ]) ]
        return $! force . check                                         $ inps

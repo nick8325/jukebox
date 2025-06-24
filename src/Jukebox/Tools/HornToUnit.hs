@@ -147,7 +147,7 @@ eliminateUnsuitableConjectures flags prob
   | null bad = prob
   | otherwise =
     good ++ map (fmap addConjecture) bad ++
-    [Input { tag = "goal", kind = Ax NegatedConjecture, source = Unknown,
+    [Input { ident = Nothing, tag = "goal", kind = Ax NegatedConjecture, source = Unknown,
              what = clause [Neg (a :=: b)] }]
   where
     (bad, good) = partition unsuitable prob
@@ -279,6 +279,7 @@ eliminateHornClauses flags prob = do
 
     toInput (tag, l) =
       Input {
+        ident = Nothing,
         tag = tag,
         kind = Ax Axiom,
         source = Unknown,

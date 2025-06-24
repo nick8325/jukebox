@@ -16,6 +16,7 @@ import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.State.Strict
 import Data.List
+import Data.Maybe
 import Jukebox.Utils
 import Data.Typeable(Typeable)
 import Data.Monoid
@@ -374,7 +375,8 @@ answerJustification (Unsat _ (Just refutation)) =
 answerJustification _ = Nothing
 
 data Input a = Input
-  { tag    :: Tag,
+  { ident  :: Maybe Name,
+    tag    :: Tag,
     kind   :: Kind,
     source :: InputSource,
     what   :: a }
@@ -491,7 +493,7 @@ instance Symbolic a => Unpack [a] where
   rep' (x:xs) = Binary (:) x xs
 
 instance Symbolic a => Unpack (Input a) where
-  rep' (Input tag kind info what) = Unary (Input tag kind info) what
+  rep' (Input ident tag kind info what) = Unary (Input ident tag kind info) what
 
 instance Unpack CNF where
   rep' (CNF ax conj s1 s2) =
@@ -617,7 +619,8 @@ names = usort . termsAndBinders term bind inp where
   bind (Bind vs _) = map name (Set.toList vs)
 
   inp :: Symbolic a => Input a -> [Name]
-  inp (Input _ _ source _) =
+  inp (Input ident _ _ source _) =
+    maybeToList ident ++
     case source of
       Inference _ _ inps ->
         concatMap inputNames inps
@@ -637,7 +640,7 @@ types = usort . termsAndBinders term bind inp where
   bind (Bind vs _) = map typ (Set.toList vs)
 
   inp :: Symbolic a => Input a -> [Type]
-  inp (Input _ _ source _) =
+  inp (Input _ _ _ source _) =
     case source of
       Inference _ _ inps ->
         concatMap inputTypes inps
@@ -664,7 +667,7 @@ functions = usort . termsAndBinders term mempty inp where
   term _ = mempty
 
   inp :: Symbolic a => Input a -> [Function]
-  inp (Input _ _ source _) =
+  inp (Input _ _ _ source _) =
     case source of
       Inference _ _ inps ->
         concatMap inputFunctions inps
@@ -791,8 +794,8 @@ mapName f0 = rename
     term (Var x) = Var (var x)
 
     input :: Symbolic a => Input a -> Input a
-    input (Input name kind source what) =
-      Input name kind source' (rename what)
+    input (Input id name kind source what) =
+      Input (fmap f id) name kind source' (rename what)
       where
         source' =
           case source of

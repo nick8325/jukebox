@@ -38,58 +38,73 @@ pPrintProblem kind prob0
   where
     prob = prettyNames prob0
 
+type PrintProofState a = State (Int, Map Name Int, [(Input Form, (String, [Doc]))]) a
+
 -- Print a problem together with all source/derivation information.
 pPrintProof :: Problem Form -> Doc
 pPrintProof prob =
-  pPrintAnnotProof (evalState (concat <$> mapM annot prob) (1, Map.empty))
+  pPrintAnnotProof (reverse out)
   where
+    (_, _, out) = execState (mapM_ annot prob) (1, Map.empty, [])
+
     fun f [] = text f
     fun f xs = text f <> parens (hsep (punctuate comma xs))
     list = brackets . hsep . punctuate comma
 
     clause n = "c" ++ show n
 
-    info inp = (kind inp, what inp)
-
     -- We maintain: the set of formulas printed so far,
     -- and the highest number given so far.
-    findNumber :: Input Form -> State (Int, Map (Kind, Form) Int) (Maybe Int)
+    findNumber :: Input Form -> PrintProofState (Maybe Int)
     findNumber inp =
-      gets (Map.lookup (info inp) . snd)
+      case ident inp of
+        Nothing -> return Nothing
+        Just id -> do
+          (_, map, _) <- get
+          return (Map.lookup id map)
 
-    newNumber :: Input Form -> State (Int, Map (Kind, Form) Int) (Maybe Int)
+    newNumber :: Input Form -> PrintProofState Int
     newNumber inp = do
-      (n, map) <- get
-      case Map.lookup (info inp) map of
+      (n, map, out) <- get
+      case ident inp of
         Nothing -> do
-          put (n+1, Map.insert (info inp) n map)
-          return (Just n)
-        Just _ -> return Nothing
+          put (n+1, map, out)
+          return n
+        Just id ->
+          case Map.lookup id map of
+            Nothing -> do
+              put (n+1, Map.insert id n map, out)
+              return n
+            Just _ -> error "newNumber: already present"
 
-    annot :: Input Form -> State (Int, Map (Kind, Form) Int) [(Input Form, (String, [Doc]))]
+    emit :: Input Form -> String -> [Doc] -> PrintProofState ()
+    emit form k xs = do
+      (n, map, out) <- get
+      put (n, map, (form, (k, xs)):out)
+
+    annot :: Input Form -> PrintProofState Int
     annot inp
       -- Formula is identical to its parent
       | Inference _ _ [InputPlus{inputValue = inp'}] <- source inp,
-          let [p, q] = prettyNames [what inp, what inp'] in
+          let p = prettyNames (what inp)
+              q = prettyNames (what inp') in
           kind inp == kind inp' &&
           -- I have NO idea why this doesn't work without show here :(
-          show p == show q =
+          show p == show q &&
+          (isJust (ident inp) || not (isJust (ident inp'))) = -- don't lose an ident
             annot inp { source = source inp' }
     annot inp = do
       mn <- findNumber inp
       case mn of
-        Just _ ->
+        Just n -> do
           -- Already processed this formula
-          return []
+          return n
         Nothing -> do
           let
             ret k stuff = do
-              res <- newNumber inp
-              case res of
-                Just n ->
-                  return [(inp { tag = clause n }, (k, stuff))]
-                Nothing ->
-                  return []
+              n <- newNumber inp
+              emit inp { tag = clause n } k stuff
+              return n
 
           case source inp of
             Unknown -> ret "plain" []
@@ -98,20 +113,17 @@ pPrintProof prob =
                 [fun "file" [text (escapeAtom file), text (escapeAtom (tag inp))]]
             Inference name status parents -> do
               -- Process all parents first
-              rest <- mapM (annot . inputValue) parents
-              nums <- map fromJust <$> mapM (findNumber . inputValue) parents
-
-              fmap (concat rest ++) $
-                ret "plain"
-                  [fun "inference" [
-                    text name, list [fun "status" [text status]],
-                    list [text (clause n) | n <- nums]]]
+              nums <- mapM (annot . inputValue) parents
+              ret "plain"
+                [fun "inference" [
+                  text name, list [fun "status" [text status]],
+                  list [text (clause n) | n <- nums]]]
 
 pPrintAnnotProof :: [(Input Form, (String, [Doc]))] -> Doc
 pPrintAnnotProof annots0 =
   vcat $
     [ vcat (pPrintDecls "tff" inps) | not (isReallyFof inps) ] ++
-    [ pPrintClause (family x) (tag inp) k (pp x:rest)
+    [ pPrintClause (family x) (tag inp) k (pp x:rest) <+> text (show (ident inp))
     | (inp, (k, rest)) <- annots,
       let x = what inp ]
   where
