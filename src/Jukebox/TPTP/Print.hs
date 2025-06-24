@@ -123,7 +123,7 @@ pPrintAnnotProof :: [(Input Form, (String, [Doc]))] -> Doc
 pPrintAnnotProof annots0 =
   vcat $
     [ vcat (pPrintDecls "tff" inps) | not (isReallyFof inps) ] ++
-    [ pPrintClause (family x) (tag inp) k (pp x:rest) <+> text (show (ident inp))
+    [ pPrintClause (family x) (tag inp) k (pp x:rest)
     | (inp, (k, rest)) <- annots,
       let x = what inp ]
   where
