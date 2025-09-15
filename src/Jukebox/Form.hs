@@ -423,6 +423,7 @@ data TypeOf a where
   Signed :: (Symbolic a, Symbolic (Signed a)) => TypeOf (Signed a)
   Bind_ :: (Symbolic a, Symbolic (Bind a)) => TypeOf (Bind a)
   List :: (Symbolic a, Symbolic [a]) => TypeOf [a]
+  Tuple :: (Symbolic a, Symbolic b) => TypeOf (a, b)
   Input_ :: (Symbolic a, Symbolic (Input a)) => TypeOf (Input a)
   CNF_ :: TypeOf CNF
 
@@ -436,6 +437,7 @@ instance Symbolic Atomic where typeOf _ = Atomic
 instance Symbolic a => Symbolic (Signed a) where typeOf _ = Signed
 instance Symbolic a => Symbolic (Bind a) where typeOf _ = Bind_
 instance Symbolic a => Symbolic [a] where typeOf _ = List
+instance (Symbolic a, Symbolic b) => Symbolic (a, b) where typeOf _ = Tuple
 instance Symbolic a => Symbolic (Input a) where typeOf _ = Input_
 instance Symbolic CNF where typeOf _ = CNF_
 
@@ -458,6 +460,7 @@ rep x =
     Signed -> rep' x
     Bind_ -> rep' x
     List -> rep' x
+    Tuple -> rep' x
     Input_ -> rep' x
     CNF_ -> rep' x
 
@@ -496,6 +499,9 @@ instance Symbolic a => Unpack (Bind a) where
 instance Symbolic a => Unpack [a] where
   rep' [] = Const []
   rep' (x:xs) = Binary (:) x xs
+
+instance (Symbolic a, Symbolic b) => Unpack (a, b) where
+  rep' (x, y) = Binary (,) x y
 
 instance Symbolic a => Unpack (Input a) where
   rep' (Input ident tag kind info what) = Unary (Input ident tag kind info) what
