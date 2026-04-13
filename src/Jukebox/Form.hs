@@ -651,11 +651,7 @@ types = usort . termsAndBinders term bind inp where
   bind (Bind vs _) = map typ (Set.toList vs)
 
   inp :: Symbolic a => Input a -> [Type]
-  inp (Input _ _ _ source _) =
-    case source of
-      Inference _ _ inps ->
-        concatMap inputTypes inps
-      _ -> []
+  inp _ = []
 
 types' :: Symbolic a => a -> [Type]
 types' = filter (/= O) . types
