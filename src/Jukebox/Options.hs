@@ -307,8 +307,13 @@ version x p =
 
 printHelp :: ExitCode -> [String] -> IO a
 printHelp code xs = do
-  mapM_ (hPutStrLn stderr) xs
+  mapM_ (hPutStrLn handle) xs
   exitWith code
+  where
+    handle =
+      case code of
+        ExitSuccess -> stdout
+        ExitFailure _ -> stderr
 
 printError :: String -> String -> IO a
 printError name err =

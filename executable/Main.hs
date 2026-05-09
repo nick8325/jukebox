@@ -18,8 +18,8 @@ main = do
   args <- getArgs
   let
     progTool = prog ++ " <toolname>"
-    help =
-      printHelp ExitSuccess $
+    help code =
+      printHelp code $
         intercalate [""] $
           [usageText progTool "Jukebox, a first-order logic toolbox"] ++
           [["<toolname> can be any of the following:"] ++
@@ -28,9 +28,9 @@ main = do
           [["For more information about each tool, run " ++ progTool ++ " --help."]]
     usage msg = printError prog msg
   case args of
-    [] -> help
-    ["help"] -> help
-    ["--help"] -> help
+    [] -> help (ExitFailure 1)
+    ["help"] -> help ExitSuccess
+    ["--help"] -> help ExitSuccess
     ["--version"] ->
       putStrLn $ "Jukebox version " ++
 #ifdef VERSION_jukebox
