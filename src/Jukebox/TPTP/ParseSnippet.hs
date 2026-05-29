@@ -53,3 +53,11 @@ form parser types0 funs0 str =
         Nothing -> id
         Just i ->
           \ty -> if ty == i then indType else ty
+
+giveProblem :: Symbolic a => a -> ([(String, Type)] -> [(String, Function)] -> String -> b) -> String -> b
+giveProblem prob cont str =
+  cont (extract (types prob)) (extract (functions prob)) str
+  where
+    extract :: Named a => [a] -> [(String, a)]
+    extract xs =
+      [(unintern sym, x) | x <- xs, Fixed (Basic sym) _ <- [name x]]
