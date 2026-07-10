@@ -19,6 +19,9 @@ tff, cnf :: [(String, Type)] -> [(String, Function)] -> String -> Form
 tff = form TPTP.Parse.Core.tff
 cnf = form TPTP.Parse.Core.cnf
 
+term :: [(String, Type)] -> [(String, Function)] -> String -> Term
+term = form (TPTP.Parse.Core.term NoQuantification Map.empty)
+
 form :: Symbolic a => Parser a -> [(String, Type)] -> [(String, Function)] -> String -> a
 form parser types0 funs0 str =
   case run_ (parser <* eof)
@@ -33,8 +36,8 @@ form parser types0 funs0 str =
                 show (map snd (Map.toList funs' \\ Map.toList funs))
       | otherwise -> mapType elimI res
     Ok{} -> error "ParseSnippet: lexical error"
-    TPTP.Parsec.Error _ msg -> error $ "ParseSnippet: parse error: " ++ msg
-    Expected _ exp -> error $ "ParseSnippet: parse error: expected " ++ show exp
+    TPTP.Parsec.Error _ msg -> error $ "ParseSnippet: parse error: " ++ msg ++ " for " ++ str
+    Expected _ exp -> error $ "ParseSnippet: parse error: expected " ++ show exp ++ " for " ++ str
 
   where
     funs = Map.mapKeys intern $ Map.fromList $ map (mapFunType introI) funs0
