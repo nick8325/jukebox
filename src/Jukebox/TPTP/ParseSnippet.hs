@@ -63,4 +63,5 @@ giveProblem prob cont str =
   where
     extract :: Named a => [a] -> [(String, a)]
     extract xs =
-      [(unintern sym, x) | x <- xs, Fixed (Basic sym) _ <- [name x]]
+      [(unintern sym, x) | x <- xs, Fixed (Basic sym) _ <- [name x]] ++
+      [(unintern sym, x) | x <- xs, Unique _ sym _ _ <- [name x]]
