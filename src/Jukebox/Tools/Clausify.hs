@@ -63,7 +63,7 @@ clausify flags inps = Form.run inps (run . clausifyInputs [] [])
     do cs <-
          clausForm NegatedConjecture inp {
            what = nt a,
-           source = inference "negate_conjecture" "cth" [inp] }
+           source = inference' (Just (Ax NegatedConjecture)) "negate_conjecture" "cth" [inp] }
        clausifyObligs theory (cs:obligs) inp as inps
 
   split' a | splitting flags = if null split_a then [true] else split_a

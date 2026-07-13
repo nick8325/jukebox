@@ -390,10 +390,13 @@ data Input a = Input
 data InputSource =
     Unknown
   | FromFile String Int
-  | Inference String String [InputPlus Form]
+  | Inference (Maybe Kind) String String [InputPlus Form]
 
 inference :: String -> String -> [Input Form] -> InputSource
-inference name status parents = Inference name status (map inputPlus parents)
+inference = inference' Nothing
+
+inference' :: Maybe Kind -> String -> String -> [Input Form] -> InputSource
+inference' role name status parents = Inference role name status (map inputPlus parents)
 
 data InputPlus a = InputPlus
   { inputNames     :: [Name],
@@ -633,7 +636,7 @@ names = usort . termsAndBinders term bind inp where
   inp (Input ident _ _ source _) =
     maybeToList ident ++
     case source of
-      Inference _ _ inps ->
+      Inference _ _ _ inps ->
         concatMap inputNames inps
       _ -> []
 
@@ -676,7 +679,7 @@ functions = usort . termsAndBinders term mempty inp where
   inp :: Symbolic a => Input a -> [Function]
   inp (Input _ _ _ source _) =
     case source of
-      Inference _ _ inps ->
+      Inference _ _ _ inps ->
         concatMap inputFunctions inps
       _ -> []
 
@@ -806,8 +809,8 @@ mapName f0 = rename
       where
         source' =
           case source of
-            Inference inf status forms ->
-              Inference inf status (map inputPlus forms)
+            Inference mkind inf status forms ->
+              Inference mkind inf status (map inputPlus forms)
             _ -> source
 
     inputPlus  :: InputPlus Form -> InputPlus Form

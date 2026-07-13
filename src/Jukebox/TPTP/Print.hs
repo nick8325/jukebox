@@ -86,7 +86,7 @@ pPrintProof prob =
     annot :: Input Form -> PrintProofState Int
     annot inp
       -- Formula is identical to its parent
-      | Inference _ _ [InputPlus{inputValue = inp'}] <- source inp,
+      | Inference Nothing _ _ [InputPlus{inputValue = inp'}] <- source inp,
           let p = prettyNames (what inp)
               q = prettyNames (what inp') in
           isAxiom (kind inp) == isAxiom (kind inp') &&
@@ -111,10 +111,10 @@ pPrintProof prob =
             FromFile file _ ->
               ret (show (kind inp))
                 [fun "file" [text (escapeAtom file), text (escapeAtom (tag inp))]]
-            Inference name status parents -> do
+            Inference mkind name status parents -> do
               -- Process all parents first
               nums <- mapM (annot . inputValue) parents
-              ret "plain"
+              ret (case mkind of { Nothing -> "plain"; Just kind -> show kind })
                 [fun "inference" [
                   text name, list [fun "status" [text status]],
                   list [text (clause n) | n <- nums]]]
