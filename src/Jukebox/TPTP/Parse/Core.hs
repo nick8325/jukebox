@@ -275,7 +275,7 @@ kind = do
               Form.source =
                 case mfile of
                   Nothing -> Form.Unknown
-                  Just file -> FromFile file (fromIntegral n) }
+                  Just file -> FromFile file tag (fromIntegral n) }
   axiom L.Axiom Axiom <|>
     axiom L.Hypothesis Hypothesis <|>
     axiom L.Definition Definition <|>

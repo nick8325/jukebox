@@ -313,6 +313,8 @@ toLiterals :: Clause -> [Literal]
 toLiterals (Clause (Bind _ ls)) = ls
 
 toClause :: Form -> Maybe Clause
+toClause (And [c]) = toClause c
+toClause (Or [c]) = toClause c
 toClause (ForAll (Bind _ f)) = toClause f
 toClause f = clause <$> cl f
   where
@@ -389,7 +391,7 @@ data Input a = Input
 
 data InputSource =
     Unknown
-  | FromFile String Int
+  | FromFile String String Int
   | Inference (Maybe Kind) String String [InputPlus Form]
 
 inference :: String -> String -> [Input Form] -> InputSource
@@ -397,6 +399,10 @@ inference = inference' Nothing
 
 inference' :: Maybe Kind -> String -> String -> [Input Form] -> InputSource
 inference' role name status parents = Inference role name status (map inputPlus parents)
+
+derivedClause :: String -> String -> Input Form -> a -> Input a
+derivedClause name status parent clause =
+  Input Nothing (tag parent) (kind parent) (inference name status [parent]) clause
 
 data InputPlus a = InputPlus
   { inputNames     :: [Name],

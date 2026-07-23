@@ -108,9 +108,9 @@ pPrintProof prob =
 
           case source inp of
             Unknown -> ret "plain" []
-            FromFile file _ ->
+            FromFile file tag _ ->
               ret (show (kind inp))
-                [fun "file" [text (escapeAtom file), text (escapeAtom (tag inp))]]
+                [fun "file" [text (escapeAtom file), text (escapeAtom tag)]]
             Inference mkind name status parents -> do
               -- Process all parents first
               nums <- mapM (annot . inputValue) parents

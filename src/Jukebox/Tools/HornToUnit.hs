@@ -127,7 +127,8 @@ eliminateMultiplePreconditions flags prob
       elim inp
         | (null poss && length negs /= 1 && not (allowConjunctiveConjectures flags)) ||
           (not (null poss) && length negs > 1 && multi flags) =
-          inp{what = clause (Neg ((tuple tys :@: ts) :=: (tuple tys :@: us)):poss)}
+          derivedClause "tupling" "esa" (fmap toForm inp) $
+            clause (Neg ((tuple tys :@: ts) :=: (tuple tys :@: us)):poss)
         where
           (poss, negs) = partition pos (toLiterals (what inp))
           ts = [t | l <- negs, let Neg (t :=: _) = l]
@@ -194,7 +195,7 @@ eliminateHornClauses flags prob = do
         ([], _) -> return [c]
         ([Pos l], ls) -> do
           l <- foldM (encode (tag c)) l ls
-          return [c { what = clause [Pos l] }]
+          return [derivedClause "ifeq_intro" "esa" (fmap toForm c) (clause [Pos l])]
         _ ->
           if dropNonHorn flags then
             return []
@@ -282,7 +283,7 @@ eliminateHornClauses flags prob = do
         ident = Nothing,
         tag = tag,
         kind = Ax Axiom,
-        source = Unknown,
+        source = inference "ifeq_elim" "esa" [],
         what = clause [Pos l] }
 
     (ifeqName, freshName, passiveName, xvar, yvar, zvar) = run_ prob $ do
