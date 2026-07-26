@@ -127,8 +127,9 @@ eliminateMultiplePreconditions flags prob
       elim inp
         | (null poss && length negs /= 1 && not (allowConjunctiveConjectures flags)) ||
           (not (null poss) && length negs > 1 && multi flags) =
+          let conj = null poss in
           derivedClause "tupling" "esa" (fmap toForm inp) $
-            clause (Neg ((tuple tys :@: ts) :=: (tuple tys :@: us)):poss)
+            clause (Neg ((tuple conj tys :@: ts) :=: (tuple conj tys :@: us)):poss)
         where
           (poss, negs) = partition pos (toLiterals (what inp))
           ts = [t | l <- negs, let Neg (t :=: _) = l]
@@ -139,8 +140,9 @@ eliminateMultiplePreconditions flags prob
       tuple = run_ prob $ do
         tupleType <- newName (withLabel "tuple" (name "tuple"))
         tuple <- newName (withLabel "tuple" (name "tuple"))
-        return $ \args ->
-          variant tuple args :::
+        conjectureTuple <- newName (withLabel "conjecture_tuple" (name "tuple"))
+        return $ \conj args ->
+          variant (if conj then conjectureTuple else tuple) args :::
           FunType args (Type (variant tupleType args))
 
 eliminateUnsuitableConjectures :: HornFlags -> Problem Clause -> Problem Clause
