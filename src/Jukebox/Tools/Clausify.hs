@@ -118,6 +118,9 @@ split p =
 -- core clausification algorithm
 
 clausForm :: AxKind -> Input Form -> M [Input Clause]
+clausForm _ inp
+  | Just clause <- toClause (what inp) =
+    return [fmap (const clause) inp]
 clausForm kind inp =
   withName (tag inp) $
     do miniscoped      <- miniscope . check . simplify         . check $ what inp
