@@ -86,7 +86,7 @@ pPrintProof prob =
     annot :: Input Form -> PrintProofState Int
     annot inp
       -- Formula is identical to its parent
-      | Inference Nothing _ _ [InputPlus{inputValue = inp'}] <- source inp,
+      | Inference _ _ _ [InputPlus{inputValue = inp'}] <- source inp,
           let p = prettyNames (what inp)
               q = prettyNames (what inp') in
           isAxiom (kind inp) == isAxiom (kind inp') &&
