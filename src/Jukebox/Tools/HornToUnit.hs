@@ -107,9 +107,11 @@ hornToUnit flags prob = do
 
 eliminatePredicates :: Problem Clause -> Problem Clause
 eliminatePredicates prob =
-  map (fmap elim) prob
+  map elim prob
   where
-    elim = clause . map (fmap elim1) . toLiterals
+    elim inp =
+      derivedClause "true_elimination" "esa" (fmap toForm inp) $
+        clause . map (fmap elim1) . toLiterals $ what inp
     elim1 (t :=: u) = t :=: u
     elim1 (Tru ((p ::: FunType tys _) :@: ts)) =
       ((p ::: FunType tys bool) :@: ts) :=: true
