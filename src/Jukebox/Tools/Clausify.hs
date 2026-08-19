@@ -118,8 +118,8 @@ split p =
 -- core clausification algorithm
 
 clausForm :: AxKind -> Input Form -> M [Input Clause]
-clausForm _ inp
-  | Just clause <- toClause (what inp) =
+clausForm k inp
+  | Just clause <- toClause (what inp), kind inp == Ax k =
     return [fmap (const clause) inp]
 clausForm kind inp =
   withName (tag inp) $
